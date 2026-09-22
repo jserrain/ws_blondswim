@@ -1,0 +1,29 @@
+[project]
+name = "blondswim"
+version = "0.1.0"
+description = "Sistema d'agents per a la planificació d'entrenament de natació"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic",
+    "openpyxl",
+    "pydantic>=2.0",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "ruff"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
