@@ -1,0 +1,45 @@
+from pydantic import BaseModel
+from typing import Literal
+
+class Mesocicle(BaseModel):
+    """
+    Representa un mesocicle dins del macrocicle anual.
+    Cada mesocicle agrupa diverses setmanes amb objectius i metodologia comuns.
+    """
+    id: str
+    nom: str
+    setmanes: str  # Ex: "1-4"
+    dates: str  # Ex: "21/09-18/10/2026"
+    fase_objectiu: str
+    metodologia_dominant: str
+    volum_min: int  # metres
+    volum_max: int  # metres
+    volum_mitja_previst: int  # metres
+    tancament: str | None = None
+    tecnica_focus: str | None = None
+    especific_metodologia: str | None = None
+
+class Microcicle(BaseModel):
+    """
+    Representa una setmana dins d'un mesocicle.
+    Conté la planificació setmanal amb volum objectiu i característiques.
+    """
+    setmana: int
+    dates: str  # Ex: "25-31/01/2027"
+    mesocicle_id: str
+    tipus_base: Literal["carrega", "qualitat", "descarrega", "taper", "transicio"]
+    notes: str | None = None  # Ex: "Test CSS", "Nadal", "Pic 1", etc.
+    volum_objectiu: int  # metres
+    dies_qualitat: bool  # Dc+Ds
+    test_css: bool
+    competicio_test_oficial: str | None = None
+    test_avaluacio: str | None = None
+    focus_especific: str | None = None
+
+class Macrocicle(BaseModel):
+    """
+    Representa el macrocicle anual complet amb tots els mesocicles i microcicles.
+    """
+    temporada: str  # Ex: "2026-2027"
+    mesocicles: list[Mesocicle]
+    microcicles: list[Microcicle]
