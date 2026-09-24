@@ -313,10 +313,17 @@ def convertir_macrocicle_jep(
         # Crear mesocicle
         from blondswim.models.macrocicle import Mesocicle
         
+        # Generar id com a slug del nom
+        import unicodedata
+        nom_normalitzat = str(mesocicle_nom).strip()
+        nom_slug = unicodedata.normalize('NFKD', nom_normalitzat.lower())
+        nom_slug = nom_slug.encode('ascii', 'ignore').decode('ascii')
+        mesocicle_id = nom_slug.replace(' ', '-').replace('/', '-').strip('-')
+        
         try:
             mesocicle = Mesocicle(
-                id=str(mesocicle_nom).strip(),
-                nom=str(mesocicle_nom).strip(),
+                id=mesocicle_id,
+                nom=nom_normalitzat,
                 setmanes=str(setmanes).strip() if setmanes else "",
                 dates=str(dates).strip() if dates else "",
                 fase_objectiu=str(fase_objectiu).strip() if fase_objectiu else "",

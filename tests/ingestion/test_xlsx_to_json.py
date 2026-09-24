@@ -1,11 +1,16 @@
 """Tests per al conversor XLSX → JSON."""
 
+import json
 import pytest
 from datetime import datetime
+from pathlib import Path
 
 from blondswim.ingestion.xlsx_to_json import (
     DataParseError,
     InconsistentDataWarning,
+    convertir_calendari,
+    convertir_macrocicle_jep,
+    convertir_nedador_ritmes,
     determinar_font_ritmes,
     llegir_capçaleres,
     parsejar_data,
@@ -134,3 +139,111 @@ class TestLlegirCapçaleres:
         # Aquest test requereix un mock d'un worksheet
         # Es pot implementar quan es tingui openpyxl disponible als tests
         pass
+
+
+class TestConvertirCalendari:
+    """Tests per a la funció convertir_calendari amb fitxers reals."""
+
+    def test_calendari_provisional_26_27(self, tmp_path):
+        """Test que convertir_calendari processa correctament el fitxer real."""
+        # Localitzar fitxer d'entrada
+        base_dir = Path(__file__).parent.parent.parent
+        fitxer_entrada = base_dir / "data" / "raw" / "Provisional26-27.xlsx"
+        fitxer_sortida = tmp_path / "calendari_test.json"
+
+        # Executar conversió
+        stats = convertir_calendari(fitxer_entrada, fitxer_sortida)
+
+        # Verificar estadístiques
+        assert stats["total"] == 17, f"Esperat 17 competicions, obtingut {stats['total']}"
+        assert stats["classe_a"] == 2, f"Esperat 2 competicions classe A, obtingut {stats['classe_a']}"
+
+        # Verificar que el fitxer JSON s'ha creat
+        assert fitxer_sortida.exists()
+
+        # Verificar contingut del JSON
+        with open(fitxer_sortida, "r", encoding="utf-8") as f:
+            competicions = json.load(f)
+
+        assert len(competicions) == 17
+        
+        # Verificar que hi ha exactament 2 competicions de classe A
+        classe_a = [c for c in competicions if c["classe"] == "A"]
+        assert len(classe_a) == 2
+
+
+class TestConvertirMacrocicleJep:
+    """Tests per a la funció convertir_macrocicle_jep amb fitxers reals."""
+
+    def test_macrocicle_jep(self, tmp_path):
+        """Test que convertir_macrocicle_jep processa correctament el fitxer real."""
+        # Localitzar fitxer d'entrada
+        base_dir = Path(__file__).parent.parent.parent
+        fitxer_entrada = base_dir / "data" / "raw" / "Planificacio_Mesocicles_Jep.xlsx"
+        fitxer_sortida = tmp_path / "macrocicle_jep_test.json"
+
+        # Executar conversió
+        stats = convertir_macrocicle_jep(fitxer_entrada, fitxer_sortida)
+
+        # Verificar estadístiques - hauria de ser 5 mesocicles, no 8
+        assert stats["mesocicles"] == 5, f"Esperat 5 mesocicles, obtingut {stats['mesocicles']}"
+
+        # Verificar que el fitxer JSON s'ha creat
+        assert fitxer_sortida.exists()
+
+        # Verificar contingut del JSON
+        with open(fitxer_sortida, "r", encoding="utf-8") as f:
+            macrocicle = json.load(f)
+
+        assert len(macrocicle["mesocicles"]) == 5
+        
+        # Verificar que els ids són slugs (minúscules, sense espais ni accents)
+        for mesocicle in macrocicle["mesocicles"]:
+            mesocicle_id = mesocicle["id"]
+            # Verificar que és minúscules
+            assert mesocicle_id == mesocicle_id.lower(), f"ID '{mesocicle_id}' no és minúscules"
+            # Verificar que no té espais
+            assert " " not in mesocicle_id, f"ID '{mesocicle_id}' conté espais"
+            # Verificar que el nom original es manté
+            assert mesocicle["nom"] != mesocicle_id or mesocicle_id.islower()
+
+
+class TestConvertirNedadorRitmes:
+    """Tests per a la funció convertir_nedador_ritmes amb fitxers reals."""
+
+    def test_nedador_jep(self, tmp_path):
+        """Test que convertir_nedador_ritmes processa correctament Jep."""
+        # Localitzar fitxer d'entrada
+        base_dir = Path(__file__).parent.parent.parent
+        fitxer_entrada = base_dir / "data" / "raw" / "Planificacio_Mesocicles_Jep.xlsx"
+
+        # Executar conversió
+        stats = convertir_nedador_ritmes(fitxer_entrada, tmp_path)
+
+        # Verificar que s'ha processat 1 nedador
+        assert len(stats["nedadors"]) == 1
+
+        nedador_info = stats["nedadors"][0]
+        
+        # Verificar que el fitxer JSON s'ha creat
+        fitxer_sortida = tmp_path / nedador_info["fitxer"]
+        assert fitxer_sortida.exists()
+
+        # Carregar i verificar contingut
+        with open(fitxer_sortida, "r", encoding="utf-8") as f:
+            nedador = json.load(f)
+
+        # Verificar categoria
+        assert nedador["categoria"] == "master", f"Esperat categoria='master', obtingut '{nedador['categoria']}'"
+
+        # Verificar mode_ritme
+        assert nedador["mode_ritme"] == "temps", f"Esperat mode_ritme='temps', obtingut '{nedador['mode_ritme']}'"
+
+        # Verificar ritmes_cursa_objectiu té 3 elements
+        assert len(nedador["ritmes_cursa_objectiu"]) == 3, \
+            f"Esperat 3 ritmes_cursa_objectiu, obtingut {len(nedador['ritmes_cursa_objectiu'])}"
+
+        # Verificar ritmes_css.a2 està proper a 82.09 (±0.01)
+        a2_valor = nedador["ritmes_css"]["a2"]
+        assert abs(a2_valor - 82.09) <= 0.01, \
+            f"Esperat ritmes_css.a2 ≈ 82.09, obtingut {a2_valor}"
