@@ -490,11 +490,12 @@ def convertir_nedador_ritmes(
         distancia = ws[f"B{num_fila}"].value
         temps_objectiu = ws[f"C{num_fila}"].value
 
-        if distancia and temps_objectiu:
+        # Crear RitmeCursaObjectiu si hi ha distància (temps_objectiu és opcional)
+        if distancia:
             ritme = RitmeCursaObjectiu(
                 prova=str(prova).strip(),
                 distancia_m=int(distancia),
-                temps_objectiu_s=float(temps_objectiu),
+                temps_objectiu_s=float(temps_objectiu) if temps_objectiu else None,
             )
             ritmes_cursa.append(ritme)
 
