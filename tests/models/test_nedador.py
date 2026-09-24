@@ -1,5 +1,6 @@
 from blondswim.models.nedador import Nedador
 
+
 def test_nedador_es_crea_correctament():
     n = Nedador(
         id="jep",

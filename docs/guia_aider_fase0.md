@@ -1,22 +1,40 @@
-BlondSwim — Guia d'ús d'aider per als models i el conversor
-Objectiu d'aquesta sessió amb aider: (1) actualitzar nedador.py amb el disseny final de Ritmes, (2) generar macrocicle.py i sessio.py, i (3) generar el conversor complet xlsx_to_json.py — tot a partir de les dades reals dels teus fitxers.
+# BlondSwim — Guia d'ús d'aider per als models i el conversor
 
-Nota de rutes: el projecte fa servir el layout src/blondswim/... (no src/...), confirma-ho abans de començar:
+Objectiu d'aquesta sessió amb aider: (1) actualitzar `nedador.py` amb el disseny final de `Ritmes`, (2) generar `macrocicle.py` i `sessio.py`, i (3) generar el conversor complet `xlsx_to_json.py` — tot a partir de les dades reals dels teus fitxers.
 
+**Nota de rutes**: el projecte fa servir el layout `src/blondswim/...` (no `src/...`), confirma-ho abans de començar:
+```bash
 ls src/blondswim/models/ src/blondswim/ingestion/
-Pas 1 — Arrencar aider
-Ja el tens instal·lat via pipx. Des de l'arrel de ws_blondswim:
+```
 
+---
+
+## Pas 1 — Arrencar aider
+
+Ja el tens instal·lat via `pipx`. Des de l'arrel de `ws_blondswim`:
+```bash
 make aider
-Pas 2 — Afegir els fitxers de context
+```
+
+---
+
+## Pas 2 — Afegir els fitxers de context
+
+```
 /add src/blondswim/models/nedador.py
 /add src/blondswim/models/calendari.py
 /add src/blondswim/models/macrocicle.py
 /add src/blondswim/models/sessio.py
 /add src/blondswim/ingestion/xlsx_to_json.py
-Pas 3 — Prompt per actualitzar nedador.py (disseny final de Ritmes)
-El nedador.py actual només té l'esquelet mínim (RitmesCSS amb a1/a2/a3). Cal ampliar-lo amb el disseny final que ja tens construït i validat a la pestanya Ritmes:
+```
 
+---
+
+## Pas 3 — Prompt per actualitzar `nedador.py` (disseny final de Ritmes)
+
+El `nedador.py` actual només té l'esquelet mínim (`RitmesCSS` amb `a1/a2/a3`). Cal ampliar-lo amb el disseny final que ja tens construït i validat a la pestanya `Ritmes`:
+
+```
 Actualitza src/blondswim/models/nedador.py per reflectir el disseny final de la 
 pestanya "Ritmes" (fitxer Planificacio_Mesocicles_Jep.xlsx), mantenint el que 
 ja hi ha (Nedador, camps existents) i ampliant-ho així:
@@ -72,7 +90,13 @@ aquests models només representen l'estructura de dades.
 No implementis els càlculs de les zones (offsets, factors d'escala) com a 
 mètodes aquí — això és responsabilitat d'un mòdul de càlcul separat que 
 farem a la Fase 1. Aquí només l'estructura de dades amb pydantic.
-Pas 4 — Prompt per als models Macrocicle i Sessio
+```
+
+---
+
+## Pas 4 — Prompt per als models `Macrocicle` i `Sessio`
+
+```
 Defineix els models pydantic Macrocicle i Sessio a src/blondswim/models/macrocicle.py 
 i src/blondswim/models/sessio.py, seguint l'estil de nedador.py i calendari.py.
 
@@ -119,7 +143,13 @@ percentatges per tipus de setmana, i un camp de contingut/descripció per part.
 No incloguis lògica de negoci (regles de taper, validacions) en aquests 
 models — només l'estructura de dades. Si algun camp et sembla ambigu, 
 pregunta abans d'assumir.
-Pas 5 — Prompt per al conversor xlsx_to_json.py
+```
+
+---
+
+## Pas 5 — Prompt per al conversor `xlsx_to_json.py`
+
+```
 Escriu el conversor complet a src/blondswim/ingestion/xlsx_to_json.py. Ha de:
 
 1. Llegir data/raw/Provisional26-27.xlsx, pestanya "Calendari".
@@ -198,18 +228,26 @@ una per validar/escriure), no una única funció monolítica — a
 tests/ingestion/test_xlsx_to_json.py hi haurem d'escriure tests per a 
 cadascuna, incloent un test específic per al cas piscina/modalitat 
 inconsistent i un per al format de data no reconegut.
-Pas 6 — Revisió (fes-ho abans d'executar)
- nedador.py conté els 4 models nous (MarquesReferencia, ParametresRitme, RitmeCursaObjectiu, RitmesCSS ampliat) i el Nedador original segueix funcionant (el test del Pas 11 de la Fase 0 encara passa: make test).
- macrocicle.py/sessio.py reflecteixen exactament els camps reals (compara amb les taules d'aquest document).
- La proposta de tipus_base/notes per al "Tipus de setmana" et sembla correcta, o prefereixes una altra categorització?
- El conversor llegeix les columnes del Calendari per nom de capçalera, no per lletra fixa.
- El conversor no regenera l'id de cada competició — el llegeix directament de la columna id (ja ve calculat al fitxer font).
- El parser de dates del calendari gestiona els 2 formats reals actuals (data única datetime, rang ISO "2027-01-16 a 2027-01-17") i falla amb error clar davant qualsevol altre format.
- La reconciliació piscina/modalitat funciona: la fila de Budapest aigües obertes (id que comença per 2027-06-29_) ha de donar piscina=None, modalitat="aaoo".
- El conversor llegeix B48:B52 amb data_only=True (valors calculats, no la fórmula en text).
- El conversor falla clarament (no en silenci) si una fila no encaixa amb cap model.
-Pas 7 — Executar i validar
+```
+
+## Pas 6 — Revisió (fes-ho abans d'executar)
+
+- [ ] `nedador.py` conté els 4 models nous (`MarquesReferencia`, `ParametresRitme`, `RitmeCursaObjectiu`, `RitmesCSS` ampliat) i el `Nedador` original segueix funcionant (el test del Pas 11 de la Fase 0 encara passa: `make test`).
+- [ ] `macrocicle.py`/`sessio.py` reflecteixen exactament els camps reals (compara amb les taules d'aquest document).
+- [ ] La proposta de `tipus_base`/`notes` per al "Tipus de setmana" et sembla correcta, o prefereixes una altra categorització?
+- [ ] El conversor llegeix les columnes del `Calendari` **per nom de capçalera**, no per lletra fixa.
+- [ ] El conversor **no** regenera l'`id` de cada competició — el llegeix directament de la columna `id` (ja ve calculat al fitxer font).
+- [ ] El parser de dates del calendari gestiona els 2 formats reals actuals (data única `datetime`, rang ISO "2027-01-16 a 2027-01-17") i falla amb error clar davant qualsevol altre format.
+- [ ] La reconciliació piscina/modalitat funciona: la fila de Budapest aigües obertes (`id` que comença per `2027-06-29_`) ha de donar `piscina=None`, `modalitat="aaoo"`.
+- [ ] El conversor llegeix `B48:B52` amb `data_only=True` (valors calculats, no la fórmula en text).
+- [ ] El conversor falla clarament (no en silenci) si una fila no encaixa amb cap model.
+
+## Pas 7 — Executar i validar
+
+```bash
 make run-ingestion
-Revisa manualment els 3 JSON generats: calendari.json (17 competicions, 2 de classe A, tots amb id legible i estable com "2027-01-16_campionat-catalunya-hivern"), macrocicle_jep.json (volums coincidint amb el full), i nedador_jep.json (font="estimat_marca", zones amb els valors que ja vam validar: A2≈82.09s, Velocitat≈67.55s).
+```
+
+Revisa manualment els 3 JSON generats: `calendari.json` (17 competicions, 2 de classe A, tots amb `id` legible i estable com `"2027-01-16_campionat-catalunya-hivern"`), `macrocicle_jep.json` (volums coincidint amb el full), i `nedador_jep.json` (`font="estimat_marca"`, zones amb els valors que ja vam validar: A2≈82.09s, Velocitat≈67.55s).
 
 Quan ho tinguis fet, comparteix el resultat i ho revisem junts.

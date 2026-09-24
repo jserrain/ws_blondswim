@@ -1,18 +1,17 @@
 """Tests per al conversor XLSX → JSON."""
 
 import json
-import pytest
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from blondswim.ingestion.xlsx_to_json import (
     DataParseError,
-    InconsistentDataWarning,
     convertir_calendari,
     convertir_macrocicle_jep,
     convertir_nedador_ritmes,
     determinar_font_ritmes,
-    llegir_capçaleres,
     parsejar_data,
     reconciliar_piscina_modalitat,
 )
@@ -84,12 +83,12 @@ class TestReconciliarPiscinaModalitat:
 
     def test_inconsistencia_piscina_modalitat(self):
         """Test amb inconsistència: modalitat=piscina però piscina buida."""
-        piscina, skip = reconciliar_piscina_modalitat("", "piscina", 5)
+        _piscina, skip = reconciliar_piscina_modalitat("", "piscina", 5)
         assert skip is True
 
     def test_inconsistencia_amb_espais(self):
         """Test amb inconsistència: piscina només amb espais."""
-        piscina, skip = reconciliar_piscina_modalitat("   ", "piscina", 7)
+        _piscina, skip = reconciliar_piscina_modalitat("   ", "piscina", 7)
         assert skip is True
 
 
@@ -126,19 +125,16 @@ class TestLlegirCapçaleres:
         # i "Metodologia dominant" a "metodologiadominant"
         # Aquest test requereix un mock d'un worksheet
         # Es pot implementar quan es tingui openpyxl disponible als tests
-        pass
 
     def test_header_row_per_defecte(self):
         """Test que per defecte llegeix la fila 1."""
         # Aquest test requereix un mock d'un worksheet
         # Es pot implementar quan es tingui openpyxl disponible als tests
-        pass
 
     def test_header_row_personalitzat(self):
         """Test que pot llegir capçaleres d'una fila específica."""
         # Aquest test requereix un mock d'un worksheet
         # Es pot implementar quan es tingui openpyxl disponible als tests
-        pass
 
 
 class TestConvertirCalendari:

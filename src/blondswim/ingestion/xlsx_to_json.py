@@ -15,7 +15,6 @@ from blondswim.models.macrocicle import Macrocicle
 from blondswim.models.nedador import (
     MarquesReferencia,
     Nedador,
-    ParametresRitme,
     RitmeCursaObjectiu,
     RitmesCSS,
 )
@@ -26,13 +25,11 @@ logger = logging.getLogger(__name__)
 class DataParseError(Exception):
     """Error en parsejar una data."""
 
-    pass
 
 
 class InconsistentDataWarning(Exception):
     """Advertència per dades inconsistents (no fatal)."""
 
-    pass
 
 
 def parsejar_data(valor: Any, num_fila: int) -> tuple[str, str]:
@@ -311,10 +308,10 @@ def convertir_macrocicle_jep(
                 volum_max = int(parts[1].strip().replace(".", ""))
         
         # Crear mesocicle
-        from blondswim.models.macrocicle import Mesocicle
-        
         # Generar id com a slug del nom
         import unicodedata
+
+        from blondswim.models.macrocicle import Mesocicle
         nom_normalitzat = str(mesocicle_nom).strip()
         nom_slug = unicodedata.normalize('NFKD', nom_normalitzat.lower())
         nom_slug = nom_slug.encode('ascii', 'ignore').decode('ascii')
@@ -567,7 +564,7 @@ def main():
             print(f"   ⚠ {len(stats_cal['advertencies'])} advertències:")
             for adv in stats_cal["advertencies"]:
                 print(f"     - {adv}")
-    except Exception as e:
+    except Exception as e: # noqa: BLE001
         print(f"   ✗ Error: {e}")
         return
 
@@ -580,7 +577,7 @@ def main():
         )
         print(f"   ✓ {stats_macro['mesocicles']} mesocicles processats")
         print(f"   ✓ {stats_macro['microcicles']} microcicles totals")
-    except Exception as e:
+    except Exception as e: # noqa: BLE001
         print(f"   ✗ Error: {e}")
         return
 
@@ -596,7 +593,7 @@ def main():
             print(f"     - {ned['nom']} ({ned['fitxer']})")
             print(f"       Font ritmes: {ned['font_ritmes']}")
             print(f"       Ritmes cursa objectiu: {ned['ritmes_cursa']}")
-    except Exception as e:
+    except Exception as e: # noqa: BLE001
         print(f"   ✗ Error: {e}")
         return
 
