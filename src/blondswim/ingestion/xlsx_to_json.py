@@ -284,7 +284,7 @@ def convertir_macrocicle_jep(
             
         mesocicle_nom = row[mesocicle_col - 1].value
         if not mesocicle_nom:
-            continue  # Fila buida
+            break  # Aturar a la primera fila buida
         
         files_processades += 1
         
@@ -413,6 +413,10 @@ def convertir_nedador_ritmes(
         raise ValueError("No s'ha trobat nom del nedador a B4")
 
     edat = ws["B5"].value
+    categoria = ws["B6"].value
+    if not categoria:
+        raise ValueError("Camp obligatori categoria (B6) està buit")
+    
     data_test_css = ws["B8"].value
     temps_400 = ws["B9"].value
     temps_200 = ws["B10"].value
@@ -424,6 +428,15 @@ def convertir_nedador_ritmes(
     marca_50_papallona = ws["B19"].value
     marca_200_lliure = ws["B21"].value
     marca_100_im = ws["B22"].value
+    
+    # Generar id com a slug del nom
+    import unicodedata
+    nom_slug = unicodedata.normalize('NFKD', str(nom).lower())
+    nom_slug = nom_slug.encode('ascii', 'ignore').decode('ascii')
+    nedador_id = nom_slug.replace(' ', '-').strip()
+    
+    # Determinar mode_ritme
+    mode_ritme = "temps" if marca_100_lliures else "rpe"
 
     # Determinar font
     font = determinar_font_ritmes(temps_400, temps_200, text_font)
@@ -465,11 +478,15 @@ def convertir_nedador_ritmes(
 
     # Llegir taula de Ritme de cursa objectiu (files 76-79, columnes A-C)
     ritmes_cursa = []
+    proves_objectiu = []
     for num_fila in range(76, 80):
         prova = ws[f"A{num_fila}"].value
         if not prova or prova == "[Prova]":
             continue
 
+        # Afegir a proves_objectiu
+        proves_objectiu.append(str(prova).strip())
+        
         distancia = ws[f"B{num_fila}"].value
         temps_objectiu = ws[f"C{num_fila}"].value
 
@@ -484,8 +501,12 @@ def convertir_nedador_ritmes(
     # Crear Nedador
     try:
         nedador = Nedador(
+            id=nedador_id,
             nom=str(nom).strip(),
             edat=int(edat) if edat else 0,
+            categoria=str(categoria).strip().lower(),
+            proves_objectiu=proves_objectiu,
+            mode_ritme=mode_ritme,
             ritmes_css=ritmes_css,
             marques_referencia=marques,
             ritmes_cursa_objectiu=ritmes_cursa,

@@ -59,6 +59,7 @@ class RitmeCursaObjectiu(BaseModel):
 class Nedador(BaseModel):
     id: str
     nom: str
+    edat: int | None = None
     categoria: Literal["absolut", "master", "junior"]
     proves_objectiu: list[str]
     pics_prioritzats: list[str] = []
