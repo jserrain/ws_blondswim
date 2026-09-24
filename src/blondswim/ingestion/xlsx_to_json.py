@@ -92,7 +92,7 @@ def llegir_capçaleres(ws: Worksheet) -> dict[str, int]:
 
 def reconciliar_piscina_modalitat(
     piscina: Any, modalitat: Any, num_fila: int
-) -> tuple[str | None, bool]:
+) -> tuple[str, bool]:
     """
     Reconciliar els camps piscina i modalitat segons les regles especificades.
 
@@ -103,7 +103,7 @@ def reconciliar_piscina_modalitat(
 
     Returns:
         Tuple (piscina_final, skip_fila)
-        - piscina_final: Valor final de piscina (pot ser None si és "aaoo")
+        - piscina_final: Valor final de piscina ("25m", "50m" o "aaoo")
         - skip_fila: True si cal saltar aquesta fila per inconsistència
 
     Raises:
@@ -116,16 +116,16 @@ def reconciliar_piscina_modalitat(
     if not piscina_net:
         # El valor real és "aaoo" (de modalitat)
         if modalitat and str(modalitat).strip().lower() == "aaoo":
-            return None, False  # None indica que és aigües obertes
+            return "aaoo", False
 
         # Si modalitat="piscina" però piscina buida -> inconsistència
         if modalitat and str(modalitat).strip().lower() == "piscina":
             logger.warning(
                 f"Fila {num_fila}: modalitat='piscina' però camp piscina buit. Saltant fila."
             )
-            return None, True  # Skip aquesta fila
+            return "", True  # Skip aquesta fila
 
-    return piscina_net if piscina_net else None, False
+    return piscina_net, False
 
 
 def convertir_calendari(

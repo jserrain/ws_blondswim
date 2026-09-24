@@ -67,13 +67,13 @@ class TestReconciliarPiscinaModalitat:
     def test_aigues_obertes(self):
         """Test amb aigües obertes (piscina buida, modalitat aaoo)."""
         piscina, skip = reconciliar_piscina_modalitat("", "aaoo", 2)
-        assert piscina is None
+        assert piscina == "aaoo"
         assert skip is False
 
     def test_aigues_obertes_amb_espais(self):
         """Test amb aigües obertes (piscina amb espais)."""
         piscina, skip = reconciliar_piscina_modalitat("   ", "aaoo", 2)
-        assert piscina is None
+        assert piscina == "aaoo"
         assert skip is False
 
     def test_inconsistencia_piscina_modalitat(self):

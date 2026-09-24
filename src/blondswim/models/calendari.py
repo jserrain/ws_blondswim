@@ -7,4 +7,4 @@ class Competicio(BaseModel):
     data_inici: str
     data_fi: str
     classe: Literal["A", "B", "C"]
-    piscina: str
+    piscina: Literal["25m", "50m", "aaoo"]
