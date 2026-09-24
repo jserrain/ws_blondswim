@@ -257,17 +257,83 @@ def convertir_macrocicle_jep(
 
     # Llegir capçaleres
     capçaleres = llegir_capçaleres(ws)
+    
+    # Capçaleres esperades (normalitzades a minúscules)
+    required = ["mesocicle", "setmanes", "dates", "fase/objectiu", 
+                "metodologia dominant", "volum setmanal (rang)", 
+                "volum mitjà previst (m)"]
+    
+    # Verificar que existeixen les capçaleres necessàries
+    for req in required:
+        if req not in capçaleres:
+            logger.warning(f"Capçalera '{req}' no trobada. Capçaleres disponibles: {list(capçaleres.keys())}")
 
-    # TODO: Implementar lectura segons l'estructura real del full Macrocicle
-    # Aquesta és una implementació placeholder que caldrà completar
-    # quan es conegui l'estructura exacta del full
+    mesocicles = []
+    
+    # Processar files (començant des de la 2, la 1 són capçaleres)
+    files_processades = 0
+    for num_fila, row in enumerate(ws.iter_rows(min_row=2), start=2):
+        # Obtenir valor de la primera columna (Mesocicle)
+        mesocicle_col = capçaleres.get("mesocicle")
+        if not mesocicle_col:
+            logger.error("No s'ha trobat la columna 'mesocicle'")
+            break
+            
+        mesocicle_nom = row[mesocicle_col - 1].value
+        if not mesocicle_nom:
+            continue  # Fila buida
+        
+        files_processades += 1
+        
+        # Extreure dades de cada columna per nom
+        setmanes = row[capçaleres.get("setmanes", 1) - 1].value
+        dates = row[capçaleres.get("dates", 1) - 1].value
+        fase_objectiu = row[capçaleres.get("fase/objectiu", 1) - 1].value
+        metodologia = row[capçaleres.get("metodologia dominant", 1) - 1].value
+        volum_rang = row[capçaleres.get("volum setmanal (rang)", 1) - 1].value
+        volum_mitja = row[capçaleres.get("volum mitjà previst (m)", 1) - 1].value
+        tancament = row[capçaleres.get("tancament", 999) - 1].value if "tancament" in capçaleres else None
+        
+        # Parsejar volum_rang (ex: "18000-22000" -> min=18000, max=22000)
+        volum_min, volum_max = 0, 0
+        if volum_rang:
+            volum_str = str(volum_rang).strip()
+            if "-" in volum_str:
+                parts = volum_str.split("-")
+                volum_min = int(parts[0].strip())
+                volum_max = int(parts[1].strip())
+        
+        # Crear mesocicle
+        from blondswim.models.macrocicle import Mesocicle
+        
+        try:
+            mesocicle = Mesocicle(
+                id=str(mesocicle_nom).strip(),
+                nom=str(mesocicle_nom).strip(),
+                setmanes=str(setmanes).strip() if setmanes else "",
+                dates=str(dates).strip() if dates else "",
+                fase_objectiu=str(fase_objectiu).strip() if fase_objectiu else "",
+                metodologia_dominant=str(metodologia).strip() if metodologia else "",
+                volum_min=volum_min,
+                volum_max=volum_max,
+                volum_mitja_previst=int(volum_mitja) if volum_mitja else 0,
+                tancament=str(tancament).strip() if tancament else None,
+                microcicles=[],  # Els microcicles es poden afegir després si cal
+            )
+            mesocicles.append(mesocicle)
+        except Exception as e:
+            raise ValueError(
+                f"Fila {num_fila}: error de validació del model Mesocicle: {e}"
+            ) from e
+    
+    logger.info(f"Files processades del full Macrocicle: {files_processades}")
+    logger.info(f"Mesocicles creats: {len(mesocicles)}")
 
-    # Per ara, retornem un macrocicle buit vàlid
+    # Crear macrocicle
     macrocicle_data = {
         "nom": "Macrocicle 2026-27",
-        "data_inici": "2026-09-01",
-        "data_fi": "2027-08-31",
-        "mesocicles": [],
+        "temporada": "2026-2027",
+        "mesocicles": mesocicles,
     }
 
     # Validar contra model

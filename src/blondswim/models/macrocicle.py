@@ -18,28 +18,12 @@ class Mesocicle(BaseModel):
     tancament: str | None = None
     tecnica_focus: str | None = None
     especific_metodologia: str | None = None
-
-class Microcicle(BaseModel):
-    """
-    Representa una setmana dins d'un mesocicle.
-    Conté la planificació setmanal amb volum objectiu i característiques.
-    """
-    setmana: int
-    dates: str  # Ex: "25-31/01/2027"
-    mesocicle_id: str
-    tipus_base: Literal["carrega", "qualitat", "descarrega", "taper", "transicio"]
-    notes: str | None = None  # Ex: "Test CSS", "Nadal", "Pic 1", etc.
-    volum_objectiu: int  # metres
-    dies_qualitat: bool  # Dc+Ds
-    test_css: bool
-    competicio_test_oficial: str | None = None
-    test_avaluacio: str | None = None
-    focus_especific: str | None = None
+    microcicles: list[Microcicle] = []
 
 class Macrocicle(BaseModel):
     """
-    Representa el macrocicle anual complet amb tots els mesocicles i microcicles.
+    Representa el macrocicle anual complet amb tots els mesocicles.
     """
-    temporada: str  # Ex: "2026-2027"
+    nom: str
+    temporada: str | None = None  # Ex: "Hivern", "Estiu" (opcional)
     mesocicles: list[Mesocicle]
-    microcicles: list[Microcicle]
