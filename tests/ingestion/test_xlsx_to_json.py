@@ -115,6 +115,14 @@ class TestDeterminarFontRitmes:
 class TestLlegirCapçaleres:
     """Tests per a la funció llegir_capçaleres."""
 
+    def test_normalitzacio_capçaleres(self):
+        """Test que les capçaleres es normalitzen correctament."""
+        # Verificar que "Fase / Objectiu" es normalitza a "fase/objectiu"
+        # i "Metodologia dominant" a "metodologiadominant"
+        # Aquest test requereix un mock d'un worksheet
+        # Es pot implementar quan es tingui openpyxl disponible als tests
+        pass
+
     def test_header_row_per_defecte(self):
         """Test que per defecte llegeix la fila 1."""
         # Aquest test requereix un mock d'un worksheet

@@ -87,7 +87,9 @@ def llegir_capçaleres(ws: Worksheet, header_row: int = 1) -> dict[str, int]:
     capçaleres = {}
     for cell in ws[header_row]:
         if cell.value:
-            capçaleres[str(cell.value).strip().lower()] = cell.column
+            # Normalitzar: minúscules, sense espais interns
+            nom_normalitzat = str(cell.value).strip().lower().replace(" ", "")
+            capçaleres[nom_normalitzat] = cell.column
     return capçaleres
 
 
@@ -259,10 +261,10 @@ def convertir_macrocicle_jep(
     # Llegir capçaleres (fila 6 en aquest full específic)
     capçaleres = llegir_capçaleres(ws, header_row=6)
     
-    # Capçaleres esperades (normalitzades a minúscules)
+    # Capçaleres esperades (normalitzades: minúscules, sense espais)
     required = ["mesocicle", "setmanes", "dates", "fase/objectiu", 
-                "metodologia dominant", "volum setmanal (rang)", 
-                "volum mitjà previst (m)"]
+                "metodologiadominant", "volumsetmanal(rang)", 
+                "volummitjàprevist(m)"]
     
     # Verificar que existeixen les capçaleres necessàries
     for req in required:
@@ -286,23 +288,27 @@ def convertir_macrocicle_jep(
         
         files_processades += 1
         
-        # Extreure dades de cada columna per nom
+        # Extreure dades de cada columna per nom (normalitzat)
         setmanes = row[capçaleres.get("setmanes", 1) - 1].value
         dates = row[capçaleres.get("dates", 1) - 1].value
         fase_objectiu = row[capçaleres.get("fase/objectiu", 1) - 1].value
-        metodologia = row[capçaleres.get("metodologia dominant", 1) - 1].value
-        volum_rang = row[capçaleres.get("volum setmanal (rang)", 1) - 1].value
-        volum_mitja = row[capçaleres.get("volum mitjà previst (m)", 1) - 1].value
-        tancament = row[capçaleres.get("tancament", 999) - 1].value if "tancament" in capçaleres else None
+        metodologia = row[capçaleres.get("metodologiadominant", 1) - 1].value
+        volum_rang = row[capçaleres.get("volumsetmanal(rang)", 1) - 1].value
+        volum_mitja = row[capçaleres.get("volummitjàprevist(m)", 1) - 1].value
+        tancament = row[capçaleres.get("tancament(control/objectiu)", 999) - 1].value if "tancament(control/objectiu)" in capçaleres else None
         
-        # Parsejar volum_rang (ex: "18000-22000" -> min=18000, max=22000)
+        # Parsejar volum_rang (ex: "15.500 - 17.000 m" -> min=15500, max=17000)
+        # El punt és separador de milers en format català
         volum_min, volum_max = 0, 0
         if volum_rang:
             volum_str = str(volum_rang).strip()
+            # Eliminar " m" del final si existeix
+            volum_str = volum_str.replace(" m", "").replace("m", "")
             if "-" in volum_str:
                 parts = volum_str.split("-")
-                volum_min = int(parts[0].strip())
-                volum_max = int(parts[1].strip())
+                # Eliminar punts (separadors de milers) abans de convertir a int
+                volum_min = int(parts[0].strip().replace(".", ""))
+                volum_max = int(parts[1].strip().replace(".", ""))
         
         # Crear mesocicle
         from blondswim.models.macrocicle import Mesocicle
