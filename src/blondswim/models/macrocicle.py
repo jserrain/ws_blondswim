@@ -1,6 +1,23 @@
 from pydantic import BaseModel
 from typing import Literal
 
+class Microcicle(BaseModel):
+    """
+    Representa una setmana dins d'un mesocicle.
+    Conté la planificació setmanal amb volum objectiu i característiques.
+    """
+    setmana: int
+    dates: str  # Ex: "25-31/01/2027"
+    mesocicle_id: str
+    tipus_base: Literal["carrega", "qualitat", "descarrega", "taper", "transicio"]
+    notes: str | None = None  # Ex: "Test CSS", "Nadal", "Pic 1", etc.
+    volum_objectiu: int  # metres
+    dies_qualitat: bool  # Dc+Ds
+    test_css: bool
+    competicio_test_oficial: str | None = None
+    test_avaluacio: str | None = None
+    focus_especific: str | None = None
+
 class Mesocicle(BaseModel):
     """
     Representa un mesocicle dins del macrocicle anual.
