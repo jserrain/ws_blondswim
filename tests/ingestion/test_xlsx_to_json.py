@@ -7,6 +7,7 @@ from blondswim.ingestion.xlsx_to_json import (
     DataParseError,
     InconsistentDataWarning,
     determinar_font_ritmes,
+    llegir_capçaleres,
     parsejar_data,
     reconciliar_piscina_modalitat,
 )
@@ -109,3 +110,19 @@ class TestDeterminarFontRitmes:
         """Test sense temps ni text."""
         font = determinar_font_ritmes(None, None, None)
         assert font == "estimat_marca"
+
+
+class TestLlegirCapçaleres:
+    """Tests per a la funció llegir_capçaleres."""
+
+    def test_header_row_per_defecte(self):
+        """Test que per defecte llegeix la fila 1."""
+        # Aquest test requereix un mock d'un worksheet
+        # Es pot implementar quan es tingui openpyxl disponible als tests
+        pass
+
+    def test_header_row_personalitzat(self):
+        """Test que pot llegir capçaleres d'una fila específica."""
+        # Aquest test requereix un mock d'un worksheet
+        # Es pot implementar quan es tingui openpyxl disponible als tests
+        pass

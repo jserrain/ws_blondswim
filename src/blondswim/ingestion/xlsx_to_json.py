@@ -73,18 +73,19 @@ def parsejar_data(valor: Any, num_fila: int) -> tuple[str, str]:
     )
 
 
-def llegir_capçaleres(ws: Worksheet) -> dict[str, int]:
+def llegir_capçaleres(ws: Worksheet, header_row: int = 1) -> dict[str, int]:
     """
-    Llegir capçaleres de la primera fila i retornar un mapa nom -> índex de columna.
+    Llegir capçaleres d'una fila específica i retornar un mapa nom -> índex de columna.
 
     Args:
         ws: Worksheet d'openpyxl
+        header_row: Número de fila on es troben les capçaleres (per defecte 1)
 
     Returns:
         Diccionari {nom_capçalera: índex_columna} (índex basat en 1)
     """
     capçaleres = {}
-    for cell in ws[1]:
+    for cell in ws[header_row]:
         if cell.value:
             capçaleres[str(cell.value).strip().lower()] = cell.column
     return capçaleres
@@ -255,8 +256,8 @@ def convertir_macrocicle_jep(
     wb = openpyxl.load_workbook(fitxer_entrada, data_only=True)
     ws = wb["Macrocicle"]
 
-    # Llegir capçaleres
-    capçaleres = llegir_capçaleres(ws)
+    # Llegir capçaleres (fila 6 en aquest full específic)
+    capçaleres = llegir_capçaleres(ws, header_row=6)
     
     # Capçaleres esperades (normalitzades a minúscules)
     required = ["mesocicle", "setmanes", "dates", "fase/objectiu", 
@@ -270,9 +271,9 @@ def convertir_macrocicle_jep(
 
     mesocicles = []
     
-    # Processar files (començant des de la 2, la 1 són capçaleres)
+    # Processar files (començant des de la 7, la 6 són capçaleres)
     files_processades = 0
-    for num_fila, row in enumerate(ws.iter_rows(min_row=2), start=2):
+    for num_fila, row in enumerate(ws.iter_rows(min_row=7), start=7):
         # Obtenir valor de la primera columna (Mesocicle)
         mesocicle_col = capçaleres.get("mesocicle")
         if not mesocicle_col:
@@ -414,9 +415,9 @@ def convertir_nedador_ritmes(
     text_font = ws["B44"].value
 
     # Altres marques de referència
-    marca_ref_b19 = ws["B19"].value
-    marca_ref_b21 = ws["B21"].value
-    marca_ref_b22 = ws["B22"].value
+    marca_50_papallona = ws["B19"].value
+    marca_200_lliure = ws["B21"].value
+    marca_100_im = ws["B22"].value
 
     # Determinar font
     font = determinar_font_ritmes(temps_400, temps_200, text_font)
@@ -441,15 +442,19 @@ def convertir_nedador_ritmes(
         velocitat=float(zona_velocitat) if zona_velocitat else 0.0,
     )
 
+    # Validar camps obligatoris
+    if not marca_100_lliures:
+        raise ValueError("Camp obligatori marca_100_lliure_seg (B15) està buit")
+    if not marca_50_lliures:
+        raise ValueError("Camp obligatori marca_50_lliure_seg (B20) està buit")
+
     # Crear MarquesReferencia
     marques = MarquesReferencia(
-        millor_100_lliures=float(marca_100_lliures) if marca_100_lliures else 0.0,
-        millor_50_lliures=float(marca_50_lliures) if marca_50_lliures else 0.0,
-        altres={
-            "B19": str(marca_ref_b19) if marca_ref_b19 else "",
-            "B21": str(marca_ref_b21) if marca_ref_b21 else "",
-            "B22": str(marca_ref_b22) if marca_ref_b22 else "",
-        },
+        marca_100_lliure_seg=float(marca_100_lliures),
+        marca_50_lliure_seg=float(marca_50_lliures),
+        marca_50_papallona=str(marca_50_papallona).strip() if marca_50_papallona else None,
+        marca_200_lliure=str(marca_200_lliure).strip() if marca_200_lliure else None,
+        marca_100_im=str(marca_100_im).strip() if marca_100_im else None,
     )
 
     # Llegir taula de Ritme de cursa objectiu (files 76-79, columnes A-C)
