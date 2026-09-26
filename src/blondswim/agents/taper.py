@@ -106,10 +106,7 @@ def detectar_retaper(
     
     # Condició 3: separació <= finestra_setmanes
     setmanes = setmanes_entre(competicio_a, competicio_b)
-    if setmanes > finestra_setmanes:
-        return False
-    
-    return True
+    return setmanes <= finestra_setmanes
 
 
 def generar_pla_taper_temporada(
