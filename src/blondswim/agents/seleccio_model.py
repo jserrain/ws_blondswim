@@ -129,11 +129,14 @@ Retorna NOMÉS la justificació ampliada usant la tool retornar_justificacio."""
 
         response = client.messages.create(
             model=DEFAULT_MODEL,
-            max_tokens=1024,
+            max_tokens=4096,
             tools=tools,
             tool_choice={"type": "tool", "name": "retornar_justificacio"},
             messages=[{"role": "user", "content": prompt}],
         )
+
+        # Debug: verificar stop_reason
+        logger.debug(f"stop_reason: {response.stop_reason}")
 
         # Extreure justificació del tool use
         for block in response.content:
