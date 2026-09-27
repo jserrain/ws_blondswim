@@ -79,8 +79,10 @@ def seleccionar_metodologia(
                 "volum moderat amb sessions específiques de tècnica i tàctica."
             ),
             avisos=[
-                "Metodologia basada en judici d'entrenador i pràctica documentada, "
-                "sense evidència controlada disponible."
+                (
+                    "Metodologia basada en judici d'entrenador i pràctica documentada, "
+                    "sense evidència controlada disponible."
+                )
             ],
         )
 
@@ -136,10 +138,12 @@ def seleccionar_metodologia(
     # 100m: Sprint/Tècnica (USRPT NO recomanat)
     if distancia <= 100:
         avisos_100m = [
-            "USRPT no és recomanat per a proves de sprint (50-100m) ja que la "
-            "metodologia està dissenyada per a proves de resistència on el ritme "
-            "de cursa es pot mantenir durant repeticions. En sprint, la fatiga "
-            "neuromuscular impedeix mantenir velocitat màxima."
+            (
+                "USRPT no és recomanat per a proves de sprint (50-100m) ja que la "
+                "metodologia està dissenyada per a proves de resistència on el ritme "
+                "de cursa es pot mantenir durant repeticions. En sprint, la fatiga "
+                "neuromuscular impedeix mantenir velocitat màxima."
+            )
         ]
 
         return DecisioMetodologia(
