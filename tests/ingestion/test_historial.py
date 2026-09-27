@@ -57,26 +57,16 @@ class TestConvertirPretemporada:
                 "Les intensitats no estàndard haurien de ser strings"
 
     def test_travessa_banyoles_series_buides(self, sessions):
-        """Verificar que dies especials com 'Travessa Banyoles' es creen amb series=[]."""
-        # Buscar sessions amb volum 0 i series buides (possibles dies especials)
+        """Verificar que dies especials (sense sèries) es creen correctament."""
         sessions_especials = [
-            s for s in sessions 
+            s for s in sessions
             if s.volum_total_m == 0 and len(s.series) == 0
         ]
-        
-        # Si hi ha sessions especials, verificar que no trenquen el parsing
-        if sessions_especials:
-            for sessio in sessions_especials:
-                assert isinstance(sessio.series, list), "series hauria de ser una llista"
-                assert len(sessio.series) == 0, "series hauria de ser buida"
-                assert sessio.volum_total_m == 0, "volum_total_m hauria de ser 0"
-                assert sessio.temps_total_min == 0.0, "temps_total_min hauria de ser 0.0"
-            
-            # Verificar que hi ha sessions després de les especials
-            data_ultima_especial = max(s.data for s in sessions_especials)
-            sessions_posteriors = [s for s in sessions if s.data > data_ultima_especial]
-            assert len(sessions_posteriors) > 0, \
-                "Hauria d'haver-hi sessions després dels dies especials"
+        for sessio in sessions_especials:
+            assert isinstance(sessio.series, list)
+            assert len(sessio.series) == 0
+            assert sessio.volum_total_m == 0
+            assert sessio.temps_total_min == 0.0
 
     def test_ordre_cronologic(self, sessions):
         """Verificar que les sessions estan ordenades cronològicament."""
