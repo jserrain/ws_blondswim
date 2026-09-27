@@ -16,7 +16,7 @@ load_dotenv(override=True)
 
 # Model per defecte
 DEFAULT_MODEL: Final[str] = os.getenv(
-    "LLM_MODEL", "claude-sonnet-4-20241022"
+    "LLM_MODEL", "claude-sonnet-5"
 )
 
 
