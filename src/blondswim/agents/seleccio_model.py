@@ -143,11 +143,22 @@ Retorna NOMÉS la justificació ampliada usant la tool retornar_justificacio."""
                     f"keys={list(block.input.keys()) if isinstance(block.input, dict) else 'N/A'}, "
                     f"content={block.input}"
                 )
-                return block.input["justificacio"]
+                # Verificar que block.input té la clau esperada
+                if isinstance(block.input, dict) and "justificacio" in block.input:
+                    return block.input["justificacio"]
+                else:
+                    logger.warning(
+                        f"Tool use block sense clau 'justificacio'. "
+                        f"Contingut rebut: {block.input}. Usant justificació original."
+                    )
+                    return decisio.justificacio
+            elif block.type == "text":
+                # Fallback: si hi ha text, intentar usar-lo
+                logger.debug(f"Text block trobat: {block.text[:100]}...")
 
-        # Si no trobem tool use, fallback
+        # Si no trobem tool use vàlid, fallback
         logger.warning(
-            "Resposta LLM sense tool use esperat. Usant justificació original."
+            "Resposta LLM sense tool use vàlid. Usant justificació original."
         )
         return decisio.justificacio
 
