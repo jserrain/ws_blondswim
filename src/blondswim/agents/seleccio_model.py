@@ -1,10 +1,13 @@
 """Selecció de metodologia d'entrenament basada en prova i categoria."""
 
+import logging
 import re
 from typing import Literal
 
 from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.nedador import Nedador
+
+logger = logging.getLogger(__name__)
 
 
 def _extreure_distancia(prova: str) -> tuple[int | None, str]:
@@ -43,10 +46,120 @@ def _extreure_distancia(prova: str) -> tuple[int | None, str]:
     return None, "piscina"
 
 
+def _enriquir_justificacio_amb_llm(
+    decisio: DecisioMetodologia,
+    nedador: Nedador,
+) -> str:
+    """
+    Enriquir la justificació amb una crida a l'API de Claude.
+
+    Utilitza tool-use forçat perquè la resposta sigui exclusivament
+    {"justificacio": str}. L'LLM NO pot canviar la metodologia principal,
+    només ampliar i personalitzar la justificació basant-se en el context
+    del nedador.
+
+    Args:
+        decisio: Decisió de metodologia ja calculada (determinista)
+        nedador: Nedador per al qual es fa la selecció
+
+    Returns:
+        Justificació enriquida (o la original si hi ha error)
+    """
+    try:
+        from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
+
+        client = get_llm_client()
+
+        # Definir tool per forçar resposta estructurada
+        tools = [
+            {
+                "name": "retornar_justificacio",
+                "description": (
+                    "Retorna una justificació ampliada i personalitzada per a "
+                    "la metodologia d'entrenament seleccionada."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "justificacio": {
+                            "type": "string",
+                            "description": (
+                                "Justificació ampliada que explica per què aquesta "
+                                "metodologia és adequada per al nedador i la seva prova "
+                                "objectiu, mantenint la metodologia principal ja decidida."
+                            ),
+                        }
+                    },
+                    "required": ["justificacio"],
+                },
+            }
+        ]
+
+        # Construir prompt
+        proves_str = ", ".join(nedador.proves_objectiu)
+        prompt = f"""Ets un expert en metodologies d'entrenament de natació.
+
+CONTEXT DEL NEDADOR:
+- Nom: {nedador.nom}
+- Edat: {nedador.edat}
+- Categoria: {nedador.categoria}
+- Proves objectiu: {proves_str}
+
+DECISIÓ JA PRESA (NO LA CANVIÏS):
+- Prova analitzada: {decisio.prova}
+- Metodologia principal: {decisio.metodologia_principal}
+- Metodologies complementàries: {', '.join(decisio.metodologies_complementaries)}
+- Força d'evidència: {decisio.forca_evidencia}
+
+JUSTIFICACIÓ ACTUAL:
+{decisio.justificacio}
+
+TASCA:
+Amplia i personalitza la justificació per a aquest nedador específic.
+NO proposis cap metodologia diferent, només explica millor per què aquesta
+metodologia és adequada considerant:
+- La seva edat i categoria
+- Les seves proves objectiu
+- El nivell d'evidència científica disponible
+
+Mantén un to professional i basat en evidència. Si la força d'evidència és
+baixa (pràctica documentada o sense evidència), sigues honest sobre les
+limitacions però explica el raonament pràctic.
+
+Retorna NOMÉS la justificació ampliada usant la tool retornar_justificacio."""
+
+        response = client.messages.create(
+            model=DEFAULT_MODEL,
+            max_tokens=1024,
+            tools=tools,
+            tool_choice={"type": "tool", "name": "retornar_justificacio"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        # Extreure justificació del tool use
+        for block in response.content:
+            if block.type == "tool_use" and block.name == "retornar_justificacio":
+                return block.input["justificacio"]
+
+        # Si no trobem tool use, fallback
+        logger.warning(
+            "Resposta LLM sense tool use esperat. Usant justificació original."
+        )
+        return decisio.justificacio
+
+    except Exception as e:
+        logger.warning(
+            f"Error en enriquir justificació amb LLM: {e}. "
+            f"Usant justificació original."
+        )
+        return decisio.justificacio
+
+
 def seleccionar_metodologia(
     nedador: Nedador,
     prova_objectiu: str,
     categoria: Literal["absolut", "master"],
+    enriquir_amb_llm: bool = True,
 ) -> DecisioMetodologia:
     """
     Seleccionar metodologia d'entrenament basada en la prova i categoria.
@@ -58,6 +171,8 @@ def seleccionar_metodologia(
         nedador: Nedador per al qual es fa la selecció
         prova_objectiu: Descripció de la prova (ex: "100m lliure", "AAOO 5km")
         categoria: Categoria del nedador ("absolut" o "master")
+        enriquir_amb_llm: Si True, enriquir justificació amb LLM per casos
+                          amb evidència baixa (default: True)
 
     Returns:
         DecisioMetodologia amb metodologia principal, complementàries i justificació
@@ -66,7 +181,7 @@ def seleccionar_metodologia(
 
     # Aigües obertes
     if tipus == "aaoo":
-        return DecisioMetodologia(
+        decisio = DecisioMetodologia(
             prova=prova_objectiu,
             categoria=categoria,
             metodologia_principal="Entrenament específic AAOO",
@@ -86,9 +201,18 @@ def seleccionar_metodologia(
             ],
         )
 
+        # Enriquir justificació amb LLM si està habilitat
+        if enriquir_amb_llm and decisio.forca_evidencia in {
+            "sense_evidencia",
+            "practica_documentada",
+        }:
+            decisio.justificacio = _enriquir_justificacio_amb_llm(decisio, nedador)
+
+        return decisio
+
     # IM/Estils
     if tipus == "im":
-        return DecisioMetodologia(
+        decisio = DecisioMetodologia(
             prova=prova_objectiu,
             categoria=categoria,
             metodologia_principal="Bowman/Escola australiana multi-estil",
@@ -103,10 +227,19 @@ def seleccionar_metodologia(
             avisos=[],
         )
 
+        # Enriquir justificació amb LLM si està habilitat
+        if enriquir_amb_llm and decisio.forca_evidencia in {
+            "sense_evidencia",
+            "practica_documentada",
+        }:
+            decisio.justificacio = _enriquir_justificacio_amb_llm(decisio, nedador)
+
+        return decisio
+
     # Proves de piscina per distància
     if distancia is None:
         # Fallback si no es pot determinar distància
-        return DecisioMetodologia(
+        decisio = DecisioMetodologia(
             prova=prova_objectiu,
             categoria=categoria,
             metodologia_principal="Indeterminat",
@@ -116,11 +249,20 @@ def seleccionar_metodologia(
             avisos=["Prova no reconeguda. Especifiqueu distància en metres."],
         )
 
+        # Enriquir justificació amb LLM si està habilitat
+        if enriquir_amb_llm and decisio.forca_evidencia in {
+            "sense_evidencia",
+            "practica_documentada",
+        }:
+            decisio.justificacio = _enriquir_justificacio_amb_llm(decisio, nedador)
+
+        return decisio
+
     avisos = []
 
     # 50m: Sprint/Tècnica
     if distancia <= 50:
-        return DecisioMetodologia(
+        decisio = DecisioMetodologia(
             prova=prova_objectiu,
             categoria=categoria,
             metodologia_principal="Sprint/Tècnica",
@@ -135,6 +277,15 @@ def seleccionar_metodologia(
             avisos=[],
         )
 
+        # Enriquir justificació amb LLM si està habilitat
+        if enriquir_amb_llm and decisio.forca_evidencia in {
+            "sense_evidencia",
+            "practica_documentada",
+        }:
+            decisio.justificacio = _enriquir_justificacio_amb_llm(decisio, nedador)
+
+        return decisio
+
     # 100m: Sprint/Tècnica (USRPT NO recomanat)
     if distancia <= 100:
         avisos_100m = [
@@ -146,7 +297,7 @@ def seleccionar_metodologia(
             )
         ]
 
-        return DecisioMetodologia(
+        decisio = DecisioMetodologia(
             prova=prova_objectiu,
             categoria=categoria,
             metodologia_principal="Sprint/Tècnica",
@@ -164,6 +315,9 @@ def seleccionar_metodologia(
             avisos=avisos_100m,
         )
 
+        # No enriquir amb LLM per evidència moderada
+        return decisio
+
     # 200m: Polaritzat
     if distancia <= 200:
         if categoria == "master":
@@ -176,7 +330,7 @@ def seleccionar_metodologia(
         else:
             forca = "forta"
 
-        return DecisioMetodologia(
+        decisio = DecisioMetodologia(
             prova=prova_objectiu,
             categoria=categoria,
             metodologia_principal="Polaritzat",
@@ -191,6 +345,9 @@ def seleccionar_metodologia(
             avisos=avisos,
         )
 
+        # No enriquir amb LLM per evidència forta/moderada
+        return decisio
+
     # 400m: Polaritzat
     if distancia <= 400:
         if categoria == "master":
@@ -203,7 +360,7 @@ def seleccionar_metodologia(
         else:
             forca = "forta"
 
-        return DecisioMetodologia(
+        decisio = DecisioMetodologia(
             prova=prova_objectiu,
             categoria=categoria,
             metodologia_principal="Polaritzat",
@@ -218,9 +375,12 @@ def seleccionar_metodologia(
             avisos=avisos,
         )
 
+        # No enriquir amb LLM per evidència forta/moderada
+        return decisio
+
     # 800-1500m: Polaritzat + USRPT complementari
     if distancia <= 1500:
-        return DecisioMetodologia(
+        decisio = DecisioMetodologia(
             prova=prova_objectiu,
             categoria=categoria,
             metodologia_principal="Polaritzat",
@@ -235,8 +395,11 @@ def seleccionar_metodologia(
             avisos=[],
         )
 
+        # No enriquir amb LLM per evidència moderada
+        return decisio
+
     # >1500m: Polaritzat amb èmfasi en volum
-    return DecisioMetodologia(
+    decisio = DecisioMetodologia(
         prova=prova_objectiu,
         categoria=categoria,
         metodologia_principal="Polaritzat",
@@ -250,3 +413,12 @@ def seleccionar_metodologia(
         ),
         avisos=[],
     )
+
+    # Enriquir justificació amb LLM si està habilitat i la força d'evidència és baixa
+    if enriquir_amb_llm and decisio.forca_evidencia in {
+        "sense_evidencia",
+        "practica_documentada",
+    }:
+        decisio.justificacio = _enriquir_justificacio_amb_llm(decisio, nedador)
+
+    return decisio

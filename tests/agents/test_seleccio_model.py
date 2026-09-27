@@ -24,7 +24,9 @@ class TestSeleccioMetodologia50m:
 
     def test_50m_absolut(self, nedador_base):
         """50m absolut: Sprint/Tècnica amb evidència pràctica documentada."""
-        decisio = seleccionar_metodologia(nedador_base, "50m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "50m lliure", "absolut", enriquir_amb_llm=False
+        )
 
         assert decisio.prova == "50m lliure"
         assert decisio.categoria == "absolut"
@@ -34,7 +36,9 @@ class TestSeleccioMetodologia50m:
 
     def test_50m_master(self, nedador_base):
         """50m master: mateix que absolut."""
-        decisio = seleccionar_metodologia(nedador_base, "50m lliure", "master")
+        decisio = seleccionar_metodologia(
+            nedador_base, "50m lliure", "master", enriquir_amb_llm=False
+        )
 
         assert decisio.metodologia_principal == "Sprint/Tècnica"
         assert decisio.categoria == "master"
@@ -46,7 +50,9 @@ class TestSeleccioMetodologia100m:
 
     def test_100m_absolut(self, nedador_base):
         """100m absolut: Sprint/Tècnica amb avís sobre USRPT."""
-        decisio = seleccionar_metodologia(nedador_base, "100m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "100m lliure", "absolut", enriquir_amb_llm=False
+        )
 
         assert decisio.prova == "100m lliure"
         assert decisio.metodologia_principal == "Sprint/Tècnica"
@@ -56,7 +62,9 @@ class TestSeleccioMetodologia100m:
 
     def test_100m_usrpt_no_principal(self, nedador_base):
         """USRPT no hauria de ser metodologia principal per 100m."""
-        decisio = seleccionar_metodologia(nedador_base, "100m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "100m lliure", "absolut", enriquir_amb_llm=False
+        )
 
         assert decisio.metodologia_principal != "USRPT"
         assert "USRPT" not in decisio.metodologies_complementaries
@@ -67,7 +75,9 @@ class TestSeleccioMetodologia200m:
 
     def test_200m_absolut(self, nedador_base):
         """200m absolut: Polaritzat amb evidència forta."""
-        decisio = seleccionar_metodologia(nedador_base, "200m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "200m lliure", "absolut", enriquir_amb_llm=False
+        )
 
         assert decisio.prova == "200m lliure"
         assert decisio.metodologia_principal == "Polaritzat"
@@ -76,7 +86,9 @@ class TestSeleccioMetodologia200m:
 
     def test_200m_master(self, nedador_base):
         """200m master: Polaritzat amb evidència moderada i avís d'extrapolació."""
-        decisio = seleccionar_metodologia(nedador_base, "200m lliure", "master")
+        decisio = seleccionar_metodologia(
+            nedador_base, "200m lliure", "master", enriquir_amb_llm=False
+        )
 
         assert decisio.metodologia_principal == "Polaritzat"
         assert decisio.categoria == "master"
@@ -91,7 +103,9 @@ class TestSeleccioMetodologia400m:
 
     def test_400m_absolut(self, nedador_base):
         """400m absolut: Polaritzat amb evidència forta."""
-        decisio = seleccionar_metodologia(nedador_base, "400m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "400m lliure", "absolut", enriquir_amb_llm=False
+        )
 
         assert decisio.prova == "400m lliure"
         assert decisio.metodologia_principal == "Polaritzat"
@@ -100,7 +114,9 @@ class TestSeleccioMetodologia400m:
 
     def test_400m_master(self, nedador_base):
         """400m master: Polaritzat amb evidència moderada i avís."""
-        decisio = seleccionar_metodologia(nedador_base, "400m lliure", "master")
+        decisio = seleccionar_metodologia(
+            nedador_base, "400m lliure", "master", enriquir_amb_llm=False
+        )
 
         assert decisio.metodologia_principal == "Polaritzat"
         assert decisio.forca_evidencia == "moderada"
@@ -113,7 +129,9 @@ class TestSeleccioMetodologia800_1500m:
 
     def test_800m_absolut(self, nedador_base):
         """800m: Polaritzat + USRPT complementari."""
-        decisio = seleccionar_metodologia(nedador_base, "800m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "800m lliure", "absolut", enriquir_amb_llm=False
+        )
 
         assert decisio.metodologia_principal == "Polaritzat"
         assert "USRPT" in decisio.metodologies_complementaries
@@ -121,7 +139,9 @@ class TestSeleccioMetodologia800_1500m:
 
     def test_1500m_absolut(self, nedador_base):
         """1500m: Polaritzat + USRPT complementari."""
-        decisio = seleccionar_metodologia(nedador_base, "1500m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "1500m lliure", "absolut", enriquir_amb_llm=False
+        )
 
         assert decisio.metodologia_principal == "Polaritzat"
         assert "USRPT" in decisio.metodologies_complementaries
@@ -129,7 +149,9 @@ class TestSeleccioMetodologia800_1500m:
 
     def test_usrpt_complementari_no_principal(self, nedador_base):
         """USRPT és complementari, no principal per 800-1500m."""
-        decisio = seleccionar_metodologia(nedador_base, "1500m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "1500m lliure", "absolut", enriquir_amb_llm=False
+        )
 
         assert decisio.metodologia_principal != "USRPT"
         assert "USRPT" in decisio.metodologies_complementaries
@@ -140,7 +162,9 @@ class TestSeleccioMetodologiaIM:
 
     def test_200m_im_absolut(self, nedador_base):
         """200m IM: Bowman/Escola australiana."""
-        decisio = seleccionar_metodologia(nedador_base, "200m IM", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "200m IM", "absolut", enriquir_amb_llm=False
+        )
 
         assert decisio.prova == "200m IM"
         assert decisio.metodologia_principal == "Bowman/Escola australiana multi-estil"
@@ -148,7 +172,9 @@ class TestSeleccioMetodologiaIM:
 
     def test_400m_im_master(self, nedador_base):
         """400m IM master: mateix enfocament."""
-        decisio = seleccionar_metodologia(nedador_base, "400m estils", "master")
+        decisio = seleccionar_metodologia(
+            nedador_base, "400m estils", "master", enriquir_amb_llm=False
+        )
 
         assert decisio.metodologia_principal == "Bowman/Escola australiana multi-estil"
         assert decisio.categoria == "master"
@@ -159,7 +185,9 @@ class TestSeleccioMetodologiaAAOO:
 
     def test_aaoo_5km(self, nedador_base):
         """AAOO 5km: sense evidència controlada."""
-        decisio = seleccionar_metodologia(nedador_base, "AAOO 5km", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "AAOO 5km", "absolut", enriquir_amb_llm=False
+        )
 
         assert decisio.prova == "AAOO 5km"
         assert decisio.forca_evidencia == "sense_evidencia"
@@ -169,7 +197,7 @@ class TestSeleccioMetodologiaAAOO:
     def test_aaoo_10km_master(self, nedador_base):
         """AAOO 10km master: pràctica documentada."""
         decisio = seleccionar_metodologia(
-            nedador_base, "Aigües obertes 10km", "master"
+            nedador_base, "Aigües obertes 10km", "master", enriquir_amb_llm=False
         )
 
         assert decisio.forca_evidencia == "sense_evidencia"
@@ -182,10 +210,10 @@ class TestDiferenciesAbsolutMaster:
     def test_200m_diferencia_avisos(self, nedador_base):
         """200m: absolut sense avisos, master amb avís d'extrapolació."""
         decisio_absolut = seleccionar_metodologia(
-            nedador_base, "200m lliure", "absolut"
+            nedador_base, "200m lliure", "absolut", enriquir_amb_llm=False
         )
         decisio_master = seleccionar_metodologia(
-            nedador_base, "200m lliure", "master"
+            nedador_base, "200m lliure", "master", enriquir_amb_llm=False
         )
 
         assert len(decisio_absolut.avisos) == 0
@@ -196,10 +224,10 @@ class TestDiferenciesAbsolutMaster:
     def test_400m_diferencia_evidencia(self, nedador_base):
         """400m: evidència forta per absolut, moderada per master."""
         decisio_absolut = seleccionar_metodologia(
-            nedador_base, "400m lliure", "absolut"
+            nedador_base, "400m lliure", "absolut", enriquir_amb_llm=False
         )
         decisio_master = seleccionar_metodologia(
-            nedador_base, "400m lliure", "master"
+            nedador_base, "400m lliure", "master", enriquir_amb_llm=False
         )
 
         assert decisio_absolut.forca_evidencia == "forta"
@@ -212,14 +240,18 @@ class TestUSRPTNoRecomanatSprint:
     @pytest.mark.parametrize("prova", ["50m lliure", "100m lliure"])
     def test_usrpt_no_principal_sprint(self, nedador_base, prova):
         """USRPT no hauria de ser principal per 50-100m."""
-        decisio = seleccionar_metodologia(nedador_base, prova, "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, prova, "absolut", enriquir_amb_llm=False
+        )
 
         assert decisio.metodologia_principal != "USRPT"
 
     @pytest.mark.parametrize("prova", ["50m lliure", "100m lliure"])
     def test_usrpt_no_complementari_sprint(self, nedador_base, prova):
         """USRPT no hauria de ser complementari per 50-100m."""
-        decisio = seleccionar_metodologia(nedador_base, prova, "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, prova, "absolut", enriquir_amb_llm=False
+        )
 
         assert "USRPT" not in decisio.metodologies_complementaries
 
@@ -229,35 +261,167 @@ class TestForcaEvidencia:
 
     def test_50m_practica_documentada(self, nedador_base):
         """50m: pràctica documentada."""
-        decisio = seleccionar_metodologia(nedador_base, "50m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "50m lliure", "absolut", enriquir_amb_llm=False
+        )
         assert decisio.forca_evidencia == "practica_documentada"
 
     def test_100m_moderada(self, nedador_base):
         """100m: evidència moderada."""
-        decisio = seleccionar_metodologia(nedador_base, "100m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "100m lliure", "absolut", enriquir_amb_llm=False
+        )
         assert decisio.forca_evidencia == "moderada"
 
     def test_200m_absolut_forta(self, nedador_base):
         """200m absolut: evidència forta."""
-        decisio = seleccionar_metodologia(nedador_base, "200m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "200m lliure", "absolut", enriquir_amb_llm=False
+        )
         assert decisio.forca_evidencia == "forta"
 
     def test_400m_absolut_forta(self, nedador_base):
         """400m absolut: evidència forta."""
-        decisio = seleccionar_metodologia(nedador_base, "400m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "400m lliure", "absolut", enriquir_amb_llm=False
+        )
         assert decisio.forca_evidencia == "forta"
 
     def test_800_1500m_moderada(self, nedador_base):
         """800-1500m: evidència moderada."""
-        decisio = seleccionar_metodologia(nedador_base, "1500m lliure", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "1500m lliure", "absolut", enriquir_amb_llm=False
+        )
         assert decisio.forca_evidencia == "moderada"
 
     def test_im_practica_documentada(self, nedador_base):
         """IM: pràctica documentada."""
-        decisio = seleccionar_metodologia(nedador_base, "200m IM", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "200m IM", "absolut", enriquir_amb_llm=False
+        )
         assert decisio.forca_evidencia == "practica_documentada"
 
     def test_aaoo_sense_evidencia(self, nedador_base):
         """AAOO: sense evidència controlada."""
-        decisio = seleccionar_metodologia(nedador_base, "AAOO 5km", "absolut")
+        decisio = seleccionar_metodologia(
+            nedador_base, "AAOO 5km", "absolut", enriquir_amb_llm=False
+        )
         assert decisio.forca_evidencia == "sense_evidencia"
+
+
+class TestEnriquimentLLM:
+    """Tests per a l'enriquiment de justificacions amb LLM."""
+
+    def test_aaoo_enriqueix_justificacio(self, nedador_base):
+        """AAOO: enriquir justificació amb LLM mockejat."""
+        from unittest.mock import MagicMock, patch
+
+        # Mock de la resposta de l'API
+        mock_response = MagicMock()
+        mock_tool_use = MagicMock()
+        mock_tool_use.type = "tool_use"
+        mock_tool_use.name = "retornar_justificacio"
+        mock_tool_use.input = {
+            "justificacio": (
+                "Justificació enriquida per AAOO específica per al nedador. "
+                "Aquesta és una resposta personalitzada del LLM que amplia "
+                "la justificació original amb context del nedador."
+            )
+        }
+        mock_response.content = [mock_tool_use]
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_response
+
+        with patch(
+            "blondswim.agents.seleccio_model.get_llm_client", return_value=mock_client
+        ):
+            decisio = seleccionar_metodologia(
+                nedador_base, "AAOO 5km", "absolut", enriquir_amb_llm=True
+            )
+
+        # Verificar que la metodologia i evidència no han canviat
+        assert decisio.metodologia_principal == "Entrenament específic AAOO"
+        assert decisio.forca_evidencia == "sense_evidencia"
+
+        # Verificar que la justificació ha estat enriquida
+        assert "Justificació enriquida per AAOO" in decisio.justificacio
+        assert decisio.justificacio != (
+            "Aigües obertes requereix adaptacions específiques (orientació, "
+            "condicions variables, nutrició en cursa). No hi ha estudis controlats "
+            "específics, però la pràctica documentada suggereix combinació de "
+            "volum moderat amb sessions específiques de tècnica i tàctica."
+        )
+
+        # Verificar que s'ha cridat l'API
+        mock_client.messages.create.assert_called_once()
+
+    def test_200m_absolut_no_crida_llm(self, nedador_base):
+        """200m absolut (evidència forta): no cridar LLM."""
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+
+        with patch(
+            "blondswim.agents.seleccio_model.get_llm_client", return_value=mock_client
+        ):
+            decisio = seleccionar_metodologia(
+                nedador_base, "200m lliure", "absolut", enriquir_amb_llm=True
+            )
+
+        # Verificar que NO s'ha cridat l'API (evidència forta)
+        mock_client.messages.create.assert_not_called()
+
+        # Verificar que la justificació és la original
+        assert decisio.forca_evidencia == "forta"
+        assert "Estudis controlats" in decisio.justificacio
+
+    def test_enriquiment_error_fa_fallback(self, nedador_base):
+        """Error en LLM: fallback a justificació original."""
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = Exception("API Error")
+
+        with patch(
+            "blondswim.agents.seleccio_model.get_llm_client", return_value=mock_client
+        ):
+            decisio = seleccionar_metodologia(
+                nedador_base, "AAOO 5km", "absolut", enriquir_amb_llm=True
+            )
+
+        # Verificar que la justificació és la original (fallback)
+        assert decisio.justificacio == (
+            "Aigües obertes requereix adaptacions específiques (orientació, "
+            "condicions variables, nutrició en cursa). No hi ha estudis controlats "
+            "específics, però la pràctica documentada suggereix combinació de "
+            "volum moderat amb sessions específiques de tècnica i tàctica."
+        )
+
+        # Verificar que la metodologia no ha canviat
+        assert decisio.metodologia_principal == "Entrenament específic AAOO"
+        assert decisio.forca_evidencia == "sense_evidencia"
+
+    def test_enriquir_amb_llm_false_no_crida_api(self, nedador_base):
+        """enriquir_amb_llm=False: no cridar API."""
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+
+        with patch(
+            "blondswim.agents.seleccio_model.get_llm_client", return_value=mock_client
+        ):
+            decisio = seleccionar_metodologia(
+                nedador_base, "AAOO 5km", "absolut", enriquir_amb_llm=False
+            )
+
+        # Verificar que NO s'ha cridat l'API
+        mock_client.messages.create.assert_not_called()
+
+        # Verificar que la justificació és la original
+        assert decisio.justificacio == (
+            "Aigües obertes requereix adaptacions específiques (orientació, "
+            "condicions variables, nutrició en cursa). No hi ha estudis controlats "
+            "específics, però la pràctica documentada suggereix combinació de "
+            "volum moderat amb sessions específiques de tècnica i tàctica."
+        )
