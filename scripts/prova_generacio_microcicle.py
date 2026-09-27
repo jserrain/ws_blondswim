@@ -42,7 +42,7 @@ def main():
     print(f"     Proves objectiu: {', '.join(nedador.proves_objectiu)}")
     print(f"     Categoria: {nedador.categoria}")
 
-    # 2. Carregar macrocicle i extreure primer microcicle
+    # 2. Carregar macrocicle i construir microcicle manual
     print("\n2. Carregant macrocicle...")
     macrocicle_path = data_processed / "macrocicle_jep.json"
     if not macrocicle_path.exists():
@@ -53,20 +53,35 @@ def main():
         macrocicle_data = json.load(f)
     macrocicle = Macrocicle(**macrocicle_data)
 
-    # Buscar primer mesocicle amb microcicles
-    primer_microcicle = None
-    for mesocicle in macrocicle.mesocicles:
-        if mesocicle.microcicles:
-            primer_microcicle = mesocicle.microcicles[0]
-            print(f"   ✓ Primer microcicle trobat: Setmana {primer_microcicle.setmana}")
-            print(f"     Mesocicle: {mesocicle.nom}")
-            print(f"     Tipus: {primer_microcicle.tipus_base}")
-            print(f"     Volum objectiu: {primer_microcicle.volum_objectiu}m")
-            break
-
-    if not primer_microcicle:
-        print("   ✗ Error: No s'ha trobat cap microcicle al macrocicle")
+    if not macrocicle.mesocicles:
+        print("   ✗ Error: No s'ha trobat cap mesocicle al macrocicle")
         return 1
+
+    # Usar primer mesocicle per construir microcicle manual
+    mesocicle = macrocicle.mesocicles[0]
+    print(f"   ✓ Mesocicle trobat: {mesocicle.nom}")
+    print(f"     Dates: {mesocicle.dates}")
+    print(f"     Volum mitjà previst: {mesocicle.volum_mitja_previst}m")
+    
+    print("\n   ⚠ AVÍS: La pestanya Microcicles encara no s'ingereix des de l'Excel.")
+    print("   ⚠ Construint un Microcicle manual per a la prova...")
+    
+    from blondswim.models.macrocicle import Microcicle
+    
+    primer_microcicle = Microcicle(
+        setmana=1,
+        dates=mesocicle.dates,
+        mesocicle_id=mesocicle.id,
+        tipus_base="carrega",
+        notes="Setmana de prova manual (Microcicle no ingerit encara des de l'Excel)",
+        volum_objectiu=mesocicle.volum_mitja_previst,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    
+    print(f"   ✓ Microcicle manual creat: Setmana {primer_microcicle.setmana}")
+    print(f"     Tipus: {primer_microcicle.tipus_base}")
+    print(f"     Volum objectiu: {primer_microcicle.volum_objectiu}m")
 
     # 3. Carregar historial
     print("\n3. Carregant historial...")
