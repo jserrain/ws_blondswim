@@ -79,6 +79,8 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 
 7. **SEGUIR L'ORDRE DE SESSIONS:**
    Segueix l'ordre i el tipus de cada sessió tal com es proporcionen a continuació, sense assumir cap patró fix de dies de la setmana.
+   
+   **IMPORTANT:** Retorna el camp `sessio_id` EXACTAMENT igual com apareix aquí per a cada sessió, sense modificar-lo.
 
 {sessions_setmana}
 

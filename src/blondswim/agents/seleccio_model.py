@@ -138,6 +138,11 @@ Retorna NOMÉS la justificació ampliada usant la tool retornar_justificacio."""
         # Extreure justificació del tool use
         for block in response.content:
             if block.type == "tool_use" and block.name == "retornar_justificacio":
+                logger.debug(
+                    f"Tool use block rebut: type={type(block.input)}, "
+                    f"keys={list(block.input.keys()) if isinstance(block.input, dict) else 'N/A'}, "
+                    f"content={block.input}"
+                )
                 return block.input["justificacio"]
 
         # Si no trobem tool use, fallback

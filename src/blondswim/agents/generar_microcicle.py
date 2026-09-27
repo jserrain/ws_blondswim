@@ -139,7 +139,7 @@ def generar_microcicle(
 
         # Construir llista de sessions per al placeholder {sessions_setmana}
         sessions_setmana_text = "\n".join(
-            f"- {s.dia.capitalize()}: {s.tipus_sessio} ({s.volum_total}m)"
+            f"- sessio_id: \"{s.id}\" | dia: {s.dia} | tipus: {s.tipus_sessio} | volum: {s.volum_total}m"
             for s in sessions
         )
 
