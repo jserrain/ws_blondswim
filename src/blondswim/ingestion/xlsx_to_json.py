@@ -11,6 +11,7 @@ import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 
 from blondswim.models.calendari import Competicio
+from blondswim.models.historial import SerieRealitzada, SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle
 from blondswim.models.nedador import (
     MarquesReferencia,
@@ -539,6 +540,188 @@ def convertir_nedador_ritmes(
     return {"nedadors": nedadors_processats}
 
 
+def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
+    """
+    Convertir l'historial de pretemporada a llista de SessioRealitzada.
+
+    Args:
+        fitxer_entrada: Path al fitxer XLSX amb pestanyes per mes
+
+    Returns:
+        Llista de SessioRealitzada ordenades cronològicament
+    """
+    wb = openpyxl.load_workbook(fitxer_entrada, data_only=True)
+    
+    # Mapa de noms de mes a número
+    mesos = {
+        "ago": 8,
+        "sep": 9,
+        "oct": 10,
+        "nov": 11,
+        "dec": 12,
+        "gen": 1,
+        "feb": 2,
+        "mar": 3,
+        "abr": 4,
+        "mai": 5,
+        "jun": 6,
+        "jul": 7,
+    }
+    
+    sessions = []
+    
+    # Processar cada pestanya
+    for sheet_name in wb.sheetnames:
+        # Detectar si és una pestanya de mes
+        sheet_lower = sheet_name.lower().strip()
+        if sheet_lower not in mesos:
+            continue
+        
+        mes_num = mesos[sheet_lower]
+        ws = wb[sheet_name]
+        
+        logger.info(f"Processant pestanya: {sheet_name} (mes {mes_num})")
+        
+        # Iterar per les files buscant blocs de setmana
+        setmana_actual = None
+        capçaleres = {}
+        dia_actual = None
+        series_dia = []
+        ordre_serie = 1
+        
+        for num_fila, row in enumerate(ws.iter_rows(min_row=1), start=1):
+            primera_cel = row[0].value
+            
+            if not primera_cel:
+                # Fila buida o continuació de dia
+                if dia_actual and capçaleres:
+                    # Llegir sèrie
+                    serie_data = {}
+                    fila_buida = True
+                    
+                    for nom_cap, idx_col in capçaleres.items():
+                        valor = row[idx_col - 1].value
+                        if valor is not None and str(valor).strip():
+                            fila_buida = False
+                        serie_data[nom_cap] = valor
+                    
+                    # Si la fila no està completament buida, afegir sèrie
+                    if not fila_buida and serie_data.get("execucio"):
+                        serie = SerieRealitzada(
+                            ordre=ordre_serie,
+                            treball=str(serie_data.get("treball")).strip() if serie_data.get("treball") else None,
+                            execucio=str(serie_data["execucio"]).strip(),
+                            descans=str(serie_data.get("descans")).strip() if serie_data.get("descans") else None,
+                            material=str(serie_data.get("material")).strip() if serie_data.get("material") else None,
+                            intensitat=str(serie_data.get("intensitat")).strip() if serie_data.get("intensitat") else None,
+                            objectiu=str(serie_data.get("objectiu")).strip() if serie_data.get("objectiu") else None,
+                            temps_min=float(serie_data["temps(min)"]) if serie_data.get("temps(min)") else None,
+                            volum_m=int(serie_data["volum(m)"]) if serie_data.get("volum(m)") else None,
+                        )
+                        series_dia.append(serie)
+                        ordre_serie += 1
+                continue
+            
+            primera_cel_str = str(primera_cel).strip()
+            
+            # Detectar "Setmana N"
+            if primera_cel_str.lower().startswith("setmana"):
+                match = re.search(r"setmana\s+(\d+)", primera_cel_str, re.IGNORECASE)
+                if match:
+                    setmana_actual = int(match.group(1))
+                    logger.debug(f"Detectada setmana {setmana_actual}")
+                continue
+            
+            # Detectar capçalera (Dia | Treball | Execució ...)
+            if primera_cel_str.lower() == "dia":
+                capçaleres = {}
+                for cell in row:
+                    if cell.value:
+                        nom_normalitzat = str(cell.value).strip().lower().replace(" ", "")
+                        capçaleres[nom_normalitzat] = cell.column
+                logger.debug(f"Capçaleres detectades: {list(capçaleres.keys())}")
+                continue
+            
+            # Detectar fila "Total"
+            if primera_cel_str.lower() == "total":
+                if dia_actual and capçaleres:
+                    # Tancar dia actual
+                    volum_total = int(row[capçaleres.get("volum(m)", 999) - 1].value or 0)
+                    temps_total = float(row[capçaleres.get("temps(min)", 999) - 1].value or 0.0)
+                    
+                    sessio = SessioRealitzada(
+                        data=dia_actual,
+                        setmana=setmana_actual,
+                        series=series_dia,
+                        volum_total_m=volum_total,
+                        temps_total_min=temps_total,
+                    )
+                    sessions.append(sessio)
+                    logger.debug(f"Sessió creada: {dia_actual}, {len(series_dia)} sèries, {volum_total}m")
+                    
+                    # Reset per al següent dia
+                    dia_actual = None
+                    series_dia = []
+                    ordre_serie = 1
+                continue
+            
+            # Detectar inici de dia (p.ex. "Dilluns 18" o "Diumenge 24")
+            if capçaleres:
+                # Intentar extreure dia numèric del text
+                match = re.search(r"\b(\d{1,2})\b", primera_cel_str)
+                if match:
+                    dia_num = int(match.group(1))
+                    
+                    # Tancar dia anterior si existeix (sense haver trobat Total)
+                    if dia_actual and series_dia:
+                        # Crear sessió amb el que tenim
+                        volum_total = sum(s.volum_m for s in series_dia if s.volum_m)
+                        temps_total = sum(s.temps_min for s in series_dia if s.temps_min)
+                        
+                        sessio = SessioRealitzada(
+                            data=dia_actual,
+                            setmana=setmana_actual,
+                            series=series_dia,
+                            volum_total_m=volum_total,
+                            temps_total_min=temps_total,
+                        )
+                        sessions.append(sessio)
+                        logger.debug(f"Sessió creada (sense Total): {dia_actual}, {len(series_dia)} sèries")
+                    
+                    # Determinar any (agost-desembre 2026, gener-juliol 2027)
+                    any = 2026 if mes_num >= 8 else 2027
+                    
+                    # Crear nova data
+                    dia_actual = f"{any:04d}-{mes_num:02d}-{dia_num:02d}"
+                    series_dia = []
+                    ordre_serie = 1
+                    logger.debug(f"Nou dia detectat: {dia_actual}")
+    
+    # Tancar última sessió si existeix
+    if dia_actual:
+        if series_dia:
+            volum_total = sum(s.volum_m for s in series_dia if s.volum_m)
+            temps_total = sum(s.temps_min for s in series_dia if s.temps_min)
+        else:
+            volum_total = 0
+            temps_total = 0.0
+        
+        sessio = SessioRealitzada(
+            data=dia_actual,
+            setmana=setmana_actual,
+            series=series_dia,
+            volum_total_m=volum_total,
+            temps_total_min=temps_total,
+        )
+        sessions.append(sessio)
+        logger.debug(f"Última sessió creada: {dia_actual}, {len(series_dia)} sèries")
+    
+    # Ordenar sessions cronològicament
+    sessions.sort(key=lambda s: s.data)
+    
+    return sessions
+
+
 def main():
     """Executar totes les conversions i imprimir resum."""
     logging.basicConfig(level=logging.INFO)
@@ -593,6 +776,31 @@ def main():
             print(f"     - {ned['nom']} ({ned['fitxer']})")
             print(f"       Font ritmes: {ned['font_ritmes']}")
             print(f"       Ritmes cursa objectiu: {ned['ritmes_cursa']}")
+    except Exception as e: # noqa: BLE001
+        print(f"   ✗ Error: {e}")
+        return
+
+    # 4. Historial pretemporada
+    print("\n4. Convertint Historial Pretemporada...")
+    try:
+        sessions = convertir_pretemporada(
+            data_raw / "Planificacio_Mesocicles_Jep.xlsx"
+        )
+        
+        # Escriure JSON
+        fitxer_historial = data_processed / "historial_jep.json"
+        fitxer_historial.parent.mkdir(parents=True, exist_ok=True)
+        with open(fitxer_historial, "w", encoding="utf-8") as f:
+            json.dump(
+                [s.model_dump() for s in sessions],
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+        
+        print(f"   ✓ {len(sessions)} sessions processades")
+        if sessions:
+            print(f"   ✓ Període: {sessions[0].data} a {sessions[-1].data}")
     except Exception as e: # noqa: BLE001
         print(f"   ✗ Error: {e}")
         return
