@@ -14,6 +14,7 @@ from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.historial import SerieRealitzada, SessioRealitzada
 from blondswim.models.macrocicle import Microcicle
 from blondswim.models.nedador import Nedador, RitmesCSS
+from blondswim.models.sessio import Sessio
 
 
 @pytest.fixture
