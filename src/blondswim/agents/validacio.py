@@ -10,9 +10,46 @@ Segueix la metodologia documentada a docs/guia_mvp.md.
 Totes les funcions retornen avisos informatius (dict), mai llancen excepcions.
 """
 
+from datetime import datetime
 from typing import Literal
 
+from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Microcicle
+
+
+def calcular_volums_setmanals_historial(
+    sessions: list[SessioRealitzada],
+) -> list[int]:
+    """
+    Agrupa les SessioRealitzada per setmana ISO i suma el volum total.
+    
+    Utilitza date.isocalendar() per determinar la setmana ISO (dilluns-diumenge).
+    Sessions sense sèries (dies especials com "Travessa Banyoles") compten
+    igualment el seu volum_total_m (normalment 0).
+    
+    Args:
+        sessions: Llista de sessions realitzades (poden estar desordenades)
+        
+    Returns:
+        Llista de volums setmanals (metres) ordenada cronològicament
+        (setmana més antiga primera)
+    """
+    # Agrupar per (any_iso, setmana_iso)
+    volums_per_setmana: dict[tuple[int, int], int] = {}
+    
+    for sessio in sessions:
+        # Parsejar data (format "YYYY-MM-DD")
+        data = datetime.strptime(sessio.data, "%Y-%m-%d").date()
+        any_iso, setmana_iso, _ = data.isocalendar()
+        
+        clau = (any_iso, setmana_iso)
+        if clau not in volums_per_setmana:
+            volums_per_setmana[clau] = 0
+        volums_per_setmana[clau] += sessio.volum_total_m
+    
+    # Ordenar per (any, setmana) i retornar només els volums
+    setmanes_ordenades = sorted(volums_per_setmana.keys())
+    return [volums_per_setmana[clau] for clau in setmanes_ordenades]
 
 
 def validar_descarrega_periodica(
@@ -94,6 +131,7 @@ def validar_progressio_volum(
     ratio_min: float = 0.8,
     ratio_max: float = 1.3,
     ratio_risc: float = 1.5,
+    historial_previ: list[int] | None = None,
 ) -> list[dict]:
     """
     Valida la progressió de volum amb ACWR (Acute:Chronic Workload Ratio).
@@ -112,6 +150,9 @@ def validar_progressio_volum(
         ratio_min: Ratio mínima acceptable (per defecte 0.8)
         ratio_max: Ratio màxima acceptable (per defecte 1.3)
         ratio_risc: Ratio de risc elevat de lesió (per defecte 1.5)
+        historial_previ: Llista opcional de volums reals (metres) de setmanes anteriors
+                         a microcicles[0], ordenada cronològicament (més antiga primera).
+                         Permet avaluar les primeres setmanes del macrocicle amb context real.
         
     Returns:
         Llista d'avisos (dict) amb:
@@ -123,25 +164,29 @@ def validar_progressio_volum(
         - missatge: Descripció de l'avís
         
     Notes:
-        - Les primeres finestra_setmanes setmanes no generen avisos (no hi ha prou historial)
-        - El càlcul només considera volum_objectiu, no volum real executat
+        - Sense historial_previ: les primeres finestra_setmanes setmanes no generen avisos
+        - Amb historial_previ suficient: fins i tot microcicles[0] pot generar avisos
+        - El càlcul només considera volum_objectiu dels microcicles, no volum real executat
     """
     avisos = []
     
-    # Necessitem almenys finestra_setmanes + 1 setmanes per calcular ACWR
-    if len(microcicles) <= finestra_setmanes:
-        return avisos
+    # Construir context combinant historial previ + volums del macrocicle
+    contexte = list(historial_previ or []) + [
+        m.volum_objectiu for m in microcicles
+    ]
+    offset = len(historial_previ or [])
     
-    for i in range(finestra_setmanes, len(microcicles)):
+    for i in range(len(microcicles)):
+        pos = offset + i
+        finestra = contexte[pos - finestra_setmanes:pos]
+        
+        # Només avaluem si tenim una finestra completa de finestra_setmanes setmanes anteriors
+        if len(finestra) < finestra_setmanes:
+            continue
+        
         micro_actual = microcicles[i]
         volum_actual = micro_actual.volum_objectiu
-        
-        # Calcular mitjana crònica (finestra_setmanes setmanes anteriors)
-        volums_cronics = [
-            microcicles[j].volum_objectiu
-            for j in range(i - finestra_setmanes, i)
-        ]
-        volum_mitja_cronic = sum(volums_cronics) / len(volums_cronics)
+        volum_mitja_cronic = sum(finestra) / len(finestra)
         
         # Evitar divisió per zero
         if volum_mitja_cronic == 0:

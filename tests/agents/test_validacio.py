@@ -6,11 +6,13 @@ coherència amb taper i orquestració completa amb casos sintètics raonables.
 """
 
 from blondswim.agents.validacio import (
+    calcular_volums_setmanals_historial,
     validar_coherencia_taper,
     validar_descarrega_periodica,
     validar_pla_complet,
     validar_progressio_volum,
 )
+from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Mesocicle, Microcicle
 
 
@@ -451,3 +453,152 @@ def test_validar_pla_complet_amb_avisos_pics_a():
     avisos_pics = [a for a in avisos if a.get("tipus_validacio") == "espaiat_pics_a"]
     assert len(avisos_pics) == 1
     assert avisos_pics[0]["missatge"] == "Test avís pics A"
+
+
+def test_validar_progressio_volum_amb_historial_previ_complet():
+    """Amb historial previ complet, microcicles[0] pot generar avís."""
+    # Historial previ: 4 setmanes amb volum estable de 14000m
+    historial_previ = [14000, 14000, 14000, 14000]
+    
+    # Primera setmana del macrocicle amb salt brusc a 22000m
+    microcicles = [
+        Microcicle(
+            setmana=1,
+            dates="1/10/2026",
+            mesocicle_id="meso1",
+            tipus_base="carrega",
+            volum_objectiu=22000,  # Salt de ~1.57x la mitjana
+            dies_qualitat=True,
+            test_css=False,
+        ),
+    ]
+    
+    avisos = validar_progressio_volum(
+        microcicles,
+        finestra_setmanes=4,
+        ratio_risc=1.5,
+        historial_previ=historial_previ,
+    )
+    
+    # Ha de generar avís per la setmana 1 (ACWR ~1.57)
+    assert len(avisos) == 1
+    assert avisos[0]["setmana"] == 1
+    assert avisos[0]["tipus_avis"] == "carrega_risc_lesio"
+    assert avisos[0]["ratio_acwr"] > 1.5
+
+
+def test_validar_progressio_volum_historial_previ_insuficient():
+    """Amb historial previ insuficient, comportament igual que sense historial."""
+    # Historial previ: només 2 setmanes (insuficient per finestra de 4)
+    historial_previ = [14000, 14000]
+    
+    microcicles = [
+        Microcicle(
+            setmana=1,
+            dates="1/10/2026",
+            mesocicle_id="meso1",
+            tipus_base="carrega",
+            volum_objectiu=22000,
+            dies_qualitat=True,
+            test_css=False,
+        ),
+        Microcicle(
+            setmana=2,
+            dates="2/10/2026",
+            mesocicle_id="meso1",
+            tipus_base="carrega",
+            volum_objectiu=23000,
+            dies_qualitat=True,
+            test_css=False,
+        ),
+    ]
+    
+    avisos = validar_progressio_volum(
+        microcicles,
+        finestra_setmanes=4,
+        historial_previ=historial_previ,
+    )
+    
+    # No ha de generar avisos (finestra incompleta per les primeres setmanes)
+    assert len(avisos) == 0
+
+
+def test_validar_progressio_volum_sense_historial_previ_comportament_identic():
+    """Sense historial_previ, comportament idèntic amb None explícit o sense paràmetre."""
+    microcicles = [
+        Microcicle(
+            setmana=i,
+            dates=f"{i}/10/2026",
+            mesocicle_id="meso1",
+            tipus_base="carrega",
+            volum_objectiu=15000,
+            dies_qualitat=True,
+            test_css=False,
+        )
+        for i in range(1, 8)
+    ]
+    
+    # Cridar sense especificar historial_previ
+    avisos_sense = validar_progressio_volum(microcicles, finestra_setmanes=4)
+    
+    # Cridar amb historial_previ=None explícit
+    avisos_amb_none = validar_progressio_volum(
+        microcicles, finestra_setmanes=4, historial_previ=None
+    )
+    
+    # Han de ser idèntics
+    assert avisos_sense == avisos_amb_none
+    assert len(avisos_sense) == 0  # Volum constant, sense avisos
+
+
+def test_calcular_volums_setmanals_historial():
+    """Agrupa sessions per setmana ISO i suma volums correctament."""
+    # Crear sessions en dues setmanes ISO diferents
+    # Setmana ISO 38 de 2026: 14-20 setembre (dilluns a diumenge)
+    # Setmana ISO 39 de 2026: 21-27 setembre
+    sessions = [
+        SessioRealitzada(
+            data="2026-09-14",  # Dilluns, setmana 38
+            setmana=3,
+            series=[],
+            volum_total_m=2500,
+            temps_total_min=60.0,
+        ),
+        SessioRealitzada(
+            data="2026-09-16",  # Dimecres, setmana 38
+            setmana=3,
+            series=[],
+            volum_total_m=3000,
+            temps_total_min=65.0,
+        ),
+        SessioRealitzada(
+            data="2026-09-21",  # Dilluns, setmana 39
+            setmana=4,
+            series=[],
+            volum_total_m=2800,
+            temps_total_min=62.0,
+        ),
+        SessioRealitzada(
+            data="2026-09-23",  # Dimecres, setmana 39
+            setmana=4,
+            series=[],
+            volum_total_m=0,  # Dia especial sense volum
+            temps_total_min=0.0,
+        ),
+        SessioRealitzada(
+            data="2026-09-25",  # Divendres, setmana 39
+            setmana=4,
+            series=[],
+            volum_total_m=3200,
+            temps_total_min=68.0,
+        ),
+    ]
+    
+    volums = calcular_volums_setmanals_historial(sessions)
+    
+    # Ha de retornar 2 setmanes en ordre cronològic
+    assert len(volums) == 2
+    # Setmana 38: 2500 + 3000 = 5500
+    assert volums[0] == 5500
+    # Setmana 39: 2800 + 0 + 3200 = 6000
+    assert volums[1] == 6000
