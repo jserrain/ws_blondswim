@@ -30,7 +30,7 @@ def main():
 
     # 1. Carregar nedador
     print("\n1. Carregant nedador...")
-    nedador_path = data_processed / "nedador_jep_marti.json"
+    nedador_path = data_processed / "nedador_jep.json"
     if not nedador_path.exists():
         print(f"   ✗ Error: No s'ha trobat {nedador_path}")
         return 1
