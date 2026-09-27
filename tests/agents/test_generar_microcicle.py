@@ -1,8 +1,10 @@
 """Tests per a la generació de contingut de microcicle amb LLM."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 from blondswim.agents.generar_microcicle import (
     GeneracioMicrocicleError,
     _extreure_few_shot,
@@ -12,8 +14,6 @@ from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.historial import SerieRealitzada, SessioRealitzada
 from blondswim.models.macrocicle import Microcicle
 from blondswim.models.nedador import Nedador, RitmesCSS
-from blondswim.models.sessio import EstructuraSessio, PartSessio, Sessio
-from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 
 
 @pytest.fixture

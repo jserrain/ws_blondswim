@@ -1,6 +1,5 @@
 """Generació de contingut de microcicle amb LLM (Mòdul 6)."""
 
-import json
 import logging
 from pathlib import Path
 
@@ -143,17 +142,6 @@ def generar_microcicle(
             f"- {s.dia.capitalize()}: {s.tipus_sessio} ({s.volum_total}m)"
             for s in sessions
         )
-
-        # Preparar zones de ritme
-        zones_text = "No disponibles"
-        if nedador.ritmes_css:
-            zones_text = f"""
-- Recuperació: {nedador.ritmes_css.recuperacio:.2f}s/100m
-- A1: {nedador.ritmes_css.a1:.2f}s/100m
-- A2: {nedador.ritmes_css.a2:.2f}s/100m
-- A3: {nedador.ritmes_css.a3:.2f}s/100m
-- Velocitat: {nedador.ritmes_css.velocitat:.2f}s/100m
-"""
 
         # Omplir prompt
         prompt = prompt_template.format(
