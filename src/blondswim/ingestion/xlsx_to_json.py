@@ -808,3 +808,7 @@ def main():
     print("\n" + "=" * 60)
     print("CONVERSIÓ COMPLETADA")
     print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()
