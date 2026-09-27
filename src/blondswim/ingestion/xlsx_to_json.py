@@ -553,6 +553,8 @@ def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
     Raises:
         ValueError: Si cap pestanya del fitxer coincideix amb un nom de mes conegut
     """
+    import unicodedata
+    
     wb = openpyxl.load_workbook(fitxer_entrada, data_only=True)
     
     # Mapa de noms de mes a número
@@ -603,6 +605,35 @@ def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
         for num_fila, row in enumerate(ws.iter_rows(min_row=1), start=1):
             primera_cel = row[0].value
             
+            # Detectar fila "Total" en qualsevol columna (abans de comprovar si primera_cel està buida)
+            es_fila_total = False
+            for cell in row:
+                if cell.value and str(cell.value).strip().lower() == "total":
+                    es_fila_total = True
+                    break
+            
+            if es_fila_total:
+                if dia_actual and capçaleres:
+                    # Tancar dia actual
+                    volum_total = int(row[capçaleres.get("volum(m)", 999) - 1].value or 0)
+                    temps_total = float(row[capçaleres.get("temps(min)", 999) - 1].value or 0.0)
+                    
+                    sessio = SessioRealitzada(
+                        data=dia_actual,
+                        setmana=setmana_actual,
+                        series=series_dia,
+                        volum_total_m=volum_total,
+                        temps_total_min=temps_total,
+                    )
+                    sessions.append(sessio)
+                    logger.debug(f"Sessió creada: {dia_actual}, {len(series_dia)} sèries, {volum_total}m")
+                    
+                    # Reset per al següent dia
+                    dia_actual = None
+                    series_dia = []
+                    ordre_serie = 1
+                continue
+            
             if not primera_cel:
                 # Fila buida o continuació de dia
                 if dia_actual and capçaleres:
@@ -648,34 +679,14 @@ def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
                 capçaleres = {}
                 for cell in row:
                     if cell.value:
-                        nom_normalitzat = str(cell.value).strip().lower().replace(" ", "")
+                        # Normalitzar: minúscules, sense espais, sense accents
+                        nom_str = str(cell.value).strip().lower().replace(" ", "")
+                        nom_normalitzat = unicodedata.normalize('NFKD', nom_str)
+                        nom_normalitzat = nom_normalitzat.encode('ascii', 'ignore').decode('ascii')
                         capçaleres[nom_normalitzat] = cell.column
                 logger.debug(f"Capçaleres detectades: {list(capçaleres.keys())}")
                 continue
             
-            # Detectar fila "Total"
-            if primera_cel_str.lower() == "total":
-                if dia_actual and capçaleres:
-                    # Tancar dia actual
-                    volum_total = int(row[capçaleres.get("volum(m)", 999) - 1].value or 0)
-                    temps_total = float(row[capçaleres.get("temps(min)", 999) - 1].value or 0.0)
-                    
-                    sessio = SessioRealitzada(
-                        data=dia_actual,
-                        setmana=setmana_actual,
-                        series=series_dia,
-                        volum_total_m=volum_total,
-                        temps_total_min=temps_total,
-                    )
-                    sessions.append(sessio)
-                    print(f"DEBUG: afegida sessió {sessio.data}, total sessions ara: {len(sessions)}")
-                    logger.debug(f"Sessió creada: {dia_actual}, {len(series_dia)} sèries, {volum_total}m")
-                    
-                    # Reset per al següent dia
-                    dia_actual = None
-                    series_dia = []
-                    ordre_serie = 1
-                continue
             
             # Detectar inici de dia (p.ex. "Dilluns 18" o "Diumenge 24")
             if capçaleres:
@@ -698,7 +709,6 @@ def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
                             temps_total_min=temps_total,
                         )
                         sessions.append(sessio)
-                        print(f"DEBUG: afegida sessió {sessio.data}, total sessions ara: {len(sessions)}")
                         logger.debug(f"Sessió creada (sense Total): {dia_actual}, {len(series_dia)} sèries")
                     
                     # Determinar any (agost-desembre 2026, gener-juliol 2027)
@@ -727,7 +737,6 @@ def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
             temps_total_min=temps_total,
         )
         sessions.append(sessio)
-        print(f"DEBUG: afegida sessió {sessio.data}, total sessions ara: {len(sessions)}")
         logger.debug(f"Última sessió creada: {dia_actual}, {len(series_dia)} sèries")
     
     # Ordenar sessions cronològicament
