@@ -70,3 +70,5 @@ class Nedador(BaseModel):
     ritmes_css: RitmesCSS | None = None
     parametres_ritme: ParametresRitme = ParametresRitme()
     ritmes_cursa_objectiu: list[RitmeCursaObjectiu] = []
+    dies_disponibles: list[str] = ["dilluns", "dimarts", "dimecres", "dijous"]
+    dia_opcional: str | None = "dissabte"
