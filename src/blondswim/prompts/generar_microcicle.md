@@ -77,11 +77,10 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
    - Utilitza les metodologies complementàries quan sigui apropiat
    - Respecta la justificació proporcionada
 
-7. **PROGRESSIÓ DINS LA SETMANA:**
-   - Dilluns/Dimarts: sessions de càrrega/qualitat segons el tipus de setmana
-   - Dimecres: sessió de volum moderat o tècnica
-   - Dijous/Divendres: sessions de qualitat o específiques
-   - Dissabte/Diumenge: segons el tipus de setmana (descàrrega, test, competició, etc.)
+7. **SEGUIR L'ORDRE DE SESSIONS:**
+   Segueix l'ordre i el tipus de cada sessió tal com es proporcionen a continuació, sense assumir cap patró fix de dies de la setmana.
+
+{sessions_setmana}
 
 ## Format de Sortida
 
@@ -89,23 +88,13 @@ Per a cada sessió, genera el contingut de cada part seguint aquest format JSON:
 
 ```json
 {{
-  "sessio_dia": "Dilluns",
+  "sessio_id": "...",
   "parts": [
-    {{
-      "nom": "Escalfament",
-      "percentatge": 15,
-      "volum_m": 450,
-      "contingut": "400 N suau Recuperació + 4x50 Ei C desc 15'' A1"
-    }},
-    {{
-      "nom": "Pre-principal",
-      "percentatge": 20,
-      "volum_m": 600,
-      "contingut": "6x100 Pull (50 A1 + 50 A2) desc 20''"
-    }},
+    {{"nom": "Escalfament", "contingut": "400 N suau Recuperació + 4x50 Ei C desc 15'' A1"}},
+    {{"nom": "Pre-principal", "contingut": "6x100 Pull (50 A1 + 50 A2) desc 20''"}},
     ...
   ]
 }}
 ```
 
-**IMPORTANT:** Genera NOMÉS el contingut de les parts. Els percentatges i noms de parts ja estan fixats en l'estructura proporcionada.
+**IMPORTANT:** Genera NOMÉS el camp 'contingut' de cada part. No incloguis 'percentatge' ni 'volum_m' — ja estan fixats i qualsevol valor que hi posis serà ignorat.
