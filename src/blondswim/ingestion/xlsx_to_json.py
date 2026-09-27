@@ -668,6 +668,7 @@ def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
                         temps_total_min=temps_total,
                     )
                     sessions.append(sessio)
+                    print(f"DEBUG: afegida sessió {sessio.data}, total sessions ara: {len(sessions)}")
                     logger.debug(f"Sessió creada: {dia_actual}, {len(series_dia)} sèries, {volum_total}m")
                     
                     # Reset per al següent dia
@@ -697,6 +698,7 @@ def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
                             temps_total_min=temps_total,
                         )
                         sessions.append(sessio)
+                        print(f"DEBUG: afegida sessió {sessio.data}, total sessions ara: {len(sessions)}")
                         logger.debug(f"Sessió creada (sense Total): {dia_actual}, {len(series_dia)} sèries")
                     
                     # Determinar any (agost-desembre 2026, gener-juliol 2027)
@@ -725,6 +727,7 @@ def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
             temps_total_min=temps_total,
         )
         sessions.append(sessio)
+        print(f"DEBUG: afegida sessió {sessio.data}, total sessions ara: {len(sessions)}")
         logger.debug(f"Última sessió creada: {dia_actual}, {len(series_dia)} sèries")
     
     # Ordenar sessions cronològicament
