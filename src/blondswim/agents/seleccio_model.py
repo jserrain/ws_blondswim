@@ -4,6 +4,7 @@ import logging
 import re
 from typing import Literal
 
+from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
 from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.nedador import Nedador
 
@@ -66,8 +67,6 @@ def _enriquir_justificacio_amb_llm(
         Justificació enriquida (o la original si hi ha error)
     """
     try:
-        from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
-
         client = get_llm_client()
 
         # Definir tool per forçar resposta estructurada
@@ -147,7 +146,7 @@ Retorna NOMÉS la justificació ampliada usant la tool retornar_justificacio."""
         )
         return decisio.justificacio
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — fallback intencionat: qualsevol error de l'LLM no ha de trencar la decisió determinista ja calculada
         logger.warning(
             f"Error en enriquir justificació amb LLM: {e}. "
             f"Usant justificació original."
