@@ -21,6 +21,9 @@ from blondswim.models.nedador import Nedador
 
 def main():
     """Executar prova de generació de microcicle."""
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    
     base_dir = Path(__file__).parent.parent
     data_processed = base_dir / "data" / "processed"
 
