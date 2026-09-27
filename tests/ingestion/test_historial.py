@@ -15,7 +15,7 @@ class TestConvertirPretemporada:
     def sessions(self) -> list[SessioRealitzada]:
         """Carregar sessions de pretemporada."""
         base_dir = Path(__file__).parent.parent.parent
-        fitxer_entrada = base_dir / "data" / "raw" / "Planificacio_Mesocicles_Jep.xlsx"
+        fitxer_entrada = base_dir / "data" / "raw" / "PretemporadaSep26-27.xlsx"
         return convertir_pretemporada(fitxer_entrada)
 
     def test_nombre_dies_setmanes_3_8(self, sessions):

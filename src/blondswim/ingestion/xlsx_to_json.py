@@ -549,6 +549,9 @@ def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
 
     Returns:
         Llista de SessioRealitzada ordenades cronològicament
+    
+    Raises:
+        ValueError: Si cap pestanya del fitxer coincideix amb un nom de mes conegut
     """
     wb = openpyxl.load_workbook(fitxer_entrada, data_only=True)
     
@@ -569,6 +572,14 @@ def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
     }
     
     sessions = []
+    
+    # Verificar que hi ha almenys una pestanya de mes reconeguda
+    pestanyes_mes = [s for s in wb.sheetnames if s.lower().strip() in mesos]
+    if not pestanyes_mes:
+        raise ValueError(
+            f"Cap pestanya de mes reconeguda al fitxer {fitxer_entrada}. "
+            f"Pestanyes trobades: {wb.sheetnames}"
+        )
     
     # Processar cada pestanya
     for sheet_name in wb.sheetnames:
@@ -784,7 +795,7 @@ def main():
     print("\n4. Convertint Historial Pretemporada...")
     try:
         sessions = convertir_pretemporada(
-            data_raw / "Planificacio_Mesocicles_Jep.xlsx"
+            data_raw / "PretemporadaSep26-27.xlsx"
         )
         
         # Escriure JSON
