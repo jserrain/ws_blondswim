@@ -4,7 +4,6 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-
 from typing import Literal
 
 from blondswim.agents import context_competicio, taper, validacio
