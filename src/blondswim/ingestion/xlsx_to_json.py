@@ -23,6 +23,24 @@ from blondswim.models.nedador import (
 logger = logging.getLogger(__name__)
 
 
+def _slug(nom: str) -> str:
+    """
+    Generar un slug normalitzat a partir d'un nom.
+    
+    Args:
+        nom: Nom a convertir en slug
+        
+    Returns:
+        Slug normalitzat (minúscules, ASCII, sense espais)
+    """
+    import unicodedata
+    
+    nom_normalitzat = str(nom).strip()
+    nom_slug = unicodedata.normalize('NFKD', nom_normalitzat.lower())
+    nom_slug = nom_slug.encode('ascii', 'ignore').decode('ascii')
+    return nom_slug.replace(' ', '-').replace('/', '-').strip('-')
+
+
 class DataParseError(Exception):
     """Error en parsejar una data."""
 
@@ -309,14 +327,9 @@ def convertir_macrocicle_jep(
                 volum_max = int(parts[1].strip().replace(".", ""))
         
         # Crear mesocicle
-        # Generar id com a slug del nom
-        import unicodedata
-
         from blondswim.models.macrocicle import Mesocicle
         nom_normalitzat = str(mesocicle_nom).strip()
-        nom_slug = unicodedata.normalize('NFKD', nom_normalitzat.lower())
-        nom_slug = nom_slug.encode('ascii', 'ignore').decode('ascii')
-        mesocicle_id = nom_slug.replace(' ', '-').replace('/', '-').strip('-')
+        mesocicle_id = _slug(nom_normalitzat)
         
         try:
             mesocicle = Mesocicle(
@@ -340,6 +353,15 @@ def convertir_macrocicle_jep(
     
     logger.info(f"Files processades del full Macrocicle: {files_processades}")
     logger.info(f"Mesocicles creats: {len(mesocicles)}")
+
+    # Llegir i vincular microcicles
+    microcicles_per_mesocicle = convertir_microcicles(fitxer_entrada)
+    
+    for mesocicle in mesocicles:
+        mesocicle.microcicles = microcicles_per_mesocicle.get(mesocicle.id, [])
+    
+    total_microcicles = sum(len(m.microcicles) for m in mesocicles)
+    logger.info(f"Microcicles vinculats: {total_microcicles}")
 
     # Crear macrocicle
     macrocicle_data = {
@@ -390,6 +412,108 @@ def determinar_font_ritmes(
         return "css_test"
 
     return "estimat_marca"
+
+
+def convertir_microcicles(fitxer_entrada: Path) -> dict[str, list]:
+    """
+    Convertir la pestanya "Microcicles" a diccionari agrupat per mesocicle_id.
+
+    Args:
+        fitxer_entrada: Path al fitxer XLSX
+
+    Returns:
+        Diccionari {mesocicle_id: [Microcicle, ...]}
+    """
+    from blondswim.models.macrocicle import Microcicle
+    
+    wb = openpyxl.load_workbook(fitxer_entrada, data_only=True)
+    
+    if "Microcicles" not in wb.sheetnames:
+        raise ValueError(f"Pestanya 'Microcicles' no trobada al fitxer {fitxer_entrada}")
+    
+    ws = wb["Microcicles"]
+    
+    # Llegir capçaleres (fila 1)
+    capçaleres = llegir_capçaleres(ws, header_row=1)
+    required = ["mesocicle", "microcicle", "setmana", "dates", "tipus", "volumobjectiu(m)"]
+    for req in required:
+        if req not in capçaleres:
+            raise ValueError(f"Capçalera requerida '{req}' no trobada al full Microcicles")
+    
+    # Mapa de normalització de tipus
+    mapa_tipus = {
+        "càrrega": "carrega",
+        "carrega": "carrega",
+        "descàrrega": "descarrega",
+        "descarrega": "descarrega",
+        "qualitat": "qualitat",
+        "taper": "taper",
+        "transició": "transicio",
+        "transicio": "transicio",
+    }
+    
+    microcicles_per_mesocicle = {}
+    
+    # Processar files (començant des de la 2, la 1 són capçaleres)
+    for num_fila, row in enumerate(ws.iter_rows(min_row=2), start=2):
+        # Obtenir valors per nom de capçalera
+        mesocicle_nom = row[capçaleres["mesocicle"] - 1].value
+        if not mesocicle_nom:
+            continue  # Fila buida
+        
+        setmana = row[capçaleres["setmana"] - 1].value
+        dates = row[capçaleres["dates"] - 1].value
+        tipus = row[capçaleres["tipus"] - 1].value
+        volum_objectiu = row[capçaleres["volumobjectiu(m)"] - 1].value
+        observacions = row[capçaleres.get("observacions", 999) - 1].value if "observacions" in capçaleres else None
+        
+        # Calcular mesocicle_id
+        mesocicle_id = _slug(mesocicle_nom)
+        
+        # Normalitzar dates (mantenir format string)
+        dates_str = str(dates).strip() if dates else ""
+        
+        # Normalitzar tipus
+        tipus_lower = str(tipus).strip().lower()
+        if tipus_lower not in mapa_tipus:
+            raise ValueError(
+                f"Fila {num_fila}: valor de 'Tipus' no reconegut: '{tipus}'. "
+                f"Valors vàlids: {list(set(mapa_tipus.values()))}"
+            )
+        tipus_base = mapa_tipus[tipus_lower]
+        
+        # Determinar dies_qualitat
+        dies_qualitat = tipus_base == "carrega"
+        
+        # Notes
+        notes = str(observacions).strip() if observacions else None
+        
+        # Crear Microcicle
+        try:
+            microcicle = Microcicle(
+                setmana=int(setmana) if setmana else 0,
+                dates=dates_str,
+                tipus_base=tipus_base,
+                volum_objectiu=int(volum_objectiu) if volum_objectiu else 0,
+                dies_qualitat=dies_qualitat,
+                notes=notes,
+                test_css=None,
+                competicio_test_oficial=False,
+                test_avaluacio=None,
+                focus_especific=None,
+            )
+            
+            # Afegir al diccionari agrupat
+            if mesocicle_id not in microcicles_per_mesocicle:
+                microcicles_per_mesocicle[mesocicle_id] = []
+            microcicles_per_mesocicle[mesocicle_id].append(microcicle)
+            
+        except Exception as e:
+            raise ValueError(
+                f"Fila {num_fila}: error de validació del model Microcicle: {e}"
+            ) from e
+    
+    return microcicles_per_mesocicle
 
 
 def convertir_nedador_ritmes(
@@ -774,15 +898,15 @@ def main():
         print(f"   ✗ Error: {e}")
         return
 
-    # 2. Macrocicle Jep
-    print("\n2. Convertint Macrocicle Jep...")
+    # 2. Macrocicle Jep (amb microcicles)
+    print("\n2. Convertint Macrocicle Jep (amb microcicles)...")
     try:
         stats_macro = convertir_macrocicle_jep(
             data_raw / "Planificacio_Mesocicles_Jep.xlsx",
             data_processed / "macrocicle_jep.json",
         )
         print(f"   ✓ {stats_macro['mesocicles']} mesocicles processats")
-        print(f"   ✓ {stats_macro['microcicles']} microcicles totals")
+        print(f"   ✓ {stats_macro['microcicles']} microcicles vinculats")
     except Exception as e: # noqa: BLE001
         print(f"   ✗ Error: {e}")
         return
