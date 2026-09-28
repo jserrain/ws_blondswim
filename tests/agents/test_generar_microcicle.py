@@ -13,7 +13,7 @@ from blondswim.agents.generar_microcicle import (
 )
 from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.historial import SerieRealitzada, SessioRealitzada
-from blondswim.models.macrocicle import Microcicle
+from blondswim.models.macrocicle import Macrocicle, Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador, RitmesCSS
 from blondswim.models.sessio import Sessio
 
@@ -307,8 +307,6 @@ def test_extreure_few_shot_historial_buit():
 
 def test_generar_i_validar_microcicle_setmana_trobada(nedador_test, metodologia_test):
     """Cas normal: setmana trobada, genera sessions i retorna avisos."""
-    from blondswim.models.macrocicle import Mesocicle, Microcicle
-
     # Crear macrocicle amb microcicles
     microcicle_1 = Microcicle(
         setmana=1,
@@ -378,8 +376,6 @@ def test_generar_i_validar_microcicle_setmana_no_trobada(
     nedador_test, metodologia_test
 ):
     """Setmana no trobada: aixeca ValueError."""
-    from blondswim.models.macrocicle import Mesocicle, Microcicle
-
     # Crear macrocicle amb només setmana 1
     microcicle_1 = Microcicle(
         setmana=1,
