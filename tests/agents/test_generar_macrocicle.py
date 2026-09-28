@@ -162,7 +162,7 @@ def test_generar_mesocicle_competicio_a_llunyana_genera_base():
     ]
 
     # Generar mesocicle
-    mesocicle, avisos = generar_mesocicle(
+    mesocicle, _avisos = generar_mesocicle(
         nedador_id="test",
         macrocicle=macrocicle,
         competicions=competicions,
@@ -207,7 +207,7 @@ def test_generar_mesocicle_competicio_a_propera_genera_peak():
     ]
 
     # Generar mesocicle
-    mesocicle, avisos = generar_mesocicle(
+    mesocicle, _avisos = generar_mesocicle(
         nedador_id="test",
         macrocicle=macrocicle,
         competicions=competicions,
@@ -271,7 +271,7 @@ def test_generar_mesocicle_despres_cursa_genera_transicio():
     ]
 
     # Generar següent mesocicle
-    mesocicle, avisos = generar_mesocicle(
+    mesocicle, _avisos = generar_mesocicle(
         nedador_id="test",
         macrocicle=macrocicle,
         competicions=competicions,
@@ -366,7 +366,7 @@ def test_generar_mesocicle_enriquir_amb_llm_canvia_fase_objectiu():
         "blondswim.agents.generar_macrocicle.get_llm_client",
         return_value=mock_client,
     ):
-        mesocicle, avisos = generar_mesocicle(
+        mesocicle, _avisos = generar_mesocicle(
             nedador_id="test",
             macrocicle=macrocicle,
             competicions=competicions,
@@ -409,7 +409,7 @@ def test_generar_mesocicle_sense_enriquir_llm_no_crida_api():
         "blondswim.agents.generar_macrocicle.get_llm_client",
         return_value=mock_client,
     ):
-        mesocicle, avisos = generar_mesocicle(
+        mesocicle, _avisos = generar_mesocicle(
             nedador_id="test",
             macrocicle=macrocicle,
             competicions=competicions,
