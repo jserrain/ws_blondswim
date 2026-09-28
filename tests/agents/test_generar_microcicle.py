@@ -773,7 +773,7 @@ def test_eliminar_competicio_la_treu_de_la_llista():
     nombre_original = len(competicions)
 
     # Eliminar comp2
-    competicions_actualitzades, pla_taper, avisos_pics_a = eliminar_competicio(
+    competicions_actualitzades, pla_taper, _avisos_pics_a = eliminar_competicio(
         competicions=competicions,
         competicio_id="comp2",
         motiu="Malaltia",
@@ -789,7 +789,7 @@ def test_eliminar_competicio_la_treu_de_la_llista():
 
     # Verificar que retorna pla_taper i avisos
     assert isinstance(pla_taper, list)
-    assert isinstance(avisos_pics_a, list)
+    assert isinstance(_avisos_pics_a, list)
 
 
 def test_eliminar_competicio_recalcula_pics_a_sense_ella():
