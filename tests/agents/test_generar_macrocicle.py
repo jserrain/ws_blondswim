@@ -123,7 +123,7 @@ def test_generar_macrocicle_crida_validar_espaiat_pics_a():
         "blondswim.agents.generar_macrocicle.context_competicio.validar_espaiat_pics_a",
         return_value=avisos_mock,
     ) as mock_validar:
-        macrocicle, avisos = generar_macrocicle(
+        _macrocicle, avisos = generar_macrocicle(
             nedador_id="test",
             competicions=competicions,
             temporada_data_inici="2026-09-01",
