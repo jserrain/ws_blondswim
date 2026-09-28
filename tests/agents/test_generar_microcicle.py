@@ -9,6 +9,7 @@ from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 from blondswim.agents.generar_microcicle import (
     GeneracioMicrocicleError,
     _extreure_few_shot,
+    actualitzar_volum_microcicle,
     generar_i_validar_microcicle,
     generar_microcicle,
     guardar_log_decisio,
@@ -484,3 +485,116 @@ def test_guardar_log_decisio_sense_microcicle(metodologia_test, tmp_path, monkey
         data = json.load(f)
 
     assert data["microcicle_generat"] is None
+
+
+def test_actualitzar_volum_microcicle_canvia_valor():
+    """Verifica que actualitzar_volum_microcicle canvia volum_objectiu correctament."""
+    # Crear macrocicle amb microcicles
+    microcicle_1 = Microcicle(
+        setmana=1,
+        dates="1-7/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="carrega",
+        volum_objectiu=15000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    microcicle_2 = Microcicle(
+        setmana=2,
+        dates="8-14/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="qualitat",
+        volum_objectiu=14000,
+        dies_qualitat=True,
+        test_css=False,
+    )
+    mesocicle = Mesocicle(
+        id="meso1",
+        nom="Mesocicle 1",
+        setmanes="1-2",
+        dates="1-14/10/2026",
+        fase_objectiu="Base",
+        metodologia_dominant="Polaritzat",
+        volum_min=13000,
+        volum_max=16000,
+        volum_mitja_previst=14500,
+        microcicles=[microcicle_1, microcicle_2],
+    )
+    macrocicle = Macrocicle(
+        nom="Temporada 2026-27",
+        temporada="2026-27",
+        data_inici="2026-10-01",
+        data_fi="2027-06-30",
+        mesocicles=[mesocicle],
+    )
+
+    # Guardar valors originals del microcicle 1
+    volum_original = microcicle_1.volum_objectiu
+    dates_original = microcicle_1.dates
+    tipus_original = microcicle_1.tipus_base
+
+    # Actualitzar volum
+    nou_volum = 18000
+    microcicle_actualitzat, avisos = actualitzar_volum_microcicle(
+        macrocicle=macrocicle,
+        setmana=1,
+        nou_volum_objectiu=nou_volum,
+        motiu="Ajust manual del coach",
+    )
+
+    # Verificar que el volum ha canviat
+    assert microcicle_actualitzat.volum_objectiu == nou_volum
+    assert microcicle_actualitzat.volum_objectiu != volum_original
+
+    # Verificar que la resta de camps no han canviat
+    assert microcicle_actualitzat.dates == dates_original
+    assert microcicle_actualitzat.tipus_base == tipus_original
+    assert microcicle_actualitzat.setmana == 1
+    assert microcicle_actualitzat.mesocicle_id == "meso1"
+
+    # Verificar que retorna avisos (llista, pot ser buida)
+    assert isinstance(avisos, list)
+
+
+def test_actualitzar_volum_microcicle_setmana_no_trobada():
+    """Verifica que actualitzar_volum_microcicle aixeca ValueError si la setmana no existeix."""
+    # Crear macrocicle amb només setmana 1
+    microcicle_1 = Microcicle(
+        setmana=1,
+        dates="1-7/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="carrega",
+        volum_objectiu=15000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    mesocicle = Mesocicle(
+        id="meso1",
+        nom="Mesocicle 1",
+        setmanes="1",
+        dates="1-7/10/2026",
+        fase_objectiu="Base",
+        metodologia_dominant="Polaritzat",
+        volum_min=13000,
+        volum_max=16000,
+        volum_mitja_previst=14500,
+        microcicles=[microcicle_1],
+    )
+    macrocicle = Macrocicle(
+        nom="Temporada 2026-27",
+        temporada="2026-27",
+        data_inici="2026-10-01",
+        data_fi="2027-06-30",
+        mesocicles=[mesocicle],
+    )
+
+    # Intentar actualitzar setmana 99 (no existeix)
+    with pytest.raises(ValueError) as exc_info:
+        actualitzar_volum_microcicle(
+            macrocicle=macrocicle,
+            setmana=99,
+            nou_volum_objectiu=20000,
+            motiu="Test",
+        )
+
+    assert "setmana=99" in str(exc_info.value)

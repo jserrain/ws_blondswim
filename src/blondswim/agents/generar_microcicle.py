@@ -127,6 +127,86 @@ def _extreure_few_shot(
     return resultat
 
 
+def _trobar_microcicle(macrocicle: Macrocicle, setmana: int) -> Microcicle:
+    """
+    Retorna el Microcicle amb aquesta setmana, cercant a tots els mesocicles.
+    
+    La numeració de setmanes és global (no reinicia per mesocicle).
+    
+    Args:
+        macrocicle: Macrocicle complet amb tots els mesocicles i microcicles
+        setmana: Número de setmana global
+        
+    Returns:
+        Microcicle trobat
+        
+    Raises:
+        ValueError: Si no es troba cap microcicle amb la setmana indicada
+    """
+    for mesocicle in macrocicle.mesocicles:
+        for microcicle in mesocicle.microcicles:
+            if microcicle.setmana == setmana:
+                return microcicle
+    
+    raise ValueError(
+        f"No s'ha trobat cap microcicle amb setmana={setmana} al macrocicle"
+    )
+
+
+def actualitzar_volum_microcicle(
+    macrocicle: Macrocicle,
+    setmana: int,
+    nou_volum_objectiu: int,
+    motiu: str,
+) -> tuple[Microcicle, list[dict]]:
+    """
+    Ajusta el volum_objectiu d'un microcicle ja existent (decisió humana del coach).
+    
+    Aquesta funció permet al coach ajustar manualment el volum d'un microcicle
+    i obtenir avisos de validació sobre l'impacte en la progressió de càrrega.
+    No regenera sessions ni contingut LLM.
+    
+    Args:
+        macrocicle: Macrocicle complet amb tots els mesocicles i microcicles
+        setmana: Número de setmana global del microcicle a actualitzar
+        nou_volum_objectiu: Nou volum objectiu en metres
+        motiu: Raó de l'ajust (per logging/auditoria)
+        
+    Returns:
+        Tupla amb:
+        - Microcicle actualitzat
+        - Llista d'avisos de validar_progressio_volum()
+        
+    Raises:
+        ValueError: Si no es troba cap microcicle amb la setmana indicada
+    """
+    # 1. Trobar el microcicle
+    microcicle = _trobar_microcicle(macrocicle, setmana)
+    
+    # 2. Actualitzar volum
+    volum_anterior = microcicle.volum_objectiu
+    microcicle.volum_objectiu = nou_volum_objectiu
+    
+    logger.info(
+        f"Volum microcicle setmana {setmana} actualitzat: "
+        f"{volum_anterior}m -> {nou_volum_objectiu}m. Motiu: {motiu}"
+    )
+    
+    # 3. Recollir tots els microcicles i validar progressió
+    tots_microcicles = []
+    for mesocicle in macrocicle.mesocicles:
+        tots_microcicles.extend(mesocicle.microcicles)
+    
+    # Ordenar per setmana
+    tots_microcicles.sort(key=lambda m: m.setmana)
+    
+    # Validar progressió de volum
+    avisos = validacio.validar_progressio_volum(tots_microcicles)
+    
+    # 4. Retornar microcicle i avisos
+    return microcicle, avisos
+
+
 def generar_i_validar_microcicle(
     nedador: Nedador,
     macrocicle: Macrocicle,
@@ -161,19 +241,7 @@ def generar_i_validar_microcicle(
         GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
     """
     # 1. Buscar el microcicle corresponent a la setmana
-    microcicle_trobat = None
-    for mesocicle in macrocicle.mesocicles:
-        for microcicle in mesocicle.microcicles:
-            if microcicle.setmana == setmana:
-                microcicle_trobat = microcicle
-                break
-        if microcicle_trobat:
-            break
-
-    if not microcicle_trobat:
-        raise ValueError(
-            f"No s'ha trobat cap microcicle amb setmana={setmana} al macrocicle"
-        )
+    microcicle_trobat = _trobar_microcicle(macrocicle, setmana)
 
     # 2. Generar esquelet i contingut
     sessions = generar_esquelet_sessions(nedador, microcicle_trobat)
