@@ -9,11 +9,13 @@ from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 from blondswim.agents.generar_microcicle import (
     GeneracioMicrocicleError,
     _extreure_few_shot,
+    actualitzar_classe_competicio,
     actualitzar_volum_microcicle,
     generar_i_validar_microcicle,
     generar_microcicle,
     guardar_log_decisio,
 )
+from blondswim.models.calendari import Competicio
 from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.historial import SerieRealitzada, SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Mesocicle, Microcicle
@@ -598,3 +600,138 @@ def test_actualitzar_volum_microcicle_setmana_no_trobada():
         )
 
     assert "setmana=99" in str(exc_info.value)
+
+
+def test_actualitzar_classe_competicio_canvia_classe():
+    """Verifica que actualitzar_classe_competicio canvia la classe correctament."""
+    # Crear llista de competicions
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició 1",
+            data_inici="2026-10-15",
+            data_fi="2026-10-17",
+            classe="A",
+            piscina="25m",
+        ),
+        Competicio(
+            id="comp2",
+            nom="Competició 2",
+            data_inici="2026-11-20",
+            data_fi="2026-11-22",
+            classe="B",
+            piscina="50m",
+        ),
+        Competicio(
+            id="comp3",
+            nom="Competició 3",
+            data_inici="2026-12-10",
+            data_fi="2026-12-12",
+            classe="C",
+            piscina="25m",
+        ),
+    ]
+
+    # Guardar classe original de comp2
+    classe_original = competicions[1].classe
+
+    # Actualitzar classe de comp2 de B a A
+    competicions_actualitzades, pla_taper, avisos_pics_a = actualitzar_classe_competicio(
+        competicions=competicions,
+        competicio_id="comp2",
+        nova_classe="A",
+        motiu="Prioritzada pel nedador",
+    )
+
+    # Verificar que la classe ha canviat
+    comp2 = next(c for c in competicions_actualitzades if c.id == "comp2")
+    assert comp2.classe == "A"
+    assert comp2.classe != classe_original
+
+    # Verificar que retorna pla_taper i avisos
+    assert isinstance(pla_taper, list)
+    assert isinstance(avisos_pics_a, list)
+
+    # Verificar que ara hi ha 2 competicions A al pla de taper
+    comps_a_al_pla = [p for p in pla_taper if p["classe"] == "A"]
+    assert len(comps_a_al_pla) == 2
+
+
+def test_actualitzar_classe_competicio_recalcula_pics_prioritzats():
+    """Verifica que canviar una competició B a A l'afegeix als pics prioritzats."""
+    # Crear llista de competicions
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició A",
+            data_inici="2026-10-15",
+            data_fi="2026-10-17",
+            classe="A",
+            piscina="25m",
+        ),
+        Competicio(
+            id="comp2",
+            nom="Competició B propera",
+            data_inici="2026-10-25",
+            data_fi="2026-10-27",
+            classe="B",
+            piscina="50m",
+        ),
+    ]
+
+    # Abans de canviar: comp2 no és pic prioritzat, no hauria de tenir re-taper
+    _, pla_taper_abans, _ = actualitzar_classe_competicio(
+        competicions=competicions,
+        competicio_id="comp1",  # No canviem res, només per obtenir pla inicial
+        nova_classe="A",
+        motiu="Mantenir",
+    )
+
+    comp2_abans = next(p for p in pla_taper_abans if p["competicio_id"] == "comp2")
+    assert comp2_abans["retaper"] is False
+
+    # Canviar comp2 de B a A
+    competicions_actualitzades, pla_taper_despres, avisos_pics_a = actualitzar_classe_competicio(
+        competicions=competicions,
+        competicio_id="comp2",
+        nova_classe="A",
+        motiu="Prioritzada",
+    )
+
+    # Verificar que comp2 ara és classe A
+    comp2 = next(c for c in competicions_actualitzades if c.id == "comp2")
+    assert comp2.classe == "A"
+
+    # Verificar que el pla de taper s'ha recalculat amb comp2 com a A
+    comp2_despres = next(p for p in pla_taper_despres if p["competicio_id"] == "comp2")
+    assert comp2_despres["classe"] == "A"
+    assert comp2_despres["dies_taper_pre"] == 14  # Taper de classe A
+
+    # Verificar que ara hi ha avisos de pics A (2 competicions A properes)
+    assert len(avisos_pics_a) > 0
+
+
+def test_actualitzar_classe_competicio_id_no_trobat():
+    """Verifica que actualitzar_classe_competicio aixeca ValueError si l'id no existeix."""
+    # Crear llista de competicions
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició 1",
+            data_inici="2026-10-15",
+            data_fi="2026-10-17",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    # Intentar actualitzar competició inexistent
+    with pytest.raises(ValueError) as exc_info:
+        actualitzar_classe_competicio(
+            competicions=competicions,
+            competicio_id="comp_inexistent",
+            nova_classe="B",
+            motiu="Test",
+        )
+
+    assert "comp_inexistent" in str(exc_info.value)

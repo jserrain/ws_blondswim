@@ -5,9 +5,12 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
-from blondswim.agents import validacio
+from typing import Literal
+
+from blondswim.agents import context_competicio, taper, validacio
 from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
+from blondswim.models.calendari import Competicio
 from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Microcicle
@@ -151,6 +154,73 @@ def _trobar_microcicle(macrocicle: Macrocicle, setmana: int) -> Microcicle:
     raise ValueError(
         f"No s'ha trobat cap microcicle amb setmana={setmana} al macrocicle"
     )
+
+
+def actualitzar_classe_competicio(
+    competicions: list[Competicio],
+    competicio_id: str,
+    nova_classe: Literal["A", "B", "C"],
+    motiu: str,
+) -> tuple[list[Competicio], list[dict], list[dict]]:
+    """
+    Canvia la classe d'una competició i recalcula automàticament taper i espaiat de pics A.
+    
+    Aquesta funció permet al coach reclassificar competicions (p.ex. B->C per malaltia,
+    o C->B si es decideix prioritzar-la) i obté automàticament els avisos de validació
+    actualitzats.
+    
+    Args:
+        competicions: Llista de totes les competicions del calendari
+        competicio_id: ID de la competició a actualitzar
+        nova_classe: Nova classe (A, B o C)
+        motiu: Raó del canvi (per logging/auditoria, no s'usa en el càlcul)
+        
+    Returns:
+        Tupla amb:
+        - Llista de competicions actualitzada (mateixa llista mutada)
+        - Pla de taper recalculat (generar_pla_taper_temporada)
+        - Avisos de pics A recalculats (validar_espaiat_pics_a)
+        
+    Raises:
+        ValueError: Si no es troba cap competició amb el competicio_id indicat
+        
+    Notes:
+        - La classe A defineix automàticament els pics prioritzats (no cal camp addicional)
+        - La funció mai bloqueja: sempre retorna, encara que hi hagi avisos
+        - El motiu és per traçabilitat futura, no afecta el càlcul
+    """
+    # 1. Trobar la competició
+    competicio = None
+    for comp in competicions:
+        if comp.id == competicio_id:
+            competicio = comp
+            break
+    
+    if not competicio:
+        raise ValueError(
+            f"No s'ha trobat cap competició amb id={competicio_id}"
+        )
+    
+    # 2. Actualitzar classe
+    classe_anterior = competicio.classe
+    competicio.classe = nova_classe
+    
+    logger.info(
+        f"Classe competició '{competicio.nom}' actualitzada: "
+        f"{classe_anterior} -> {nova_classe}. Motiu: {motiu}"
+    )
+    
+    # 3. Derivar pics prioritzats (totes les competicions classe A)
+    pics_prioritzats = [comp.id for comp in competicions if comp.classe == "A"]
+    
+    # 4. Recalcular pla de taper
+    pla_taper = taper.generar_pla_taper_temporada(competicions, pics_prioritzats)
+    
+    # 5. Recalcular avisos de pics A
+    avisos_pics_a = context_competicio.validar_espaiat_pics_a(competicions)
+    
+    # 6. Retornar competicions, pla_taper i avisos
+    return competicions, pla_taper, avisos_pics_a
 
 
 def actualitzar_volum_microcicle(
