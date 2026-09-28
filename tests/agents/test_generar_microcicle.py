@@ -825,7 +825,7 @@ def test_eliminar_competicio_recalcula_pics_a_sense_ella():
     ]
 
     # Eliminar comp2 (una de les competicions A)
-    competicions_actualitzades, pla_taper, avisos_pics_a = eliminar_competicio(
+    competicions_actualitzades, pla_taper, _avisos_pics_a = eliminar_competicio(
         competicions=competicions,
         competicio_id="comp2",
         motiu="Lesió",
