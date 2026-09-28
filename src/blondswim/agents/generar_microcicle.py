@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from blondswim.agents import validacio
@@ -52,7 +52,7 @@ def guardar_log_decisio(
     log_data = {
         "nedador_id": nedador_id,
         "setmana": setmana,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "metodologia": metodologia.model_dump(),
         "microcicle_generat": microcicle_generat,
     }
@@ -187,7 +187,7 @@ def generar_i_validar_microcicle(
     # 4. Guardar log de decisió (no bloqueja si falla)
     try:
         guardar_log_decisio(nedador.id, setmana, metodologia)
-    except Exception as e:
+    except (OSError, IOError) as e:
         logger.warning(f"No s'ha pogut guardar log de decisió: {e}")
 
     # 5. Retornar sessions i avisos
