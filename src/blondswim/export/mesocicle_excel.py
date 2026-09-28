@@ -66,10 +66,7 @@ def exportar_mesocicle_excel(
     }
 
     # Recollir totes les sessions i ordenar-les
-    totes_sessions = []
-    for setmana, sessions in resultats.items():
-        for sessio in sessions:
-            totes_sessions.append(sessio)
+    totes_sessions = [sessio for sessions in resultats.values() for sessio in sessions]
 
     # Ordenar per setmana i després per dia
     totes_sessions.sort(key=lambda s: (s.microcicle_setmana, dies_ordre.get(s.dia, 99)))
@@ -99,15 +96,15 @@ def exportar_mesocicle_excel(
             ws.cell(row=row_idx, column=col_idx, value=contingut)
 
     # Ajustar amplada de columnes
+    from contextlib import suppress
+    
     for col in ws.columns:
         max_length = 0
         column = col[0].column_letter
         for cell in col:
-            try:
+            with suppress(TypeError, AttributeError):
                 if cell.value:
                     max_length = max(max_length, len(str(cell.value)))
-            except:
-                pass
         adjusted_width = min(max_length + 2, 50)  # Màxim 50 per evitar columnes massa amples
         ws.column_dimensions[column].width = adjusted_width
 
