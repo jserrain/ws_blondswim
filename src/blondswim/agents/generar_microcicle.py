@@ -187,7 +187,7 @@ def generar_i_validar_microcicle(
     # 4. Guardar log de decisió (no bloqueja si falla)
     try:
         guardar_log_decisio(nedador.id, setmana, metodologia)
-    except (OSError, IOError) as e:
+    except OSError as e:
         logger.warning(f"No s'ha pogut guardar log de decisió: {e}")
 
     # 5. Retornar sessions i avisos
