@@ -38,4 +38,5 @@ class Sessio(BaseModel):
     tipus_sessio: Literal["carrega", "qualitat", "descarrega", "taper", "transicio"]
     volum_total: int  # metres
     estructura: EstructuraSessio
+    es_dia_opcional: bool = False  # True si correspon al dia opcional del nedador
     notes: str | None = None
