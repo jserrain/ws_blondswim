@@ -253,6 +253,13 @@ def generar_microcicles_mesocicle(
     Returns:
         Llista de Microcicle ordenada per setmana ascendent
     """
+    if mesocicle.tipus is None:
+        raise ValueError(
+            f"Mesocicle {mesocicle.id} no té tipus assignat; "
+            "generar_microcicles_mesocicle() només funciona amb mesocicles "
+            "creats per generar_mesocicle()"
+        )
+
     # 1. Parsejar setmanes
     parts = mesocicle.setmanes.split("-")
     setmana_inici = int(parts[0])
