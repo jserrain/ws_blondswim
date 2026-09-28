@@ -45,4 +45,6 @@ class Macrocicle(BaseModel):
     """
     nom: str
     temporada: str | None = None  # Ex: "Hivern", "Estiu" (opcional)
+    data_inici: str
+    data_fi: str
     mesocicles: list[Mesocicle]
