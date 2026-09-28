@@ -170,7 +170,7 @@ def test_generar_macrocicle_crida_validar_espaiat_pics_a():
         assert avisos_mock[0] in avisos
 
 
-def test_generar_mesocicle_competicio_a_llunyana_genera_base():
+def test_generar_mesocicle_competicio_a_llunyana_genera_base(historial_test):
     """Verifica que amb una competició A llunyana (>10 setmanes) genera Base de 4 setmanes."""
     # Crear macrocicle buit
     macrocicle = Macrocicle(
@@ -216,7 +216,7 @@ def test_generar_mesocicle_competicio_a_llunyana_genera_base():
     assert len(avisos) == 0
 
 
-def test_generar_mesocicle_competicio_a_propera_genera_peak():
+def test_generar_mesocicle_competicio_a_propera_genera_peak(historial_test):
     """Verifica que amb una competició A a 2 setmanes genera Peak retallat."""
     # Crear macrocicle buit
     macrocicle = Macrocicle(
@@ -257,7 +257,7 @@ def test_generar_mesocicle_competicio_a_propera_genera_peak():
     assert len(macrocicle.mesocicles) == 1
 
 
-def test_generar_mesocicle_despres_cursa_genera_transicio():
+def test_generar_mesocicle_despres_cursa_genera_transicio(historial_test):
     """Verifica que després d'un mesocicle Cursa, el següent és Transicio."""
     from blondswim.models.macrocicle import Mesocicle, Microcicle
 
@@ -322,7 +322,7 @@ def test_generar_mesocicle_despres_cursa_genera_transicio():
     assert len(macrocicle.mesocicles) == 2
 
 
-def test_generar_mesocicle_sense_competicio_a_genera_base_amb_avis():
+def test_generar_mesocicle_sense_competicio_a_genera_base_amb_avis(historial_test):
     """Verifica que sense competició A genera Base amb avís."""
     # Crear macrocicle buit
     macrocicle = Macrocicle(
@@ -363,7 +363,7 @@ def test_generar_mesocicle_sense_competicio_a_genera_base_amb_avis():
     assert "No queda cap competició classe A" in avisos[0]["missatge"]
 
 
-def test_generar_mesocicle_enriquir_amb_llm_canvia_fase_objectiu():
+def test_generar_mesocicle_enriquir_amb_llm_canvia_fase_objectiu(historial_test):
     """Verifica que amb enriquir_amb_llm=True es crida l'API i canvia fase_objectiu."""
     # Crear macrocicle buit
     macrocicle = Macrocicle(
@@ -418,7 +418,7 @@ def test_generar_mesocicle_enriquir_amb_llm_canvia_fase_objectiu():
     assert mesocicle.fase_objectiu != "Base"  # Ha canviat respecte al determinista
 
 
-def test_generar_mesocicle_sense_enriquir_llm_no_crida_api():
+def test_generar_mesocicle_sense_enriquir_llm_no_crida_api(historial_test):
     """Verifica que amb enriquir_amb_llm=False no es crida l'API."""
     # Crear macrocicle buit
     macrocicle = Macrocicle(
@@ -461,7 +461,7 @@ def test_generar_mesocicle_sense_enriquir_llm_no_crida_api():
     assert mesocicle.fase_objectiu == "Base"
 
 
-def test_generar_mesocicle_fallback_si_llm_falla():
+def test_generar_mesocicle_fallback_si_llm_falla(historial_test):
     """Verifica que si la crida LLM falla, manté fase_objectiu determinista."""
     # Crear macrocicle buit
     macrocicle = Macrocicle(
