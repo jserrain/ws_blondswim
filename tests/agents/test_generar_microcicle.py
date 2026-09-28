@@ -329,7 +329,13 @@ def test_generar_i_validar_microcicle_setmana_trobada(nedador_test, metodologia_
     mesocicle = Mesocicle(
         id="meso1",
         nom="Mesocicle 1",
-        setmanes=[1, 2],
+        setmanes="1-2",
+        dates="1-14/10/2026",
+        fase_objectiu="Base",
+        metodologia_dominant="Polaritzat",
+        volum_min=13000,
+        volum_max=16000,
+        volum_mitja_previst=14500,
         microcicles=[microcicle_1, microcicle_2],
     )
     macrocicle = Macrocicle(
@@ -389,7 +395,13 @@ def test_generar_i_validar_microcicle_setmana_no_trobada(
     mesocicle = Mesocicle(
         id="meso1",
         nom="Mesocicle 1",
-        setmanes=[1],
+        setmanes="1",
+        dates="1-7/10/2026",
+        fase_objectiu="Base",
+        metodologia_dominant="Polaritzat",
+        volum_min=13000,
+        volum_max=16000,
+        volum_mitja_previst=14500,
         microcicles=[microcicle_1],
     )
     macrocicle = Macrocicle(
