@@ -489,6 +489,91 @@ def test_guardar_log_decisio_sense_microcicle(metodologia_test, tmp_path, monkey
     assert data["microcicle_generat"] is None
 
 
+def test_guardar_log_ajust_crea_fitxer_amb_una_entrada(tmp_path, monkeypatch):
+    """Verifica que guardar_log_ajust crea el fitxer amb una entrada."""
+    from blondswim.agents.generar_microcicle import guardar_log_ajust
+
+    monkeypatch.chdir(tmp_path)
+
+    # Cridar la funció
+    fitxer = guardar_log_ajust(
+        nedador_id="test_nedador",
+        setmana=1,
+        tipus_ajust="volum",
+        valor_anterior="15000",
+        valor_nou="18000",
+        motiu="Ajust manual del coach",
+    )
+
+    # Verificar que el fitxer existeix
+    assert fitxer.exists()
+    assert fitxer.name == "test_nedador_1_ajustos.json"
+    assert fitxer.parent.name == "log_decisions"
+
+    # Llegir i verificar contingut
+    with open(fitxer, encoding="utf-8") as f:
+        ajustos = json.load(f)
+
+    # Hauria de ser una llista amb una entrada
+    assert isinstance(ajustos, list)
+    assert len(ajustos) == 1
+
+    # Verificar camps de l'entrada
+    ajust = ajustos[0]
+    assert "timestamp" in ajust
+    assert ajust["tipus_ajust"] == "volum"
+    assert ajust["valor_anterior"] == "15000"
+    assert ajust["valor_nou"] == "18000"
+    assert ajust["motiu"] == "Ajust manual del coach"
+
+
+def test_guardar_log_ajust_afegeix_a_fitxer_existent(tmp_path, monkeypatch):
+    """Verifica que guardar_log_ajust afegeix a un fitxer existent sense perdre entrades."""
+    from blondswim.agents.generar_microcicle import guardar_log_ajust
+
+    monkeypatch.chdir(tmp_path)
+
+    # Primera crida: crear fitxer amb primera entrada
+    fitxer = guardar_log_ajust(
+        nedador_id="test_nedador",
+        setmana=1,
+        tipus_ajust="volum",
+        valor_anterior="15000",
+        valor_nou="18000",
+        motiu="Primer ajust",
+    )
+
+    # Segona crida: afegir segona entrada
+    fitxer = guardar_log_ajust(
+        nedador_id="test_nedador",
+        setmana=1,
+        tipus_ajust="volum",
+        valor_anterior="18000",
+        valor_nou="16000",
+        motiu="Segon ajust",
+    )
+
+    # Llegir i verificar contingut
+    with open(fitxer, encoding="utf-8") as f:
+        ajustos = json.load(f)
+
+    # Hauria de tenir 2 entrades
+    assert isinstance(ajustos, list)
+    assert len(ajustos) == 2
+
+    # Verificar primera entrada (no s'ha perdut)
+    assert ajustos[0]["tipus_ajust"] == "volum"
+    assert ajustos[0]["valor_anterior"] == "15000"
+    assert ajustos[0]["valor_nou"] == "18000"
+    assert ajustos[0]["motiu"] == "Primer ajust"
+
+    # Verificar segona entrada
+    assert ajustos[1]["tipus_ajust"] == "volum"
+    assert ajustos[1]["valor_anterior"] == "18000"
+    assert ajustos[1]["valor_nou"] == "16000"
+    assert ajustos[1]["motiu"] == "Segon ajust"
+
+
 def test_actualitzar_volum_microcicle_canvia_valor():
     """Verifica que actualitzar_volum_microcicle canvia volum_objectiu correctament."""
     # Crear macrocicle amb microcicles

@@ -66,6 +66,77 @@ def guardar_log_decisio(
     return fitxer
 
 
+def guardar_log_ajust(
+    nedador_id: str,
+    setmana: int,
+    tipus_ajust: Literal["volum", "classe_competicio", "eliminacio_competicio"],
+    valor_anterior: str,
+    valor_nou: str,
+    motiu: str,
+) -> Path:
+    """
+    Registra un ajust fet amb actualitzar_volum_microcicle(),
+    actualitzar_classe_competicio() o eliminar_competicio().
+
+    A diferència de guardar_log_decisio() (que sobreescriu, un registre per
+    generació), aquesta AFEGEIX a una llista, perquè hi pot haver diversos
+    ajustos sobre la mateixa setmana al llarg de la temporada.
+
+    Guarda/actualitza data/processed/log_decisions/<nedador_id>_<setmana>_ajustos.json,
+    una llista de:
+    {
+      "timestamp": ISO 8601 UTC actual,
+      "tipus_ajust": tipus_ajust,
+      "valor_anterior": valor_anterior,
+      "valor_nou": valor_nou,
+      "motiu": motiu
+    }
+    Si el fitxer ja existeix, llegeix la llista existent i hi afegeix
+    l'entrada nova (no sobreescriu els ajustos previs). Crea el directori
+    si no existeix. Retorna el Path del fitxer.
+
+    Args:
+        nedador_id: ID del nedador
+        setmana: Número de setmana
+        tipus_ajust: Tipus d'ajust realitzat
+        valor_anterior: Valor abans de l'ajust
+        valor_nou: Valor després de l'ajust
+        motiu: Raó de l'ajust
+
+    Returns:
+        Path del fitxer JSON creat/actualitzat
+    """
+    # Crear directori si no existeix
+    log_dir = Path("data/processed/log_decisions")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Construir nom de fitxer
+    fitxer = log_dir / f"{nedador_id}_{setmana}_ajustos.json"
+
+    # Llegir llista existent o crear-ne una de nova
+    if fitxer.exists():
+        with open(fitxer, encoding="utf-8") as f:
+            ajustos = json.load(f)
+    else:
+        ajustos = []
+
+    # Afegir nou ajust
+    nou_ajust = {
+        "timestamp": datetime.now(UTC).isoformat(),
+        "tipus_ajust": tipus_ajust,
+        "valor_anterior": valor_anterior,
+        "valor_nou": valor_nou,
+        "motiu": motiu,
+    }
+    ajustos.append(nou_ajust)
+
+    # Escriure fitxer actualitzat
+    with open(fitxer, "w", encoding="utf-8") as f:
+        json.dump(ajustos, f, indent=2, ensure_ascii=False)
+
+    return fitxer
+
+
 def _extreure_few_shot(
     historial: list[SessioRealitzada],
     metodologia: DecisioMetodologia,
