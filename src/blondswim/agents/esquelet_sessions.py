@@ -90,6 +90,7 @@ def generar_esquelet_sessions(
             tipus_sessio=tipus_sessio,
             volum_total=volum_sessio,
             estructura=EstructuraSessio(parts=parts),
+            es_dia_opcional=(dia == nedador.dia_opcional),
             notes=None,
         )
         sessions.append(sessio)
