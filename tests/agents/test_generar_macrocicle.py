@@ -454,7 +454,7 @@ def test_generar_mesocicle_fallback_si_llm_falla():
         return_value=mock_client,
     ):
         # No hauria de propagar l'error
-        mesocicle, avisos = generar_mesocicle(
+        mesocicle, _avisos = generar_mesocicle(
             nedador_id="test",
             macrocicle=macrocicle,
             competicions=competicions,
