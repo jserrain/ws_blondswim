@@ -8,6 +8,7 @@ from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 from blondswim.agents.generar_microcicle import (
     GeneracioMicrocicleError,
     _extreure_few_shot,
+    generar_i_validar_microcicle,
     generar_microcicle,
 )
 from blondswim.models.decisio import DecisioMetodologia
@@ -302,3 +303,116 @@ def test_extreure_few_shot_historial_buit():
 
     resultat = _extreure_few_shot([], metodologia, n=5)
     assert resultat == []
+
+
+def test_generar_i_validar_microcicle_setmana_trobada(nedador_test, metodologia_test):
+    """Cas normal: setmana trobada, genera sessions i retorna avisos."""
+    from blondswim.models.macrocicle import Mesocicle, Microcicle
+
+    # Crear macrocicle amb microcicles
+    microcicle_1 = Microcicle(
+        setmana=1,
+        dates="1-7/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="carrega",
+        volum_objectiu=15000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    microcicle_2 = Microcicle(
+        setmana=2,
+        dates="8-14/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="qualitat",
+        volum_objectiu=14000,
+        dies_qualitat=True,
+        test_css=False,
+    )
+    mesocicle = Mesocicle(
+        id="meso1",
+        nom="Mesocicle 1",
+        setmanes=[1, 2],
+        microcicles=[microcicle_1, microcicle_2],
+    )
+    macrocicle = Macrocicle(
+        temporada="2026-27",
+        data_inici="2026-10-01",
+        data_fi="2027-06-30",
+        mesocicles=[mesocicle],
+    )
+
+    # Mock resposta LLM
+    mock_response = MagicMock()
+    mock_tool_use = MagicMock()
+    mock_tool_use.type = "tool_use"
+    mock_tool_use.name = "retornar_contingut_sessions"
+    mock_tool_use.input = {"sessions": []}
+    mock_response.content = [mock_tool_use]
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        sessions, avisos = generar_i_validar_microcicle(
+            nedador=nedador_test,
+            macrocicle=macrocicle,
+            setmana=1,
+            metodologia=metodologia_test,
+            pla_taper=[],
+            avisos_pics_a=[],
+            historial=[],
+        )
+
+    # Verificar que retorna sessions (nombre depèn de dies_disponibles del nedador)
+    assert isinstance(sessions, list)
+    assert len(sessions) > 0
+    assert all(isinstance(s, Sessio) for s in sessions)
+
+    # Verificar que retorna avisos (llista, pot ser buida)
+    assert isinstance(avisos, list)
+
+
+def test_generar_i_validar_microcicle_setmana_no_trobada(
+    nedador_test, metodologia_test
+):
+    """Setmana no trobada: aixeca ValueError."""
+    from blondswim.models.macrocicle import Mesocicle, Microcicle
+
+    # Crear macrocicle amb només setmana 1
+    microcicle_1 = Microcicle(
+        setmana=1,
+        dates="1-7/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="carrega",
+        volum_objectiu=15000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    mesocicle = Mesocicle(
+        id="meso1",
+        nom="Mesocicle 1",
+        setmanes=[1],
+        microcicles=[microcicle_1],
+    )
+    macrocicle = Macrocicle(
+        temporada="2026-27",
+        data_inici="2026-10-01",
+        data_fi="2027-06-30",
+        mesocicles=[mesocicle],
+    )
+
+    # Intentar generar setmana 99 (no existeix)
+    with pytest.raises(ValueError) as exc_info:
+        generar_i_validar_microcicle(
+            nedador=nedador_test,
+            macrocicle=macrocicle,
+            setmana=99,
+            metodologia=metodologia_test,
+            pla_taper=[],
+            avisos_pics_a=[],
+            historial=[],
+        )
+
+    assert "setmana=99" in str(exc_info.value)

@@ -3,9 +3,12 @@
 import logging
 from pathlib import Path
 
+from blondswim.agents import validacio
+from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
 from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.historial import SessioRealitzada
+from blondswim.models.macrocicle import Macrocicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import Sessio
 
@@ -77,6 +80,67 @@ def _extreure_few_shot(
         resultat.extend(series_no_rellevants[: n - len(resultat)])
 
     return resultat
+
+
+def generar_i_validar_microcicle(
+    nedador: Nedador,
+    macrocicle: Macrocicle,
+    setmana: int,
+    metodologia: DecisioMetodologia,
+    pla_taper: list[dict],
+    avisos_pics_a: list[dict],
+    historial: list[SessioRealitzada] | None = None,
+) -> tuple[list[Sessio], list[dict]]:
+    """
+    Genera contingut per a un microcicle específic i valida el macrocicle complet.
+
+    Busca el microcicle corresponent a la setmana indicada, genera l'esquelet de
+    sessions, omple el contingut amb LLM i valida el macrocicle sencer.
+
+    Args:
+        nedador: Nedador amb zones CSS i proves objectiu
+        macrocicle: Macrocicle complet amb tots els mesocicles i microcicles
+        setmana: Número de setmana global (no reinicia per mesocicle)
+        metodologia: Decisió de metodologia del Mòdul 5
+        pla_taper: Pla de taper generat per generar_pla_taper_temporada()
+        avisos_pics_a: Avisos generats per validar_espaiat_pics_a()
+        historial: Historial de sessions realitzades per few-shot (opcional)
+
+    Returns:
+        Tupla amb:
+        - Llista de sessions generades per a aquesta setmana
+        - Llista completa d'avisos de validar_pla_complet()
+
+    Raises:
+        ValueError: Si no es troba cap microcicle amb la setmana indicada
+        GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+    """
+    # 1. Buscar el microcicle corresponent a la setmana
+    microcicle_trobat = None
+    for mesocicle in macrocicle.mesocicles:
+        for microcicle in mesocicle.microcicles:
+            if microcicle.setmana == setmana:
+                microcicle_trobat = microcicle
+                break
+        if microcicle_trobat:
+            break
+
+    if not microcicle_trobat:
+        raise ValueError(
+            f"No s'ha trobat cap microcicle amb setmana={setmana} al macrocicle"
+        )
+
+    # 2. Generar esquelet i contingut
+    sessions = generar_esquelet_sessions(nedador, microcicle_trobat)
+    sessions = generar_microcicle(nedador, sessions, metodologia, historial)
+
+    # 3. Validar el macrocicle complet
+    avisos = validacio.validar_pla_complet(
+        macrocicle, nedador.categoria, pla_taper, avisos_pics_a
+    )
+
+    # 4. Retornar sessions i avisos
+    return sessions, avisos
 
 
 def generar_microcicle(
