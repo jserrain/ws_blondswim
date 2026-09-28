@@ -508,10 +508,8 @@ def convertir_microcicles(
         # Justificació: dins del mesocicle M4, aquesta setmana (15) continua el patró
         # de descàrrega de la setmana anterior (14: "Nadal - Descàrrega activa", 12500m),
         # amb volum reduït (12000m) que indica recuperació progressiva.
-        if "cap d'any" in tipus_text_lower and "represa" in tipus_text_lower:
-            tipus_base = "descarrega"
         # Ordre de comprovació: descarrega primer (per evitar match amb carrega)
-        elif "descàrrega" in tipus_text_lower or "descarrega" in tipus_text_lower:
+        if ("cap d'any" in tipus_text_lower and "represa" in tipus_text_lower) or "descàrrega" in tipus_text_lower or "descarrega" in tipus_text_lower:
             tipus_base = "descarrega"
         elif "càrrega" in tipus_text_lower or "carrega" in tipus_text_lower:
             tipus_base = "carrega"

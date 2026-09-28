@@ -1,9 +1,10 @@
 """Tests per a la ingestió de microcicles des d'Excel."""
 
-import pytest
 from pathlib import Path
 
-from blondswim.ingestion.xlsx_to_json import convertir_microcicles, _slug, convertir_macrocicle_jep
+import pytest
+
+from blondswim.ingestion.xlsx_to_json import _slug, convertir_macrocicle_jep, convertir_microcicles
 
 
 class TestSlug:
@@ -36,7 +37,7 @@ class TestConvertirMicrocicles:
         """Crear mesocicles reals del fitxer."""
         # Usar convertir_macrocicle_jep per obtenir mesocicles reals
         fitxer_sortida = tmp_path / "test_macro.json"
-        stats = convertir_macrocicle_jep(fitxer_excel, fitxer_sortida)
+        convertir_macrocicle_jep(fitxer_excel, fitxer_sortida)
         
         # Llegir el JSON generat per obtenir els mesocicles
         import json
@@ -112,7 +113,6 @@ class TestConvertirMicrocicles:
         # Aquest test requeriria modificar temporalment l'Excel
         # Per simplicitat, el deixem com a placeholder documentat
         # En un cas real, es podria usar openpyxl per crear un fitxer temporal
-        pass
     
     def test_descarrega_abans_carrega(self, fitxer_excel, mesocicles):
         """Verificar que 'descàrrega' es detecta correctament (no confondre amb 'càrrega')."""
