@@ -125,8 +125,13 @@ class TestConvertirMicrocicles:
         
         microcicles_descarrega = [m for m in tots_microcicles if m.tipus_base == "descarrega"]
         
-        # Si n'hi ha, verificar que notes conté "descàrrega" o "descarrega"
+        # Verificar que notes conté "descàrrega" o "descarrega", excepte casos especials
+        # com "Cap d'Any - Represa progressiva" que es mapeja explícitament a descarrega
         for m in microcicles_descarrega:
             if m.notes:
                 notes_lower = m.notes.lower()
+                # Excepcionar casos especials documentats (mapatge explícit, no per paraula clau)
+                if "cap d'any" in notes_lower and "represa" in notes_lower:
+                    continue  # Cas especial vàlid
+                # Per a la resta, verificar que contenen la paraula clau
                 assert "descàrrega" in notes_lower or "descarrega" in notes_lower
