@@ -1,5 +1,6 @@
 """Tests per a la generació de contingut de microcicle amb LLM."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,6 +11,7 @@ from blondswim.agents.generar_microcicle import (
     _extreure_few_shot,
     generar_i_validar_microcicle,
     generar_microcicle,
+    guardar_log_decisio,
 )
 from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.historial import SerieRealitzada, SessioRealitzada
@@ -426,3 +428,54 @@ def test_generar_i_validar_microcicle_setmana_no_trobada(
         )
 
     assert "setmana=99" in str(exc_info.value)
+
+
+def test_guardar_log_decisio(metodologia_test, tmp_path, monkeypatch):
+    """Verifica que guardar_log_decisio crea el fitxer amb els camps correctes."""
+    # Usar tmp_path per no escriure al repo real
+    monkeypatch.chdir(tmp_path)
+
+    # Cridar la funció
+    microcicle_data = {"volum_total": 15000, "sessions": 5}
+    fitxer = guardar_log_decisio(
+        nedador_id="test_nedador",
+        setmana=1,
+        metodologia=metodologia_test,
+        microcicle_generat=microcicle_data,
+    )
+
+    # Verificar que el fitxer existeix
+    assert fitxer.exists()
+    assert fitxer.name == "test_nedador_1.json"
+    assert fitxer.parent.name == "log_decisions"
+
+    # Llegir i verificar contingut
+    with open(fitxer, encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert data["nedador_id"] == "test_nedador"
+    assert data["setmana"] == 1
+    assert "timestamp" in data
+    assert data["metodologia"]["prova"] == "200m lliure"
+    assert data["metodologia"]["categoria"] == "absolut"
+    assert data["metodologia"]["metodologia_principal"] == "Polaritzat"
+    assert data["microcicle_generat"] == microcicle_data
+
+
+def test_guardar_log_decisio_sense_microcicle(metodologia_test, tmp_path, monkeypatch):
+    """Verifica que funciona amb microcicle_generat=None."""
+    monkeypatch.chdir(tmp_path)
+
+    fitxer = guardar_log_decisio(
+        nedador_id="test_nedador",
+        setmana=2,
+        metodologia=metodologia_test,
+        microcicle_generat=None,
+    )
+
+    assert fitxer.exists()
+
+    with open(fitxer, encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert data["microcicle_generat"] is None

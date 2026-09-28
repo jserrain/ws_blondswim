@@ -1,6 +1,8 @@
 """Generació de contingut de microcicle amb LLM (Mòdul 6)."""
 
+import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 from blondswim.agents import validacio
@@ -17,6 +19,49 @@ logger = logging.getLogger(__name__)
 
 class GeneracioMicrocicleError(Exception):
     """Error en la generació de contingut de microcicle amb LLM."""
+
+
+def guardar_log_decisio(
+    nedador_id: str,
+    setmana: int,
+    metodologia: DecisioMetodologia,
+    microcicle_generat: dict | None = None,
+) -> Path:
+    """
+    Guarda un registre JSON a data/processed/log_decisions/<nedador_id>_<setmana>.json.
+
+    Crea el directori si no existeix. Retorna el Path del fitxer escrit.
+
+    Args:
+        nedador_id: ID del nedador
+        setmana: Número de setmana
+        metodologia: Decisió de metodologia
+        microcicle_generat: Dades del microcicle generat (opcional)
+
+    Returns:
+        Path del fitxer JSON creat
+    """
+    # Crear directori si no existeix
+    log_dir = Path("data/processed/log_decisions")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Construir nom de fitxer
+    fitxer = log_dir / f"{nedador_id}_{setmana}.json"
+
+    # Construir contingut
+    log_data = {
+        "nedador_id": nedador_id,
+        "setmana": setmana,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "metodologia": metodologia.model_dump(),
+        "microcicle_generat": microcicle_generat,
+    }
+
+    # Escriure fitxer
+    with open(fitxer, "w", encoding="utf-8") as f:
+        json.dump(log_data, f, indent=2, ensure_ascii=False)
+
+    return fitxer
 
 
 def _extreure_few_shot(
