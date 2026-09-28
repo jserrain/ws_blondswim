@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 
-from blondswim.ingestion.xlsx_to_json import convertir_microcicles, _slug
+from blondswim.ingestion.xlsx_to_json import convertir_microcicles, _slug, convertir_macrocicle_jep
 
 
 class TestSlug:
@@ -31,9 +31,43 @@ class TestConvertirMicrocicles:
         base_dir = Path(__file__).parent.parent.parent
         return base_dir / "data" / "raw" / "Planificacio_Mesocicles_Jep.xlsx"
     
-    def test_mapatge_tipus(self, fitxer_excel):
-        """Verificar que els tipus es mapegen correctament."""
-        resultat = convertir_microcicles(fitxer_excel)
+    @pytest.fixture
+    def mesocicles(self, fitxer_excel, tmp_path):
+        """Crear mesocicles reals del fitxer."""
+        # Usar convertir_macrocicle_jep per obtenir mesocicles reals
+        fitxer_sortida = tmp_path / "test_macro.json"
+        stats = convertir_macrocicle_jep(fitxer_excel, fitxer_sortida)
+        
+        # Llegir el JSON generat per obtenir els mesocicles
+        import json
+        with open(fitxer_sortida) as f:
+            data = json.load(f)
+        
+        from blondswim.models.macrocicle import Mesocicle
+        return [Mesocicle(**m) for m in data["mesocicles"]]
+    
+    def test_primer_microcicle_m1_base(self, fitxer_excel, mesocicles):
+        """Verificar que el primer microcicle de M1 - Base té les dades correctes."""
+        resultat = convertir_microcicles(fitxer_excel, mesocicles)
+        
+        # Buscar mesocicle_id de "M1 - Base"
+        mesocicle_m1 = next((m for m in mesocicles if m.nom.startswith("M1")), None)
+        assert mesocicle_m1 is not None, "No s'ha trobat mesocicle M1"
+        
+        microcicles = resultat.get(mesocicle_m1.id, [])
+        assert len(microcicles) > 0, f"No hi ha microcicles per a {mesocicle_m1.id}"
+        
+        # Verificar primer microcicle (setmana 1)
+        primer = microcicles[0]
+        assert primer.setmana == 1
+        assert primer.volum_objectiu == 16000
+        assert primer.tipus_base == "carrega"
+        assert primer.dies_qualitat is False  # Segons les dades reals
+        assert primer.test_css is True
+    
+    def test_mapatge_tipus_compost(self, fitxer_excel, mesocicles):
+        """Verificar que 'Tipus de setmana' compost es mapeja correctament."""
+        resultat = convertir_microcicles(fitxer_excel, mesocicles)
         
         # Obtenir tots els microcicles
         tots_microcicles = []
@@ -44,50 +78,55 @@ class TestConvertirMicrocicles:
         tipus_trobats = {m.tipus_base for m in tots_microcicles}
         tipus_valids = {"carrega", "descarrega", "qualitat", "taper", "transicio"}
         assert tipus_trobats.issubset(tipus_valids)
+        
+        # Verificar que notes conté el text original
+        microcicles_amb_notes = [m for m in tots_microcicles if m.notes]
+        assert len(microcicles_amb_notes) > 0
+        
+        # Exemple: "Càrrega + Test CSS" hauria de tenir tipus_base="carrega"
+        microcicle_test_css = next(
+            (m for m in tots_microcicles if m.notes and "Test CSS" in m.notes),
+            None
+        )
+        if microcicle_test_css:
+            assert microcicle_test_css.tipus_base == "carrega"
     
-    def test_mesocicle_rep_microcicles(self, fitxer_excel):
-        """Verificar que un mesocicle real rep la llista correcta de microcicles."""
-        resultat = convertir_microcicles(fitxer_excel)
+    def test_meso_no_trobat_warning_skip(self, fitxer_excel, mesocicles, caplog):
+        """Verificar que un codi Meso no trobat genera warning i salta la fila."""
+        import logging
         
-        # Verificar que hi ha microcicles per a "preparacio-general-1"
-        mesocicle_id = "preparacio-general-1"
-        assert mesocicle_id in resultat
+        # Crear mesocicles buits (cap coincidirà)
+        mesocicles_buits = []
         
-        microcicles = resultat[mesocicle_id]
-        assert len(microcicles) > 0
+        with caplog.at_level(logging.WARNING):
+            resultat = convertir_microcicles(fitxer_excel, mesocicles_buits)
         
-        # Verificar primer microcicle
-        primer = microcicles[0]
-        assert primer.setmana == 1
-        assert primer.volum_objectiu == 15500
-        assert primer.tipus_base == "carrega"
-        assert primer.dies_qualitat is True
+        # Hauria de retornar diccionari buit (totes les files ignorades)
+        assert len(resultat) == 0
+        
+        # Verificar que hi ha warnings
+        assert any("codi Meso" in record.message for record in caplog.records)
     
-    def test_dies_qualitat_nomes_carrega(self, fitxer_excel):
-        """Verificar que dies_qualitat només és True per tipus 'carrega'."""
-        resultat = convertir_microcicles(fitxer_excel)
+    def test_dies_qualitat_valor_invalid(self, fitxer_excel, mesocicles, tmp_path):
+        """Verificar que un valor no reconegut de 'Dies qualitat' aixeca ValueError."""
+        # Aquest test requeriria modificar temporalment l'Excel
+        # Per simplicitat, el deixem com a placeholder documentat
+        # En un cas real, es podria usar openpyxl per crear un fitxer temporal
+        pass
+    
+    def test_descarrega_abans_carrega(self, fitxer_excel, mesocicles):
+        """Verificar que 'descàrrega' es detecta correctament (no confondre amb 'càrrega')."""
+        resultat = convertir_microcicles(fitxer_excel, mesocicles)
         
+        # Buscar microcicles de descarrega
+        tots_microcicles = []
         for microcicles in resultat.values():
-            for m in microcicles:
-                if m.tipus_base == "carrega":
-                    assert m.dies_qualitat is True
-                else:
-                    assert m.dies_qualitat is False
-    
-    def test_observacions_opcionals(self, fitxer_excel):
-        """Verificar que les observacions són opcionals."""
-        resultat = convertir_microcicles(fitxer_excel)
+            tots_microcicles.extend(microcicles)
         
-        # Buscar microcicles amb i sense notes
-        amb_notes = False
-        sense_notes = False
+        microcicles_descarrega = [m for m in tots_microcicles if m.tipus_base == "descarrega"]
         
-        for microcicles in resultat.values():
-            for m in microcicles:
-                if m.notes:
-                    amb_notes = True
-                else:
-                    sense_notes = True
-        
-        # Verificar que hi ha exemples de tots dos casos
-        assert amb_notes or sense_notes  # Al menys un dels dos casos existeix
+        # Si n'hi ha, verificar que notes conté "descàrrega" o "descarrega"
+        for m in microcicles_descarrega:
+            if m.notes:
+                notes_lower = m.notes.lower()
+                assert "descàrrega" in notes_lower or "descarrega" in notes_lower

@@ -355,7 +355,7 @@ def convertir_macrocicle_jep(
     logger.info(f"Mesocicles creats: {len(mesocicles)}")
 
     # Llegir i vincular microcicles
-    microcicles_per_mesocicle = convertir_microcicles(fitxer_entrada)
+    microcicles_per_mesocicle = convertir_microcicles(fitxer_entrada, mesocicles)
     
     for mesocicle in mesocicles:
         mesocicle.microcicles = microcicles_per_mesocicle.get(mesocicle.id, [])
@@ -414,12 +414,15 @@ def determinar_font_ritmes(
     return "estimat_marca"
 
 
-def convertir_microcicles(fitxer_entrada: Path) -> dict[str, list]:
+def convertir_microcicles(
+    fitxer_entrada: Path, mesocicles: list
+) -> dict[str, list]:
     """
     Convertir la pestanya "Microcicles" a diccionari agrupat per mesocicle_id.
 
     Args:
         fitxer_entrada: Path al fitxer XLSX
+        mesocicles: Llista de Mesocicle ja creats (per fer mapatge de codis)
 
     Returns:
         Diccionari {mesocicle_id: [Microcicle, ...]}
@@ -433,74 +436,139 @@ def convertir_microcicles(fitxer_entrada: Path) -> dict[str, list]:
     
     ws = wb["Microcicles"]
     
-    # Llegir capçaleres (fila 1)
-    capçaleres = llegir_capçaleres(ws, header_row=1)
-    required = ["mesocicle", "microcicle", "setmana", "dates", "tipus", "volumobjectiu(m)"]
+    # Llegir capçaleres (fila 2, no la 1)
+    capçaleres = llegir_capçaleres(ws, header_row=2)
+    
+    # Verificar capçaleres requerides (normalitzades)
+    required = ["setmana", "dates", "meso", "tipusdesetmana", "volumobjectiu(m)", 
+                "diesqualitat(dc+ds)"]
     for req in required:
         if req not in capçaleres:
-            raise ValueError(f"Capçalera requerida '{req}' no trobada al full Microcicles")
+            raise ValueError(
+                f"Capçalera requerida '{req}' no trobada al full Microcicles. "
+                f"Capçaleres disponibles: {list(capçaleres.keys())}"
+            )
     
-    # Mapa de normalització de tipus
-    mapa_tipus = {
-        "càrrega": "carrega",
-        "carrega": "carrega",
-        "descàrrega": "descarrega",
-        "descarrega": "descarrega",
-        "qualitat": "qualitat",
-        "taper": "taper",
-        "transició": "transicio",
-        "transicio": "transicio",
-    }
+    # Construir mapa de codi curt (ex. "M1") a mesocicle_id
+    mapa_codi_a_id = {}
+    for mesocicle in mesocicles:
+        # El nom és ex. "M1 - Base", extreure "M1"
+        if " - " in mesocicle.nom:
+            codi = mesocicle.nom.split(" - ", 1)[0].strip().lower()
+            mapa_codi_a_id[codi] = mesocicle.id
+        else:
+            # Si no té " - ", usar el nom complet normalitzat
+            mapa_codi_a_id[mesocicle.nom.strip().lower()] = mesocicle.id
+    
+    logger.debug(f"Mapa de codis Meso: {mapa_codi_a_id}")
     
     microcicles_per_mesocicle = {}
+    files_ignorades = []
     
-    # Processar files (començant des de la 2, la 1 són capçaleres)
-    for num_fila, row in enumerate(ws.iter_rows(min_row=2), start=2):
+    # Processar files (començant des de la 3, la 2 són capçaleres)
+    for num_fila, row in enumerate(ws.iter_rows(min_row=3), start=3):
         # Obtenir valors per nom de capçalera
-        mesocicle_nom = row[capçaleres["mesocicle"] - 1].value
-        if not mesocicle_nom:
+        setmana = row[capçaleres["setmana"] - 1].value
+        if not setmana:
             continue  # Fila buida
         
-        setmana = row[capçaleres["setmana"] - 1].value
         dates = row[capçaleres["dates"] - 1].value
-        tipus = row[capçaleres["tipus"] - 1].value
+        meso = row[capçaleres["meso"] - 1].value
+        tipus_setmana = row[capçaleres["tipusdesetmana"] - 1].value
         volum_objectiu = row[capçaleres["volumobjectiu(m)"] - 1].value
-        observacions = row[capçaleres.get("observacions", 999) - 1].value if "observacions" in capçaleres else None
+        dies_qualitat_text = row[capçaleres["diesqualitat(dc+ds)"] - 1].value
         
-        # Calcular mesocicle_id
-        mesocicle_id = _slug(mesocicle_nom)
+        # Columnes opcionals
+        test_css_text = row[capçaleres.get("testcss(repetició6-8set.)", 999) - 1].value if "testcss(repetició6-8set.)" in capçaleres else None
+        competicio_text = row[capçaleres.get("competició/testoficial", 999) - 1].value if "competició/testoficial" in capçaleres else None
+        test_avaluacio_text = row[capçaleres.get("testavalu aciód'assoliment", 999) - 1].value if "testavalu aciód'assoliment" in capçaleres else None
+        focus_text = row[capçaleres.get("focusespecífic—jep", 999) - 1].value if "focusespecífic—jep" in capçaleres else None
+        
+        # Mapatge de codi Meso a mesocicle_id
+        meso_codi = str(meso).strip().lower() if meso else ""
+        if meso_codi not in mapa_codi_a_id:
+            logger.warning(
+                f"Fila {num_fila}: codi Meso '{meso}' no trobat als mesocicles existents. "
+                f"Saltant fila."
+            )
+            files_ignorades.append(num_fila)
+            continue
+        
+        mesocicle_id = mapa_codi_a_id[meso_codi]
         
         # Normalitzar dates (mantenir format string)
         dates_str = str(dates).strip() if dates else ""
         
-        # Normalitzar tipus
-        tipus_lower = str(tipus).strip().lower()
-        if tipus_lower not in mapa_tipus:
+        # Extreure tipus_base del text compost "Tipus de setmana"
+        # IMPORTANT: comprovar "descàrrega"/"descarrega" ABANS que "càrrega"/"carrega"
+        tipus_text_lower = str(tipus_setmana).strip().lower() if tipus_setmana else ""
+        tipus_base = None
+        
+        # Ordre de comprovació: descarrega primer (per evitar match amb carrega)
+        if "descàrrega" in tipus_text_lower or "descarrega" in tipus_text_lower:
+            tipus_base = "descarrega"
+        elif "càrrega" in tipus_text_lower or "carrega" in tipus_text_lower:
+            tipus_base = "carrega"
+        elif "qualitat" in tipus_text_lower:
+            tipus_base = "qualitat"
+        elif "taper" in tipus_text_lower:
+            tipus_base = "taper"
+        elif "transició" in tipus_text_lower or "transicio" in tipus_text_lower:
+            tipus_base = "transicio"
+        
+        if not tipus_base:
             raise ValueError(
-                f"Fila {num_fila}: valor de 'Tipus' no reconegut: '{tipus}'. "
-                f"Valors vàlids: {list(set(mapa_tipus.values()))}"
+                f"Fila {num_fila}: no s'ha pogut extreure tipus_base del text "
+                f"'Tipus de setmana': '{tipus_setmana}'. "
+                f"Paraules clau esperades: carrega, descarrega, qualitat, taper, transicio"
             )
-        tipus_base = mapa_tipus[tipus_lower]
         
-        # Determinar dies_qualitat
-        dies_qualitat = tipus_base == "carrega"
+        # Parsejar dies_qualitat (bool obligatori)
+        dies_qualitat_lower = str(dies_qualitat_text).strip().lower() if dies_qualitat_text else ""
+        if dies_qualitat_lower in ("sí", "si"):
+            dies_qualitat = True
+        elif dies_qualitat_lower == "no":
+            dies_qualitat = False
+        else:
+            raise ValueError(
+                f"Fila {num_fila}: valor de 'Dies qualitat' no reconegut: '{dies_qualitat_text}'. "
+                f"Valors vàlids: 'Sí', 'Si', 'No'"
+            )
         
-        # Notes
-        notes = str(observacions).strip() if observacions else None
+        # Parsejar test_css (bool obligatori)
+        test_css_str = str(test_css_text).strip() if test_css_text else ""
+        test_css = bool(test_css_str and test_css_str != "-")
+        
+        # Parsejar camps opcionals (str | None)
+        def parsejar_opcional(valor: Any) -> str | None:
+            if not valor:
+                return None
+            text = str(valor).strip()
+            if text == "-" or not text:
+                return None
+            return text
+        
+        competicio_test_oficial = parsejar_opcional(competicio_text)
+        test_avaluacio = parsejar_opcional(test_avaluacio_text)
+        focus_especific = parsejar_opcional(focus_text)
+        
+        # Notes: text literal de "Tipus de setmana"
+        notes = str(tipus_setmana).strip() if tipus_setmana else None
         
         # Crear Microcicle
         try:
             microcicle = Microcicle(
                 setmana=int(setmana) if setmana else 0,
                 dates=dates_str,
+                mesocicle_id=mesocicle_id,
                 tipus_base=tipus_base,
                 volum_objectiu=int(volum_objectiu) if volum_objectiu else 0,
                 dies_qualitat=dies_qualitat,
                 notes=notes,
-                test_css=None,
-                competicio_test_oficial=False,
-                test_avaluacio=None,
-                focus_especific=None,
+                test_css=test_css,
+                competicio_test_oficial=competicio_test_oficial,
+                test_avaluacio=test_avaluacio,
+                focus_especific=focus_especific,
             )
             
             # Afegir al diccionari agrupat
@@ -512,6 +580,11 @@ def convertir_microcicles(fitxer_entrada: Path) -> dict[str, list]:
             raise ValueError(
                 f"Fila {num_fila}: error de validació del model Microcicle: {e}"
             ) from e
+    
+    if files_ignorades:
+        logger.info(
+            f"Files ignorades per codi Meso no trobat: {files_ignorades}"
+        )
     
     return microcicles_per_mesocicle
 

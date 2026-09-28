@@ -9,10 +9,10 @@ class Microcicle(BaseModel):
     Conté la planificació setmanal amb volum objectiu i característiques.
     """
     setmana: int
-    dates: str  # Ex: "25-31/01/2027"
+    dates: str  # Ex: "21-27/09/2026"
     mesocicle_id: str
     tipus_base: Literal["carrega", "qualitat", "descarrega", "taper", "transicio"]
-    notes: str | None = None  # Ex: "Test CSS", "Nadal", "Pic 1", etc.
+    notes: str | None = None  # Text literal de "Tipus de setmana" (ex: "Càrrega + Test CSS")
     volum_objectiu: int  # metres
     dies_qualitat: bool  # Dc+Ds
     test_css: bool
