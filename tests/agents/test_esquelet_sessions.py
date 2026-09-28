@@ -258,3 +258,31 @@ def test_id_sessio_format_correcte(nedador_base):
         assert sessio.id.startswith("meso2_s3_")
         assert sessio.microcicle_setmana == 3
         assert sessio.dia in ["dilluns", "dimarts", "dimecres", "dijous", "dissabte"]
+
+
+def test_es_dia_opcional_marcat_correctament(nedador_base, nedador_sense_opcional):
+    """Només la sessió del dia_opcional té es_dia_opcional=True."""
+    microcicle = Microcicle(
+        setmana=1,
+        dates="1-7/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="carrega",
+        volum_objectiu=15000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+
+    # Nedador amb dia opcional (dissabte)
+    sessions_amb_opcional = generar_esquelet_sessions(nedador_base, microcicle)
+    
+    for sessio in sessions_amb_opcional:
+        if sessio.dia == "dissabte":
+            assert sessio.es_dia_opcional is True
+        else:
+            assert sessio.es_dia_opcional is False
+
+    # Nedador sense dia opcional
+    sessions_sense_opcional = generar_esquelet_sessions(nedador_sense_opcional, microcicle)
+    
+    for sessio in sessions_sense_opcional:
+        assert sessio.es_dia_opcional is False
