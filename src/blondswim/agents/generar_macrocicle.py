@@ -7,7 +7,7 @@ from blondswim.agents import context_competicio
 from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
 from blondswim.models.calendari import Competicio
 from blondswim.models.historial import SessioRealitzada
-from blondswim.models.macrocicle import Macrocicle, Mesocicle
+from blondswim.models.macrocicle import Macrocicle, Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador
 
 logger = logging.getLogger(__name__)
@@ -232,6 +232,151 @@ def _calcular_volums_mesocicle(
     )
 
 
+def _interpolar_volum(volum_inici: int, volum_fi: int, index: int, total: int) -> int:
+    """Interpolació lineal entre volum_inici i volum_fi en total passos."""
+    if total <= 1:
+        return volum_fi
+    return round(volum_inici + (volum_fi - volum_inici) * index / (total - 1))
+
+
+def generar_microcicles_mesocicle(
+    mesocicle: Mesocicle,
+    data_inici_macrocicle: str,
+) -> list[Microcicle]:
+    """
+    Genera la llista de Microcicle (una per setmana) d'un mesocicle ja creat.
+
+    Args:
+        mesocicle: Mesocicle amb setmanes ("X-Y"), tipus i volums ja fixats
+        data_inici_macrocicle: Data d'inici del macrocicle (format ISO)
+
+    Returns:
+        Llista de Microcicle ordenada per setmana ascendent
+    """
+    # 1. Parsejar setmanes
+    parts = mesocicle.setmanes.split("-")
+    setmana_inici = int(parts[0])
+    setmana_fi = int(parts[1]) if len(parts) > 1 else setmana_inici
+    n_setmanes = setmana_fi - setmana_inici + 1
+
+    data_inici_macro = datetime.fromisoformat(data_inici_macrocicle)
+
+    # 2. Calcular tipus_base/volum/dies_qualitat/test_css/notes per setmana
+    tipus_base_per_setmana: list[str] = []
+    volum_per_setmana: list[int] = []
+    dies_qualitat_per_setmana: list[bool] = []
+    test_css_per_setmana: list[bool] = []
+    notes_per_setmana: list[str] = []
+
+    if mesocicle.tipus in ("Base", "Build1", "Build2"):
+        es_base = mesocicle.tipus == "Base"
+        tipus_carrega = "carrega" if es_base else "qualitat"
+        etiqueta_carrega = "Càrrega" if es_base else "Qualitat"
+
+        # Recórrer en blocs de fins a 4 setmanes
+        i = 0
+        while i < n_setmanes:
+            mida_bloc = min(4, n_setmanes - i)
+            te_descarrega = mida_bloc == 4
+            n_carrega = 3 if te_descarrega else mida_bloc
+
+            for j in range(mida_bloc):
+                idx = i + j
+                if te_descarrega and j == 3:
+                    # Setmana de descàrrega
+                    tipus_base_per_setmana.append("descarrega")
+                    volum_per_setmana.append(round(mesocicle.volum_min * 0.7))
+                    dies_qualitat_per_setmana.append(not es_base)
+                    test_css_per_setmana.append(False)
+                    notes_per_setmana.append("Descàrrega")
+                else:
+                    # Setmana de càrrega/qualitat
+                    tipus_base_per_setmana.append(tipus_carrega)
+                    if n_carrega == 1:
+                        volum = mesocicle.volum_max
+                    else:
+                        volum = _interpolar_volum(
+                            mesocicle.volum_min,
+                            mesocicle.volum_max,
+                            j,
+                            n_carrega,
+                        )
+                    volum_per_setmana.append(volum)
+                    dies_qualitat_per_setmana.append(not es_base)
+                    es_test_css = idx == 0 and es_base
+                    test_css_per_setmana.append(es_test_css)
+                    notes_per_setmana.append(
+                        f"{etiqueta_carrega} + Test CSS" if es_test_css else etiqueta_carrega
+                    )
+            i += mida_bloc
+
+    elif mesocicle.tipus == "Peak":
+        for i in range(n_setmanes):
+            tipus_base_per_setmana.append("taper")
+            dies_qualitat_per_setmana.append(True)
+            test_css_per_setmana.append(False)
+            notes_per_setmana.append("Taper")
+            if n_setmanes == 1:
+                volum_per_setmana.append(mesocicle.volum_mitja_previst)
+            else:
+                # i=0 (més lluny) = volum_max; i=n-1 (cursa) = volum_min
+                volum_per_setmana.append(
+                    _interpolar_volum(
+                        mesocicle.volum_max,
+                        mesocicle.volum_min,
+                        i,
+                        n_setmanes,
+                    )
+                )
+
+    elif mesocicle.tipus == "Cursa":
+        tipus_base_per_setmana.append("taper")
+        volum_per_setmana.append(mesocicle.volum_mitja_previst)
+        dies_qualitat_per_setmana.append(True)
+        test_css_per_setmana.append(False)
+        notes_per_setmana.append("Setmana de competició")
+
+    else:  # Transicio
+        tipus_base_per_setmana.append("transicio")
+        volum_per_setmana.append(mesocicle.volum_mitja_previst)
+        dies_qualitat_per_setmana.append(False)
+        test_css_per_setmana.append(False)
+        notes_per_setmana.append("Recuperació post-competició")
+
+    # 3. Crear els Microcicle
+    microcicles: list[Microcicle] = []
+    for i in range(n_setmanes):
+        s = setmana_inici + i
+        data_inici_setmana = data_inici_macro + timedelta(weeks=s - 1)
+        data_fi_setmana = data_inici_setmana + timedelta(days=6)
+
+        if data_inici_setmana.month == data_fi_setmana.month:
+            dates = (
+                f"{data_inici_setmana:%d}-{data_fi_setmana:%d}"
+                f"/{data_fi_setmana:%m}/{data_fi_setmana:%Y}"
+            )
+        else:
+            dates = (
+                f"{data_inici_setmana:%d/%m}-{data_fi_setmana:%d/%m}"
+                f"/{data_fi_setmana:%Y}"
+            )
+
+        microcicles.append(
+            Microcicle(
+                setmana=s,
+                dates=dates,
+                mesocicle_id=mesocicle.id,
+                tipus_base=tipus_base_per_setmana[i],
+                notes=notes_per_setmana[i],
+                volum_objectiu=volum_per_setmana[i],
+                dies_qualitat=dies_qualitat_per_setmana[i],
+                test_css=test_css_per_setmana[i],
+            )
+        )
+
+    return sorted(microcicles, key=lambda m: m.setmana)
+
+
 def generar_mesocicle(
     nedador: Nedador,
     macrocicle: Macrocicle,
@@ -397,12 +542,18 @@ def generar_mesocicle(
         nom=f"{tipus} {numero_mesocicle}",
         setmanes=f"{setmana_inici}-{setmana_fi}" if setmana_inici != setmana_fi else str(setmana_inici),
         dates=f"{data_inici_mesocicle.strftime('%d/%m/%Y')}-{data_fi_mesocicle.strftime('%d/%m/%Y')}",
+        tipus=tipus,
         fase_objectiu=tipus,
         metodologia_dominant="",  # Es pot omplir més endavant
         volum_min=volum_min,
         volum_max=volum_max,
         volum_mitja_previst=volum_mitja_previst,
         microcicles=[],
+    )
+
+    # Generar microcicles (una setmana per Microcicle)
+    mesocicle.microcicles = generar_microcicles_mesocicle(
+        mesocicle, macrocicle.data_inici
     )
 
     # 6. Enriquir fase_objectiu amb LLM si està habilitat

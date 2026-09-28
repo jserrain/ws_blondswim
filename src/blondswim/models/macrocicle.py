@@ -29,6 +29,7 @@ class Mesocicle(BaseModel):
     nom: str
     setmanes: str  # Ex: "1-4"
     dates: str  # Ex: "21/09-18/10/2026"
+    tipus: Literal["Base", "Build1", "Build2", "Peak", "Cursa", "Transicio"]
     fase_objectiu: str
     metodologia_dominant: str
     volum_min: int  # metres
