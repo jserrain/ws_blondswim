@@ -361,7 +361,9 @@ def test_generar_i_validar_microcicle_setmana_trobada(nedador_test, metodologia_
 
     with patch(
         "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
-    ):
+    ), patch(
+        "blondswim.agents.generar_microcicle.guardar_log_decisio"
+    ) as mock_guardar_log:
         sessions, avisos = generar_i_validar_microcicle(
             nedador=nedador_test,
             macrocicle=macrocicle,
@@ -379,6 +381,9 @@ def test_generar_i_validar_microcicle_setmana_trobada(nedador_test, metodologia_
 
     # Verificar que retorna avisos (llista, pot ser buida)
     assert isinstance(avisos, list)
+
+    # Verificar que s'ha cridat guardar_log_decisio
+    mock_guardar_log.assert_called_once_with(nedador_test.id, 1, metodologia_test)
 
 
 def test_generar_i_validar_microcicle_setmana_no_trobada(
