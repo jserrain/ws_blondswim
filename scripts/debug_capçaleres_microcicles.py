@@ -36,10 +36,16 @@ def main():
     for nom, idx in sorted(capçaleres.items()):
         print(f"   '{nom}' -> columna {idx}")
     
-    print(f"\n🔍 Capçaleres originals (sense normalitzar) a la fila 1:")
-    for cell in ws[1]:
-        if cell.value:
-            print(f"   Columna {cell.column}: '{cell.value}'")
+    print(f"\n🔍 Contingut literal de les files 1, 2 i 3:")
+    for fila_num in [1, 2, 3]:
+        print(f"\n   Fila {fila_num}:")
+        fila_buida = True
+        for cell in ws[fila_num]:
+            if cell.value:
+                fila_buida = False
+                print(f"      Columna {cell.column} ({cell.column_letter}): '{cell.value}'")
+        if fila_buida:
+            print(f"      (fila buida)")
     
     print(f"\n🔎 Verificació de capçaleres requerides:")
     required = ["mesocicle", "microcicle", "setmana", "dates", "tipus", "volumobjectiu(m)"]
