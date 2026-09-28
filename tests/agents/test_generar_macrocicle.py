@@ -1,9 +1,10 @@
 """Tests per a la generació de macrocicles."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from blondswim.agents.generar_macrocicle import generar_macrocicle
+from blondswim.agents.generar_macrocicle import generar_macrocicle, generar_mesocicle
 from blondswim.models.calendari import Competicio
+from blondswim.models.macrocicle import Macrocicle
 
 
 def test_generar_macrocicle_amb_competicions_a():
@@ -135,3 +136,334 @@ def test_generar_macrocicle_crida_validar_espaiat_pics_a():
 
         # Verificar que els avisos retornats inclouen els del mock
         assert avisos_mock[0] in avisos
+
+
+def test_generar_mesocicle_competicio_a_llunyana_genera_base():
+    """Verifica que amb una competició A llunyana (>10 setmanes) genera Base de 4 setmanes."""
+    # Crear macrocicle buit
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[],
+    )
+
+    # Competició A a 15 setmanes
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició A llunyana",
+            data_inici="2026-12-14",  # ~15 setmanes després
+            data_fi="2026-12-16",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    # Generar mesocicle
+    mesocicle, avisos = generar_mesocicle(
+        nedador_id="test",
+        macrocicle=macrocicle,
+        competicions=competicions,
+        enriquir_amb_llm=False,
+    )
+
+    # Verificar tipus i duració
+    assert mesocicle.fase_objectiu == "Base"
+    assert mesocicle.nom == "Base 1"
+    assert mesocicle.id == "meso_1"
+    assert mesocicle.setmanes == "1-4"  # 4 setmanes
+    
+    # Verificar que s'ha afegit al macrocicle
+    assert len(macrocicle.mesocicles) == 1
+    assert macrocicle.mesocicles[0] == mesocicle
+
+    # No hauria de tenir avisos
+    assert len(avisos) == 0
+
+
+def test_generar_mesocicle_competicio_a_propera_genera_peak():
+    """Verifica que amb una competició A a 2 setmanes genera Peak retallat."""
+    # Crear macrocicle buit
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[],
+    )
+
+    # Competició A a 2 setmanes
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició A propera",
+            data_inici="2026-09-15",  # 2 setmanes després
+            data_fi="2026-09-17",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    # Generar mesocicle
+    mesocicle, avisos = generar_mesocicle(
+        nedador_id="test",
+        macrocicle=macrocicle,
+        competicions=competicions,
+        enriquir_amb_llm=False,
+    )
+
+    # Verificar tipus i duració
+    assert mesocicle.fase_objectiu == "Peak"
+    assert mesocicle.nom == "Peak 1"
+    assert mesocicle.setmanes == "1-2"  # 2 setmanes (retallat)
+
+    # Verificar que s'ha afegit al macrocicle
+    assert len(macrocicle.mesocicles) == 1
+
+
+def test_generar_mesocicle_despres_cursa_genera_transicio():
+    """Verifica que després d'un mesocicle Cursa, el següent és Transicio."""
+    from blondswim.models.macrocicle import Mesocicle, Microcicle
+
+    # Crear macrocicle amb un mesocicle Cursa
+    microcicle_cursa = Microcicle(
+        setmana=1,
+        dates="1-7/09/2026",
+        mesocicle_id="meso_1",
+        tipus_base="taper",
+        volum_objectiu=10000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    mesocicle_cursa = Mesocicle(
+        id="meso_1",
+        nom="Cursa 1",
+        setmanes="1",
+        dates="01/09/2026-07/09/2026",
+        fase_objectiu="Cursa",
+        metodologia_dominant="",
+        volum_min=0,
+        volum_max=0,
+        volum_mitja_previst=0,
+        microcicles=[microcicle_cursa],
+    )
+
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[mesocicle_cursa],
+    )
+
+    # Competició A llunyana
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició A",
+            data_inici="2026-12-14",
+            data_fi="2026-12-16",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    # Generar següent mesocicle
+    mesocicle, avisos = generar_mesocicle(
+        nedador_id="test",
+        macrocicle=macrocicle,
+        competicions=competicions,
+        enriquir_amb_llm=False,
+    )
+
+    # Verificar que és Transicio
+    assert mesocicle.fase_objectiu == "Transicio"
+    assert mesocicle.nom == "Transicio 2"
+    assert mesocicle.setmanes == "2"  # 1 setmana
+    
+    # Verificar que s'ha afegit al macrocicle
+    assert len(macrocicle.mesocicles) == 2
+
+
+def test_generar_mesocicle_sense_competicio_a_genera_base_amb_avis():
+    """Verifica que sense competició A genera Base amb avís."""
+    # Crear macrocicle buit
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[],
+    )
+
+    # Només competicions B i C
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició B",
+            data_inici="2026-10-15",
+            data_fi="2026-10-17",
+            classe="B",
+            piscina="25m",
+        ),
+    ]
+
+    # Generar mesocicle
+    mesocicle, avisos = generar_mesocicle(
+        nedador_id="test",
+        macrocicle=macrocicle,
+        competicions=competicions,
+        enriquir_amb_llm=False,
+    )
+
+    # Verificar tipus
+    assert mesocicle.fase_objectiu == "Base"
+
+    # Verificar avís
+    assert len(avisos) == 1
+    assert avisos[0]["tipus_avis"] == "cap_competicio_a_restant"
+    assert "No queda cap competició classe A" in avisos[0]["missatge"]
+
+
+def test_generar_mesocicle_enriquir_amb_llm_canvia_fase_objectiu():
+    """Verifica que amb enriquir_amb_llm=True es crida l'API i canvia fase_objectiu."""
+    # Crear macrocicle buit
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[],
+    )
+
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició A",
+            data_inici="2026-12-14",
+            data_fi="2026-12-16",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    # Mock resposta LLM
+    mock_response = MagicMock()
+    mock_tool_use = MagicMock()
+    mock_tool_use.type = "tool_use"
+    mock_tool_use.name = "retornar_fase_objectiu"
+    mock_tool_use.input = {
+        "fase_objectiu": "Base - Desenvolupament de capacitat aeròbica i tècnica fonamental"
+    }
+    mock_response.content = [mock_tool_use]
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    with patch(
+        "blondswim.agents.generar_macrocicle.get_llm_client",
+        return_value=mock_client,
+    ):
+        mesocicle, avisos = generar_mesocicle(
+            nedador_id="test",
+            macrocicle=macrocicle,
+            competicions=competicions,
+            enriquir_amb_llm=True,
+        )
+
+    # Verificar que s'ha cridat l'API
+    mock_client.messages.create.assert_called_once()
+
+    # Verificar que fase_objectiu s'ha enriquit
+    assert mesocicle.fase_objectiu == "Base - Desenvolupament de capacitat aeròbica i tècnica fonamental"
+    assert mesocicle.fase_objectiu != "Base"  # Ha canviat respecte al determinista
+
+
+def test_generar_mesocicle_sense_enriquir_llm_no_crida_api():
+    """Verifica que amb enriquir_amb_llm=False no es crida l'API."""
+    # Crear macrocicle buit
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[],
+    )
+
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició A",
+            data_inici="2026-12-14",
+            data_fi="2026-12-16",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    mock_client = MagicMock()
+
+    with patch(
+        "blondswim.agents.generar_macrocicle.get_llm_client",
+        return_value=mock_client,
+    ):
+        mesocicle, avisos = generar_mesocicle(
+            nedador_id="test",
+            macrocicle=macrocicle,
+            competicions=competicions,
+            enriquir_amb_llm=False,
+        )
+
+    # Verificar que NO s'ha cridat l'API
+    mock_client.messages.create.assert_not_called()
+
+    # Verificar que fase_objectiu és el determinista
+    assert mesocicle.fase_objectiu == "Base"
+
+
+def test_generar_mesocicle_fallback_si_llm_falla():
+    """Verifica que si la crida LLM falla, manté fase_objectiu determinista."""
+    # Crear macrocicle buit
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[],
+    )
+
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició A",
+            data_inici="2026-12-14",
+            data_fi="2026-12-16",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    # Mock que llança excepció
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = Exception("API Error")
+
+    with patch(
+        "blondswim.agents.generar_macrocicle.get_llm_client",
+        return_value=mock_client,
+    ):
+        # No hauria de propagar l'error
+        mesocicle, avisos = generar_mesocicle(
+            nedador_id="test",
+            macrocicle=macrocicle,
+            competicions=competicions,
+            enriquir_amb_llm=True,
+        )
+
+    # Verificar que fase_objectiu és el determinista (fallback)
+    assert mesocicle.fase_objectiu == "Base"
+
+    # Verificar que el mesocicle s'ha creat correctament
+    assert mesocicle.nom == "Base 1"
+    assert len(macrocicle.mesocicles) == 1
