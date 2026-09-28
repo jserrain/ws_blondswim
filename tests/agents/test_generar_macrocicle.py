@@ -162,7 +162,7 @@ def test_generar_mesocicle_competicio_a_llunyana_genera_base():
     ]
 
     # Generar mesocicle
-    mesocicle, _avisos = generar_mesocicle(
+    mesocicle, avisos = generar_mesocicle(
         nedador_id="test",
         macrocicle=macrocicle,
         competicions=competicions,
