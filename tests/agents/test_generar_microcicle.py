@@ -11,6 +11,7 @@ from blondswim.agents.generar_microcicle import (
     _extreure_few_shot,
     actualitzar_classe_competicio,
     actualitzar_volum_microcicle,
+    generar_contingut_mesocicle,
     generar_i_validar_microcicle,
     generar_microcicle,
     guardar_log_decisio,
@@ -955,9 +956,9 @@ def test_eliminar_competicio_id_no_trobat():
     assert "comp_inexistent" in str(exc_info.value)
 
 
-def test_generar_mesocicle_totes_les_setmanes_ok(nedador_test):
-    """Verifica que generar_mesocicle genera totes les setmanes correctament."""
-    from blondswim.agents.generar_microcicle import generar_mesocicle
+def test_generar_contingut_mesocicle_totes_les_setmanes_ok(nedador_test):
+    """Verifica que generar_contingut_mesocicle genera totes les setmanes correctament."""
+    from blondswim.agents.generar_microcicle import generar_contingut_mesocicle
 
     # Crear macrocicle amb un mesocicle de 3 setmanes
     microcicle_1 = Microcicle(
@@ -1050,7 +1051,7 @@ def test_generar_mesocicle_totes_les_setmanes_ok(nedador_test):
         "blondswim.agents.generar_microcicle.generar_i_validar_microcicle",
         side_effect=mock_generar_i_validar,
     ):
-        resultats, errors = generar_mesocicle(
+        resultats, errors = generar_contingut_mesocicle(
             nedador=nedador_test,
             macrocicle=macrocicle,
             categoria="absolut",
@@ -1075,9 +1076,9 @@ def test_generar_mesocicle_totes_les_setmanes_ok(nedador_test):
     assert len(errors) == 0
 
 
-def test_generar_mesocicle_mesocicle_id_no_trobat(nedador_test):
-    """Verifica que generar_mesocicle aixeca ValueError si el mesocicle_id no existeix."""
-    from blondswim.agents.generar_microcicle import generar_mesocicle
+def test_generar_contingut_mesocicle_mesocicle_id_no_trobat(nedador_test):
+    """Verifica que generar_contingut_mesocicle aixeca ValueError si el mesocicle_id no existeix."""
+    from blondswim.agents.generar_microcicle import generar_contingut_mesocicle
 
     # Crear macrocicle amb un mesocicle
     microcicle_1 = Microcicle(
@@ -1111,7 +1112,7 @@ def test_generar_mesocicle_mesocicle_id_no_trobat(nedador_test):
 
     # Intentar generar mesocicle inexistent
     with pytest.raises(ValueError) as exc_info:
-        generar_mesocicle(
+        generar_contingut_mesocicle(
             nedador=nedador_test,
             macrocicle=macrocicle,
             categoria="absolut",
@@ -1124,9 +1125,9 @@ def test_generar_mesocicle_mesocicle_id_no_trobat(nedador_test):
     assert "meso_inexistent" in str(exc_info.value)
 
 
-def test_generar_mesocicle_una_setmana_falla_continua(nedador_test):
+def test_generar_contingut_mesocicle_una_setmana_falla_continua(nedador_test):
     """Verifica que si una setmana falla, les altres es generen igualment."""
-    from blondswim.agents.generar_microcicle import generar_mesocicle
+    from blondswim.agents.generar_microcicle import generar_contingut_mesocicle
 
     # Crear macrocicle amb 3 setmanes
     microcicle_1 = Microcicle(
@@ -1222,7 +1223,7 @@ def test_generar_mesocicle_una_setmana_falla_continua(nedador_test):
         "blondswim.agents.generar_microcicle.generar_i_validar_microcicle",
         side_effect=mock_generar_i_validar,
     ):
-        resultats, errors = generar_mesocicle(
+        resultats, errors = generar_contingut_mesocicle(
             nedador=nedador_test,
             macrocicle=macrocicle,
             categoria="absolut",

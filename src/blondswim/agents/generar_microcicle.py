@@ -477,7 +477,7 @@ def generar_i_validar_microcicle(
     return sessions, avisos
 
 
-def generar_mesocicle(
+def generar_contingut_mesocicle(
     nedador: Nedador,
     macrocicle: Macrocicle,
     categoria: Literal["absolut", "master"],
