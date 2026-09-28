@@ -339,6 +339,7 @@ def test_generar_i_validar_microcicle_setmana_trobada(nedador_test, metodologia_
         microcicles=[microcicle_1, microcicle_2],
     )
     macrocicle = Macrocicle(
+        nom="Temporada 2026-27",
         temporada="2026-27",
         data_inici="2026-10-01",
         data_fi="2027-06-30",
@@ -405,6 +406,7 @@ def test_generar_i_validar_microcicle_setmana_no_trobada(
         microcicles=[microcicle_1],
     )
     macrocicle = Macrocicle(
+        nom="Temporada 2026-27",
         temporada="2026-27",
         data_inici="2026-10-01",
         data_fi="2027-06-30",
