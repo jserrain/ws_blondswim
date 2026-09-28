@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from blondswim.agents import context_competicio, taper, validacio
+from blondswim.agents import context_competicio, seleccio_model, taper, validacio
 from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
 from blondswim.models.calendari import Competicio
@@ -475,6 +475,114 @@ def generar_i_validar_microcicle(
 
     # 5. Retornar sessions i avisos
     return sessions, avisos
+
+
+def generar_mesocicle(
+    nedador: Nedador,
+    macrocicle: Macrocicle,
+    categoria: Literal["absolut", "master"],
+    mesocicle_id: str,
+    pla_taper: list[dict],
+    avisos_pics_a: list[dict],
+    historial: list[SessioRealitzada] | None = None,
+) -> tuple[dict[int, list[Sessio]], list[dict]]:
+    """
+    Genera contingut LLM per a totes les setmanes d'UN mesocicle concret
+    (no tot el macrocicle — evita disparar una crida API per cada una de
+    les ~20 setmanes de la temporada de cop; el coach crida aquesta funció
+    mesocicle a mesocicle a mesura que avança la temporada).
+
+    1. Troba el Mesocicle amb aquest id a macrocicle.mesocicles. Raise
+       ValueError si no existeix.
+    2. Per cada Microcicle del mesocicle (ordenats per setmana):
+       a. seleccionar_metodologia() per triar la metodologia d'aquella
+          setmana (usa el primer element de nedador.proves_objectiu).
+       b. Crida generar_i_validar_microcicle(nedador, macrocicle,
+          microcicle.setmana, metodologia, pla_taper, avisos_pics_a,
+          historial).
+       c. Si crida (b) llança GeneracioMicrocicleError o ValueError,
+          NO aturis el mesocicle sencer: guarda l'error en una llista
+          {"setmana": ..., "error": str(excepcio)} i continua amb la
+          setmana següent.
+    3. Retorna (resultats, errors) on resultats és un dict
+       {setmana: list[Sessio]} amb NOMÉS les setmanes que han generat bé,
+       i errors és la llista de dicts del punt 2c (buida si tot ha anat bé).
+
+    Args:
+        nedador: Nedador amb zones CSS i proves objectiu
+        macrocicle: Macrocicle complet amb tots els mesocicles i microcicles
+        categoria: Categoria del nedador (absolut o master)
+        mesocicle_id: ID del mesocicle a generar
+        pla_taper: Pla de taper generat per generar_pla_taper_temporada()
+        avisos_pics_a: Avisos generats per validar_espaiat_pics_a()
+        historial: Historial de sessions realitzades per few-shot (opcional)
+
+    Returns:
+        Tupla amb:
+        - Diccionari {setmana: list[Sessio]} amb les setmanes generades correctament
+        - Llista d'errors {"setmana": int, "error": str} per les setmanes que han fallat
+
+    Raises:
+        ValueError: Si no es troba cap mesocicle amb el mesocicle_id indicat
+    """
+    # 1. Trobar el mesocicle
+    mesocicle = None
+    for meso in macrocicle.mesocicles:
+        if meso.id == mesocicle_id:
+            mesocicle = meso
+            break
+
+    if not mesocicle:
+        raise ValueError(
+            f"No s'ha trobat cap mesocicle amb id={mesocicle_id} al macrocicle"
+        )
+
+    # 2. Generar contingut per a cada microcicle
+    resultats: dict[int, list[Sessio]] = {}
+    errors: list[dict] = []
+
+    # Ordenar microcicles per setmana
+    microcicles_ordenats = sorted(mesocicle.microcicles, key=lambda m: m.setmana)
+
+    for microcicle in microcicles_ordenats:
+        setmana = microcicle.setmana
+
+        try:
+            # a. Seleccionar metodologia per aquesta setmana
+            prova_objectiu = nedador.proves_objectiu[0] if nedador.proves_objectiu else "200m lliure"
+            metodologia = seleccio_model.seleccionar_metodologia(
+                nedador=nedador,
+                prova_objectiu=prova_objectiu,
+                categoria=categoria,
+                enriquir_amb_llm=True,
+            )
+
+            # b. Generar i validar microcicle
+            sessions, _avisos = generar_i_validar_microcicle(
+                nedador=nedador,
+                macrocicle=macrocicle,
+                setmana=setmana,
+                metodologia=metodologia,
+                pla_taper=pla_taper,
+                avisos_pics_a=avisos_pics_a,
+                historial=historial,
+            )
+
+            # Guardar resultat
+            resultats[setmana] = sessions
+
+            logger.info(f"Setmana {setmana} generada correctament")
+
+        except (GeneracioMicrocicleError, ValueError) as e:
+            # c. Guardar error i continuar
+            errors.append({
+                "setmana": setmana,
+                "error": str(e),
+            })
+            logger.error(f"Error generant setmana {setmana}: {e}")
+
+    # 3. Retornar resultats i errors
+    return resultats, errors
 
 
 def generar_microcicle(

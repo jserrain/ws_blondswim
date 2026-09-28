@@ -953,3 +953,270 @@ def test_eliminar_competicio_id_no_trobat():
         )
 
     assert "comp_inexistent" in str(exc_info.value)
+
+
+def test_generar_mesocicle_totes_les_setmanes_ok(nedador_test):
+    """Verifica que generar_mesocicle genera totes les setmanes correctament."""
+    from blondswim.agents.generar_microcicle import generar_mesocicle
+
+    # Crear macrocicle amb un mesocicle de 3 setmanes
+    microcicle_1 = Microcicle(
+        setmana=1,
+        dates="1-7/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="carrega",
+        volum_objectiu=15000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    microcicle_2 = Microcicle(
+        setmana=2,
+        dates="8-14/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="qualitat",
+        volum_objectiu=14000,
+        dies_qualitat=True,
+        test_css=False,
+    )
+    microcicle_3 = Microcicle(
+        setmana=3,
+        dates="15-21/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="descarrega",
+        volum_objectiu=12000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    mesocicle = Mesocicle(
+        id="meso1",
+        nom="Mesocicle 1",
+        setmanes="1-3",
+        dates="1-21/10/2026",
+        fase_objectiu="Base",
+        metodologia_dominant="Polaritzat",
+        volum_min=12000,
+        volum_max=16000,
+        volum_mitja_previst=13667,
+        microcicles=[microcicle_1, microcicle_2, microcicle_3],
+    )
+    macrocicle = Macrocicle(
+        nom="Temporada 2026-27",
+        temporada="2026-27",
+        data_inici="2026-10-01",
+        data_fi="2027-06-30",
+        mesocicles=[mesocicle],
+    )
+
+    # Mock seleccionar_metodologia
+    mock_metodologia = DecisioMetodologia(
+        prova="200m lliure",
+        categoria="absolut",
+        metodologia_principal="Polaritzat",
+        metodologies_complementaries=[],
+        forca_evidencia="forta",
+        justificacio="Test",
+        avisos=[],
+    )
+
+    # Mock generar_i_validar_microcicle per retornar sessions mock
+    def mock_generar_i_validar(nedador, macrocicle, setmana, metodologia, pla_taper, avisos_pics_a, historial):
+        # Retornar sessions mock per aquesta setmana
+        sessio_mock = Sessio(
+            id=f"test_sessio_{setmana}",
+            microcicle_setmana=setmana,
+            dia="dilluns",
+            tipus_sessio="carrega",
+            volum_total=3000,
+            es_dia_opcional=False,
+            estructura=MagicMock(),
+        )
+        return [sessio_mock], []
+
+    with patch(
+        "blondswim.agents.generar_microcicle.seleccio_model.seleccionar_metodologia",
+        return_value=mock_metodologia,
+    ), patch(
+        "blondswim.agents.generar_microcicle.generar_i_validar_microcicle",
+        side_effect=mock_generar_i_validar,
+    ):
+        resultats, errors = generar_mesocicle(
+            nedador=nedador_test,
+            macrocicle=macrocicle,
+            categoria="absolut",
+            mesocicle_id="meso1",
+            pla_taper=[],
+            avisos_pics_a=[],
+            historial=[],
+        )
+
+    # Verificar que s'han generat les 3 setmanes
+    assert len(resultats) == 3
+    assert 1 in resultats
+    assert 2 in resultats
+    assert 3 in resultats
+
+    # Verificar que cada setmana té sessions
+    assert len(resultats[1]) == 1
+    assert len(resultats[2]) == 1
+    assert len(resultats[3]) == 1
+
+    # Verificar que no hi ha errors
+    assert len(errors) == 0
+
+
+def test_generar_mesocicle_mesocicle_id_no_trobat(nedador_test):
+    """Verifica que generar_mesocicle aixeca ValueError si el mesocicle_id no existeix."""
+    from blondswim.agents.generar_microcicle import generar_mesocicle
+
+    # Crear macrocicle amb un mesocicle
+    microcicle_1 = Microcicle(
+        setmana=1,
+        dates="1-7/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="carrega",
+        volum_objectiu=15000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    mesocicle = Mesocicle(
+        id="meso1",
+        nom="Mesocicle 1",
+        setmanes="1",
+        dates="1-7/10/2026",
+        fase_objectiu="Base",
+        metodologia_dominant="Polaritzat",
+        volum_min=13000,
+        volum_max=16000,
+        volum_mitja_previst=14500,
+        microcicles=[microcicle_1],
+    )
+    macrocicle = Macrocicle(
+        nom="Temporada 2026-27",
+        temporada="2026-27",
+        data_inici="2026-10-01",
+        data_fi="2027-06-30",
+        mesocicles=[mesocicle],
+    )
+
+    # Intentar generar mesocicle inexistent
+    with pytest.raises(ValueError) as exc_info:
+        generar_mesocicle(
+            nedador=nedador_test,
+            macrocicle=macrocicle,
+            categoria="absolut",
+            mesocicle_id="meso_inexistent",
+            pla_taper=[],
+            avisos_pics_a=[],
+            historial=[],
+        )
+
+    assert "meso_inexistent" in str(exc_info.value)
+
+
+def test_generar_mesocicle_una_setmana_falla_continua(nedador_test):
+    """Verifica que si una setmana falla, les altres es generen igualment."""
+    from blondswim.agents.generar_microcicle import generar_mesocicle
+
+    # Crear macrocicle amb 3 setmanes
+    microcicle_1 = Microcicle(
+        setmana=1,
+        dates="1-7/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="carrega",
+        volum_objectiu=15000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    microcicle_2 = Microcicle(
+        setmana=2,
+        dates="8-14/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="qualitat",
+        volum_objectiu=14000,
+        dies_qualitat=True,
+        test_css=False,
+    )
+    microcicle_3 = Microcicle(
+        setmana=3,
+        dates="15-21/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="descarrega",
+        volum_objectiu=12000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    mesocicle = Mesocicle(
+        id="meso1",
+        nom="Mesocicle 1",
+        setmanes="1-3",
+        dates="1-21/10/2026",
+        fase_objectiu="Base",
+        metodologia_dominant="Polaritzat",
+        volum_min=12000,
+        volum_max=16000,
+        volum_mitja_previst=13667,
+        microcicles=[microcicle_1, microcicle_2, microcicle_3],
+    )
+    macrocicle = Macrocicle(
+        nom="Temporada 2026-27",
+        temporada="2026-27",
+        data_inici="2026-10-01",
+        data_fi="2027-06-30",
+        mesocicles=[mesocicle],
+    )
+
+    # Mock seleccionar_metodologia
+    mock_metodologia = DecisioMetodologia(
+        prova="200m lliure",
+        categoria="absolut",
+        metodologia_principal="Polaritzat",
+        metodologies_complementaries=[],
+        forca_evidencia="forta",
+        justificacio="Test",
+        avisos=[],
+    )
+
+    # Mock generar_i_validar_microcicle que falla a la setmana 2
+    def mock_generar_i_validar(nedador, macrocicle, setmana, metodologia, pla_taper, avisos_pics_a, historial):
+        if setmana == 2:
+            raise GeneracioMicrocicleError("Error API a la setmana 2")
+
+        # Retornar sessions mock per les altres setmanes
+        sessio_mock = Sessio(
+            id=f"test_sessio_{setmana}",
+            microcicle_setmana=setmana,
+            dia="dilluns",
+            tipus_sessio="carrega",
+            volum_total=3000,
+            es_dia_opcional=False,
+            estructura=MagicMock(),
+        )
+        return [sessio_mock], []
+
+    with patch(
+        "blondswim.agents.generar_microcicle.seleccio_model.seleccionar_metodologia",
+        return_value=mock_metodologia,
+    ), patch(
+        "blondswim.agents.generar_microcicle.generar_i_validar_microcicle",
+        side_effect=mock_generar_i_validar,
+    ):
+        resultats, errors = generar_mesocicle(
+            nedador=nedador_test,
+            macrocicle=macrocicle,
+            categoria="absolut",
+            mesocicle_id="meso1",
+            pla_taper=[],
+            avisos_pics_a=[],
+            historial=[],
+        )
+
+    # Verificar que s'han generat les setmanes 1 i 3 (no la 2)
+    assert len(resultats) == 2
+    assert 1 in resultats
+    assert 2 not in resultats
+    assert 3 in resultats
+
+    # Verificar que hi ha 1 error (setmana 2)
+    assert len(errors) == 1
+    assert errors[0]["setmana"] == 2
+    assert "Error API a la setmana 2" in errors[0]["error"]
