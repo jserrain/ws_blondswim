@@ -2,9 +2,41 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from blondswim.agents.generar_macrocicle import generar_macrocicle, generar_mesocicle
 from blondswim.models.calendari import Competicio
+from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle
+from blondswim.models.nedador import Nedador
+
+
+@pytest.fixture
+def nedador_test() -> Nedador:
+    """Nedador base per als tests de generació de mesocicles."""
+    return Nedador(
+        id="test",
+        nom="Test Nedador",
+        categoria="absolut",
+        proves_objectiu=["200m lliure"],
+        mode_ritme="temps",
+        dies_disponibles=["dilluns", "dimarts", "dimecres", "dijous"],
+        dia_opcional="dissabte",
+    )
+
+
+@pytest.fixture
+def historial_test() -> list[SessioRealitzada]:
+    """Històric de 3 sessions de 3000m per als tests de volums."""
+    return [
+        SessioRealitzada(
+            data=f"2026-09-0{i}",
+            series=[],
+            volum_total_m=3000,
+            temps_total_min=90.0,
+        )
+        for i in range(1, 4)
+    ]
 
 
 def test_generar_macrocicle_amb_competicions_a():
@@ -163,10 +195,11 @@ def test_generar_mesocicle_competicio_a_llunyana_genera_base():
 
     # Generar mesocicle
     mesocicle, avisos = generar_mesocicle(
-        nedador_id="test",
+        nedador=nedador_test,
         macrocicle=macrocicle,
         competicions=competicions,
         enriquir_amb_llm=False,
+        historial=historial_test,
     )
 
     # Verificar tipus i duració
@@ -208,10 +241,11 @@ def test_generar_mesocicle_competicio_a_propera_genera_peak():
 
     # Generar mesocicle
     mesocicle, _avisos = generar_mesocicle(
-        nedador_id="test",
+        nedador=nedador_test,
         macrocicle=macrocicle,
         competicions=competicions,
         enriquir_amb_llm=False,
+        historial=historial_test,
     )
 
     # Verificar tipus i duració
@@ -272,10 +306,11 @@ def test_generar_mesocicle_despres_cursa_genera_transicio():
 
     # Generar següent mesocicle
     mesocicle, _avisos = generar_mesocicle(
-        nedador_id="test",
+        nedador=nedador_test,
         macrocicle=macrocicle,
         competicions=competicions,
         enriquir_amb_llm=False,
+        historial=historial_test,
     )
 
     # Verificar que és Transicio
@@ -312,10 +347,11 @@ def test_generar_mesocicle_sense_competicio_a_genera_base_amb_avis():
 
     # Generar mesocicle
     mesocicle, avisos = generar_mesocicle(
-        nedador_id="test",
+        nedador=nedador_test,
         macrocicle=macrocicle,
         competicions=competicions,
         enriquir_amb_llm=False,
+        historial=historial_test,
     )
 
     # Verificar tipus
@@ -367,10 +403,11 @@ def test_generar_mesocicle_enriquir_amb_llm_canvia_fase_objectiu():
         return_value=mock_client,
     ):
         mesocicle, _avisos = generar_mesocicle(
-            nedador_id="test",
+            nedador=nedador_test,
             macrocicle=macrocicle,
             competicions=competicions,
             enriquir_amb_llm=True,
+            historial=historial_test,
         )
 
     # Verificar que s'ha cridat l'API
@@ -410,10 +447,11 @@ def test_generar_mesocicle_sense_enriquir_llm_no_crida_api():
         return_value=mock_client,
     ):
         mesocicle, _avisos = generar_mesocicle(
-            nedador_id="test",
+            nedador=nedador_test,
             macrocicle=macrocicle,
             competicions=competicions,
             enriquir_amb_llm=False,
+            historial=historial_test,
         )
 
     # Verificar que NO s'ha cridat l'API
@@ -455,10 +493,11 @@ def test_generar_mesocicle_fallback_si_llm_falla():
     ):
         # No hauria de propagar l'error
         mesocicle, _avisos = generar_mesocicle(
-            nedador_id="test",
+            nedador=nedador_test,
             macrocicle=macrocicle,
             competicions=competicions,
             enriquir_amb_llm=True,
+            historial=historial_test,
         )
 
     # Verificar que fase_objectiu és el determinista (fallback)
@@ -467,3 +506,126 @@ def test_generar_mesocicle_fallback_si_llm_falla():
     # Verificar que el mesocicle s'ha creat correctament
     assert mesocicle.nom == "Base 1"
     assert len(macrocicle.mesocicles) == 1
+
+
+def test_generar_mesocicle_calcula_volums_base(
+    nedador_test, historial_test
+):
+    """Verifica que un mesocicle Base calcula els volums a partir de l'històric."""
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[],
+    )
+
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició A llunyana",
+            data_inici="2026-12-14",
+            data_fi="2026-12-16",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    mesocicle, avisos = generar_mesocicle(
+        nedador=nedador_test,
+        macrocicle=macrocicle,
+        competicions=competicions,
+        enriquir_amb_llm=False,
+        historial=historial_test,
+    )
+
+    # 3 sessions de 3000m -> volum_per_sessio = 3000
+    # 4 dies disponibles -> volum_min = 12000
+    # + 1 dia opcional -> volum_max = 15000
+    # mitjana = 13500
+    assert mesocicle.fase_objectiu == "Base"
+    assert mesocicle.volum_min == 12000
+    assert mesocicle.volum_max == 15000
+    assert mesocicle.volum_mitja_previst == 13500
+
+    # Sense avís de falta d'històric
+    assert not any(a.get("tipus_avis") == "sense_historial" for a in avisos)
+
+
+def test_generar_mesocicle_sense_historial_volums_zero(nedador_test):
+    """Verifica que sense històric els volums són 0 i apareix l'avís."""
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[],
+    )
+
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició A llunyana",
+            data_inici="2026-12-14",
+            data_fi="2026-12-16",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    mesocicle, avisos = generar_mesocicle(
+        nedador=nedador_test,
+        macrocicle=macrocicle,
+        competicions=competicions,
+        enriquir_amb_llm=False,
+        historial=None,
+    )
+
+    assert mesocicle.volum_min == 0
+    assert mesocicle.volum_max == 0
+    assert mesocicle.volum_mitja_previst == 0
+
+    avisos_historial = [
+        a for a in avisos if a.get("tipus_avis") == "sense_historial"
+    ]
+    assert len(avisos_historial) == 1
+    assert "Sense històric del nedador" in avisos_historial[0]["missatge"]
+
+
+def test_generar_mesocicle_peak_retalla_volums(
+    nedador_test, historial_test
+):
+    """Verifica que un mesocicle Peak aplica el 50% de retallada als volums."""
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[],
+    )
+
+    # Competició A a 2 setmanes -> Peak
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició A propera",
+            data_inici="2026-09-15",
+            data_fi="2026-09-17",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    mesocicle, _avisos = generar_mesocicle(
+        nedador=nedador_test,
+        macrocicle=macrocicle,
+        competicions=competicions,
+        enriquir_amb_llm=False,
+        historial=historial_test,
+    )
+
+    assert mesocicle.fase_objectiu == "Peak"
+    # Base: 12000 / 15000 / 13500 -> Peak (50%): 6000 / 7500 / 6750
+    assert mesocicle.volum_min == 6000
+    assert mesocicle.volum_max == 7500
+    assert mesocicle.volum_mitja_previst == 6750

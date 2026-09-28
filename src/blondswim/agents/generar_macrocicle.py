@@ -6,9 +6,20 @@ from datetime import datetime, timedelta
 from blondswim.agents import context_competicio
 from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
 from blondswim.models.calendari import Competicio
+from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Mesocicle
+from blondswim.models.nedador import Nedador
 
 logger = logging.getLogger(__name__)
+
+PERCENTATGES_VOLUM_PER_TIPUS: dict[str, float] = {
+    "Base": 1.0,
+    "Build1": 0.95,
+    "Build2": 0.85,
+    "Peak": 0.5,
+    "Transicio": 0.4,
+    "Cursa": 0.35,
+}
 
 
 def generar_macrocicle(
@@ -178,11 +189,55 @@ Retorna NOMÉS la descripció ampliada usant la tool retornar_fase_objectiu."""
         return mesocicle.fase_objectiu
 
 
+def _calcular_volums_mesocicle(
+    nedador: Nedador,
+    historial: list[SessioRealitzada],
+    tipus: str,
+    percentatges: dict[str, float] = PERCENTATGES_VOLUM_PER_TIPUS,
+) -> tuple[int, int, int]:
+    """
+    Calcula (volum_min, volum_max, volum_mitja_previst) per un mesocicle
+    d'un tipus donat.
+
+    volum_per_sessio = mitjana de SessioRealitzada.volum_total_m sobre
+    tot l'històric rebut (si l'històric és buit, retorna (0, 0, 0)).
+
+    volum_min = volum_per_sessio * len(nedador.dies_disponibles)
+    volum_max = volum_per_sessio * (len(nedador.dies_disponibles) + 1)
+      si nedador.dia_opcional no és None, altrament volum_max = volum_min
+    volum_mitja_previst = mitjana(volum_min, volum_max)
+
+    Tots tres valors multiplicats pel percentatges.get(tipus, 1.0)
+    corresponent, i arrodonits a enter.
+    """
+    if not historial:
+        return 0, 0, 0
+
+    volum_per_sessio = sum(s.volum_total_m for s in historial) / len(historial)
+
+    dies_base = len(nedador.dies_disponibles)
+    volum_min = volum_per_sessio * dies_base
+    if nedador.dia_opcional is not None:
+        volum_max = volum_per_sessio * (dies_base + 1)
+    else:
+        volum_max = volum_min
+    volum_mitja_previst = (volum_min + volum_max) / 2
+
+    factor = percentatges.get(tipus, 1.0)
+
+    return (
+        round(volum_min * factor),
+        round(volum_max * factor),
+        round(volum_mitja_previst * factor),
+    )
+
+
 def generar_mesocicle(
-    nedador_id: str,
+    nedador: Nedador,
     macrocicle: Macrocicle,
     competicions: list[Competicio],
     enriquir_amb_llm: bool = True,
+    historial: list[SessioRealitzada] | None = None,
 ) -> tuple[Mesocicle, list[dict]]:
     """
     Decideix i afegeix seqüencialment el següent mesocicle al macrocicle,
@@ -223,10 +278,11 @@ def generar_mesocicle(
     la duració s'ha hagut de reduir.
 
     Args:
-        nedador_id: ID del nedador per al qual es genera el mesocicle
+        nedador: Nedador per al qual es genera el mesocicle
         macrocicle: Macrocicle al qual afegir el mesocicle
         competicions: Llista de totes les competicions del calendari
         enriquir_amb_llm: Si True, enriquir fase_objectiu amb LLM (default: True)
+        historial: Historial de sessions realitzades per estimar volums (default: None)
 
     Returns:
         Tupla amb:
@@ -234,6 +290,7 @@ def generar_mesocicle(
         - Llista d'avisos
     """
     avisos = []
+    historial = historial or []
 
     # 1. Calcular data de posició actual
     data_inici_macro = datetime.fromisoformat(macrocicle.data_inici)
@@ -324,7 +381,17 @@ def generar_mesocicle(
     # 5. Crear Mesocicle
     numero_mesocicle = len(macrocicle.mesocicles) + 1
     mesocicle_id = f"meso_{numero_mesocicle}"
-    
+
+    # Calcular volums reals a partir de l'històric
+    volum_min, volum_max, volum_mitja_previst = _calcular_volums_mesocicle(
+        nedador, historial, tipus
+    )
+    if not historial:
+        avisos.append({
+            "tipus_avis": "sense_historial",
+            "missatge": "Sense històric del nedador: volums del mesocicle no estimats (0).",
+        })
+
     mesocicle = Mesocicle(
         id=mesocicle_id,
         nom=f"{tipus} {numero_mesocicle}",
@@ -332,15 +399,15 @@ def generar_mesocicle(
         dates=f"{data_inici_mesocicle.strftime('%d/%m/%Y')}-{data_fi_mesocicle.strftime('%d/%m/%Y')}",
         fase_objectiu=tipus,
         metodologia_dominant="",  # Es pot omplir més endavant
-        volum_min=0,
-        volum_max=0,
-        volum_mitja_previst=0,
+        volum_min=volum_min,
+        volum_max=volum_max,
+        volum_mitja_previst=volum_mitja_previst,
         microcicles=[],
     )
 
     # 6. Enriquir fase_objectiu amb LLM si està habilitat
     if enriquir_amb_llm:
-        mesocicle.fase_objectiu = _enriquir_fase_objectiu_amb_llm(mesocicle, nedador_id)
+        mesocicle.fase_objectiu = _enriquir_fase_objectiu_amb_llm(mesocicle, nedador.id)
 
     # Afegir al macrocicle
     macrocicle.mesocicles.append(mesocicle)
