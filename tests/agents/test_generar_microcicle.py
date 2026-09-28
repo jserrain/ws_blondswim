@@ -20,7 +20,7 @@ from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.historial import SerieRealitzada, SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador, RitmesCSS
-from blondswim.models.sessio import Sessio
+from blondswim.models.sessio import EstructuraSessio, PartSessio, Sessio
 
 
 @pytest.fixture
@@ -1021,6 +1021,17 @@ def test_generar_mesocicle_totes_les_setmanes_ok(nedador_test):
     # Mock generar_i_validar_microcicle per retornar sessions mock
     def mock_generar_i_validar(nedador, macrocicle, setmana, metodologia, pla_taper, avisos_pics_a, historial):
         # Retornar sessions mock per aquesta setmana
+        estructura_mock = EstructuraSessio(
+            parts=[
+                PartSessio(
+                    nom="Escalfament",
+                    percentatge_carrega=20,
+                    percentatge_qualitat=20,
+                    percentatge_descarrega=20,
+                    contingut=None,
+                )
+            ]
+        )
         sessio_mock = Sessio(
             id=f"test_sessio_{setmana}",
             microcicle_setmana=setmana,
@@ -1028,7 +1039,7 @@ def test_generar_mesocicle_totes_les_setmanes_ok(nedador_test):
             tipus_sessio="carrega",
             volum_total=3000,
             es_dia_opcional=False,
-            estructura=MagicMock(),
+            estructura=estructura_mock,
         )
         return [sessio_mock], []
 
@@ -1182,6 +1193,17 @@ def test_generar_mesocicle_una_setmana_falla_continua(nedador_test):
             raise GeneracioMicrocicleError("Error API a la setmana 2")
 
         # Retornar sessions mock per les altres setmanes
+        estructura_mock = EstructuraSessio(
+            parts=[
+                PartSessio(
+                    nom="Escalfament",
+                    percentatge_carrega=20,
+                    percentatge_qualitat=20,
+                    percentatge_descarrega=20,
+                    contingut=None,
+                )
+            ]
+        )
         sessio_mock = Sessio(
             id=f"test_sessio_{setmana}",
             microcicle_setmana=setmana,
@@ -1189,7 +1211,7 @@ def test_generar_mesocicle_una_setmana_falla_continua(nedador_test):
             tipus_sessio="carrega",
             volum_total=3000,
             es_dia_opcional=False,
-            estructura=MagicMock(),
+            estructura=estructura_mock,
         )
         return [sessio_mock], []
 
