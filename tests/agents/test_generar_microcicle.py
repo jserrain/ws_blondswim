@@ -735,3 +735,136 @@ def test_actualitzar_classe_competicio_id_no_trobat():
         )
 
     assert "comp_inexistent" in str(exc_info.value)
+
+
+def test_eliminar_competicio_la_treu_de_la_llista():
+    """Verifica que eliminar_competicio treu la competició de la llista."""
+    from blondswim.agents.generar_microcicle import eliminar_competicio
+
+    # Crear llista de competicions
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició 1",
+            data_inici="2026-10-15",
+            data_fi="2026-10-17",
+            classe="A",
+            piscina="25m",
+        ),
+        Competicio(
+            id="comp2",
+            nom="Competició 2",
+            data_inici="2026-11-20",
+            data_fi="2026-11-22",
+            classe="B",
+            piscina="50m",
+        ),
+        Competicio(
+            id="comp3",
+            nom="Competició 3",
+            data_inici="2026-12-10",
+            data_fi="2026-12-12",
+            classe="C",
+            piscina="25m",
+        ),
+    ]
+
+    # Guardar nombre original
+    nombre_original = len(competicions)
+
+    # Eliminar comp2
+    competicions_actualitzades, pla_taper, avisos_pics_a = eliminar_competicio(
+        competicions=competicions,
+        competicio_id="comp2",
+        motiu="Malaltia",
+    )
+
+    # Verificar que s'ha eliminat
+    assert len(competicions_actualitzades) == nombre_original - 1
+    assert not any(c.id == "comp2" for c in competicions_actualitzades)
+
+    # Verificar que les altres competicions encara hi són
+    assert any(c.id == "comp1" for c in competicions_actualitzades)
+    assert any(c.id == "comp3" for c in competicions_actualitzades)
+
+    # Verificar que retorna pla_taper i avisos
+    assert isinstance(pla_taper, list)
+    assert isinstance(avisos_pics_a, list)
+
+
+def test_eliminar_competicio_recalcula_pics_a_sense_ella():
+    """Verifica que eliminar una competició A recalcula els pics prioritzats sense ella."""
+    from blondswim.agents.generar_microcicle import eliminar_competicio
+
+    # Crear llista de competicions amb 2 competicions A properes
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició A1",
+            data_inici="2026-10-15",
+            data_fi="2026-10-17",
+            classe="A",
+            piscina="25m",
+        ),
+        Competicio(
+            id="comp2",
+            nom="Competició A2 propera",
+            data_inici="2026-10-25",
+            data_fi="2026-10-27",
+            classe="A",
+            piscina="50m",
+        ),
+        Competicio(
+            id="comp3",
+            nom="Competició B",
+            data_inici="2026-12-10",
+            data_fi="2026-12-12",
+            classe="B",
+            piscina="25m",
+        ),
+    ]
+
+    # Eliminar comp2 (una de les competicions A)
+    competicions_actualitzades, pla_taper, avisos_pics_a = eliminar_competicio(
+        competicions=competicions,
+        competicio_id="comp2",
+        motiu="Lesió",
+    )
+
+    # Verificar que comp2 no està a la llista
+    assert not any(c.id == "comp2" for c in competicions_actualitzades)
+
+    # Verificar que el pla de taper s'ha recalculat sense comp2
+    assert not any(p["competicio_id"] == "comp2" for p in pla_taper)
+
+    # Verificar que només hi ha 1 competició A al pla de taper
+    comps_a_al_pla = [p for p in pla_taper if p["classe"] == "A"]
+    assert len(comps_a_al_pla) == 1
+    assert comps_a_al_pla[0]["competicio_id"] == "comp1"
+
+
+def test_eliminar_competicio_id_no_trobat():
+    """Verifica que eliminar_competicio aixeca ValueError si l'id no existeix."""
+    from blondswim.agents.generar_microcicle import eliminar_competicio
+
+    # Crear llista de competicions
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició 1",
+            data_inici="2026-10-15",
+            data_fi="2026-10-17",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    # Intentar eliminar competició inexistent
+    with pytest.raises(ValueError) as exc_info:
+        eliminar_competicio(
+            competicions=competicions,
+            competicio_id="comp_inexistent",
+            motiu="Test",
+        )
+
+    assert "comp_inexistent" in str(exc_info.value)

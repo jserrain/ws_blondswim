@@ -155,6 +155,32 @@ def _trobar_microcicle(macrocicle: Macrocicle, setmana: int) -> Microcicle:
     )
 
 
+def _recalcular_taper_i_pics(
+    competicions: list[Competicio],
+) -> tuple[list[dict], list[dict]]:
+    """
+    Deriva pics_prioritzats (ids amb classe=="A") i retorna (pla_taper, avisos_pics_a).
+    
+    Args:
+        competicions: Llista de competicions del calendari
+        
+    Returns:
+        Tupla amb:
+        - Pla de taper (generar_pla_taper_temporada)
+        - Avisos de pics A (validar_espaiat_pics_a)
+    """
+    # Derivar pics prioritzats (totes les competicions classe A)
+    pics_prioritzats = [comp.id for comp in competicions if comp.classe == "A"]
+    
+    # Recalcular pla de taper
+    pla_taper = taper.generar_pla_taper_temporada(competicions, pics_prioritzats)
+    
+    # Recalcular avisos de pics A
+    avisos_pics_a = context_competicio.validar_espaiat_pics_a(competicions)
+    
+    return pla_taper, avisos_pics_a
+
+
 def actualitzar_classe_competicio(
     competicions: list[Competicio],
     competicio_id: str,
@@ -209,16 +235,65 @@ def actualitzar_classe_competicio(
         f"{classe_anterior} -> {nova_classe}. Motiu: {motiu}"
     )
     
-    # 3. Derivar pics prioritzats (totes les competicions classe A)
-    pics_prioritzats = [comp.id for comp in competicions if comp.classe == "A"]
+    # 3. Recalcular taper i pics A
+    pla_taper, avisos_pics_a = _recalcular_taper_i_pics(competicions)
     
-    # 4. Recalcular pla de taper
-    pla_taper = taper.generar_pla_taper_temporada(competicions, pics_prioritzats)
+    # 4. Retornar competicions, pla_taper i avisos
+    return competicions, pla_taper, avisos_pics_a
+
+
+def eliminar_competicio(
+    competicions: list[Competicio],
+    competicio_id: str,
+    motiu: str,
+) -> tuple[list[Competicio], list[dict], list[dict]]:
+    """
+    Treu una competició del calendari (p.ex. malaltia, lesió, no hi assistirà).
     
-    # 5. Recalcular avisos de pics A
-    avisos_pics_a = context_competicio.validar_espaiat_pics_a(competicions)
+    A diferència d'actualitzar_classe_competicio (que la manté al calendari amb
+    menys prioritat), aquesta l'elimina del tot: no compta per a pics_a ni per al taper.
     
-    # 6. Retornar competicions, pla_taper i avisos
+    Args:
+        competicions: Llista de totes les competicions del calendari
+        competicio_id: ID de la competició a eliminar
+        motiu: Raó de l'eliminació (per logging/auditoria, no s'usa en el càlcul)
+        
+    Returns:
+        Tupla amb:
+        - Llista de competicions actualitzada (sense la competició eliminada)
+        - Pla de taper recalculat (generar_pla_taper_temporada)
+        - Avisos de pics A recalculats (validar_espaiat_pics_a)
+        
+    Raises:
+        ValueError: Si no es troba cap competició amb el competicio_id indicat
+        
+    Notes:
+        - La funció mai bloqueja: sempre retorna, encara que hi hagi avisos
+        - El motiu és per traçabilitat futura, no afecta el càlcul
+    """
+    # 1. Trobar la competició
+    competicio = None
+    for comp in competicions:
+        if comp.id == competicio_id:
+            competicio = comp
+            break
+    
+    if not competicio:
+        raise ValueError(
+            f"No s'ha trobat cap competició amb id={competicio_id}"
+        )
+    
+    # 2. Eliminar la competició de la llista
+    competicions.remove(competicio)
+    
+    logger.info(
+        f"Competició '{competicio.nom}' eliminada del calendari. Motiu: {motiu}"
+    )
+    
+    # 3. Recalcular taper i pics A
+    pla_taper, avisos_pics_a = _recalcular_taper_i_pics(competicions)
+    
+    # 4. Retornar competicions, pla_taper i avisos
     return competicions, pla_taper, avisos_pics_a
 
 
