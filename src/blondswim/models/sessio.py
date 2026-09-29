@@ -1,6 +1,34 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+
+class Exercici(BaseModel):
+    """
+    Un exercici concret (una sèrie) dins d'una part de sessió. El volum
+    (series x distancia_m) es calcula sempre en codi -- mai el redacta
+    el LLM -- per evitar totals que no siguin múltiples de 25m.
+    """
+    series: int
+    distancia_m: int  # validat múltiple de 25
+    execucio: str
+    descans: str | None = None  # notació "c/X'Y''" o "d/Ns"
+    material: str | None = None
+    intensitat: Literal[
+        "Recuperació", "A1", "A2", "A3", "Velocitat", "MPLA", "TOLA", "AeM"
+    ] | None = None
+    objectiu: str | None = None
+
+    @field_validator("distancia_m")
+    @classmethod
+    def validar_multiple_25(cls, v: int) -> int:
+        if v % 25 != 0:
+            raise ValueError(f"distancia_m ha de ser múltiple de 25m (rebut: {v})")
+        return v
+
+    @property
+    def volum_m(self) -> int:
+        return self.series * self.distancia_m
 
 
 class PartSessio(BaseModel):
@@ -13,6 +41,7 @@ class PartSessio(BaseModel):
     percentatge_qualitat: float
     percentatge_descarrega: float
     contingut: str | None = None
+    exercicis: list[Exercici] = []
 
 class EstructuraSessio(BaseModel):
     """
