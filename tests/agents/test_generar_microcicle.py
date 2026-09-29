@@ -104,7 +104,20 @@ def test_omple_contingut_sense_tocar_percentatges(
             {
                 "sessio_id": s.id,
                 "parts": [
-                    {"nom": p.nom, "contingut": f"Contingut test {p.nom}"}
+                    {
+                        "nom": p.nom,
+                        "exercicis": [
+                            {
+                                "series": 4,
+                                "distancia_m": 50,
+                                "execucio": f"Exercici test {p.nom}",
+                                "descans": "c/20\"",
+                                "material": None,
+                                "intensitat": "A1",
+                                "objectiu": "Test",
+                            }
+                        ],
+                    }
                     for p in s.estructura.parts
                 ],
             }
@@ -123,11 +136,12 @@ def test_omple_contingut_sense_tocar_percentatges(
             nedador_test, sessions_test, metodologia_test, historial=[]
         )
 
-    # Verificar que contingut s'ha omplert
+    # Verificar que exercicis s'ha omplert
     for sessio in resultat:
         for part in sessio.estructura.parts:
-            assert part.contingut is not None
-            assert "Contingut test" in part.contingut
+            assert len(part.exercicis) == 1
+            assert "Exercici test" in part.exercicis[0].execucio
+            assert part.exercicis[0].volum_m == 200
 
     # Verificar que res més ha canviat
     for i, sessio in enumerate(resultat):
@@ -158,9 +172,19 @@ def test_part_sense_resposta_es_queda_none(
                 "parts": [
                     {
                         "nom": "Escalfament",
-                        "contingut": "400 N suau Recuperació",
+                        "exercicis": [
+                            {
+                                "series": 1,
+                                "distancia_m": 400,
+                                "execucio": "N suau",
+                                "descans": None,
+                                "material": None,
+                                "intensitat": "Recuperació",
+                                "objectiu": "Escalfament",
+                            }
+                        ],
                     }
-                    # Només una part, les altres es queden None
+                    # Només una part, les altres es queden buides
                 ],
             }
         ]
@@ -178,15 +202,17 @@ def test_part_sense_resposta_es_queda_none(
             nedador_test, sessions_test, metodologia_test, historial=[]
         )
 
-    # Verificar que només Escalfament té contingut
+    # Verificar que només Escalfament té exercicis
     primera_sessio = resultat[0]
     escalfament = next(p for p in primera_sessio.estructura.parts if p.nom == "Escalfament")
-    assert escalfament.contingut == "400 N suau Recuperació"
+    assert len(escalfament.exercicis) == 1
+    assert escalfament.exercicis[0].execucio == "N suau"
+    assert escalfament.exercicis[0].volum_m == 400
 
-    # Les altres parts haurien de ser None
+    # Les altres parts haurien de quedar-se sense exercicis
     altres_parts = [p for p in primera_sessio.estructura.parts if p.nom != "Escalfament"]
     for part in altres_parts:
-        assert part.contingut is None
+        assert part.exercicis == []
 
 
 def test_error_api_llança_generaciomicrocicleerror(
