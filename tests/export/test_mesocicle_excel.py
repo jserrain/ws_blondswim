@@ -1,6 +1,5 @@
 """Tests per a l'exportació de mesocicles a Excel."""
 
-from pathlib import Path
 
 import openpyxl
 import pytest
