@@ -958,7 +958,6 @@ def test_eliminar_competicio_id_no_trobat():
 
 def test_generar_contingut_mesocicle_totes_les_setmanes_ok(nedador_test):
     """Verifica que generar_contingut_mesocicle genera totes les setmanes correctament."""
-    from blondswim.agents.generar_microcicle import generar_contingut_mesocicle
 
     # Crear macrocicle amb un mesocicle de 3 setmanes
     microcicle_1 = Microcicle(
@@ -1078,7 +1077,6 @@ def test_generar_contingut_mesocicle_totes_les_setmanes_ok(nedador_test):
 
 def test_generar_contingut_mesocicle_mesocicle_id_no_trobat(nedador_test):
     """Verifica que generar_contingut_mesocicle aixeca ValueError si el mesocicle_id no existeix."""
-    from blondswim.agents.generar_microcicle import generar_contingut_mesocicle
 
     # Crear macrocicle amb un mesocicle
     microcicle_1 = Microcicle(
@@ -1127,7 +1125,6 @@ def test_generar_contingut_mesocicle_mesocicle_id_no_trobat(nedador_test):
 
 def test_generar_contingut_mesocicle_una_setmana_falla_continua(nedador_test):
     """Verifica que si una setmana falla, les altres es generen igualment."""
-    from blondswim.agents.generar_microcicle import generar_contingut_mesocicle
 
     # Crear macrocicle amb 3 setmanes
     microcicle_1 = Microcicle(
