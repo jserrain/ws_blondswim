@@ -147,7 +147,7 @@ def main() -> int:
         print(f"   ⚠ Setmana {avis.get('setmana')}: {avis.get('error')}")
 
     print("\n5. Exportant a Excel...")
-    output_path = output_dir / f"mesocicle_{primer_mesocicle.id}.xlsx"
+    output_path = output_dir / f"mesocicle_{nedador.nom.lower()}_{primer_mesocicle.id}.xlsx"
     exportar_mesocicle_excel(nedador, primer_mesocicle, resultats, output_path)
     print(f"   ✓ Excel exportat a {output_path}")
 
