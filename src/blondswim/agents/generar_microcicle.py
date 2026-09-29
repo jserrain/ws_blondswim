@@ -14,7 +14,8 @@ from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Microcicle
 from blondswim.models.nedador import Nedador
-from blondswim.models.sessio import Sessio
+from blondswim.models.sessio import Exercici, Sessio
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -679,7 +680,7 @@ def generar_microcicle(
         tools = [
             {
                 "name": "retornar_contingut_sessions",
-                "description": "Retorna el contingut generat per a cada part de cada sessió",
+                "description": "Retorna el contingut generat per a cada part de cada sessió, com a llista d'exercicis estructurats. El volum (series x distancia_m) i el ritme (intensitat) mai s'escriuen com a text lliure ni com a números decimals.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -695,9 +696,36 @@ def generar_microcicle(
                                             "type": "object",
                                             "properties": {
                                                 "nom": {"type": "string"},
-                                                "contingut": {"type": "string"},
+                                                "exercicis": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "series": {"type": "integer"},
+                                                            "distancia_m": {"type": "integer"},
+                                                            "execucio": {"type": "string"},
+                                                            "descans": {"type": "string"},
+                                                            "material": {"type": "string"},
+                                                            "intensitat": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                    "Recuperació",
+                                                                    "A1",
+                                                                    "A2",
+                                                                    "A3",
+                                                                    "Velocitat",
+                                                                    "MPLA",
+                                                                    "TOLA",
+                                                                    "AeM",
+                                                                ],
+                                                            },
+                                                            "objectiu": {"type": "string"},
+                                                        },
+                                                        "required": ["series", "distancia_m", "execucio"],
+                                                    },
+                                                },
                                             },
-                                            "required": ["nom", "contingut"],
+                                            "required": ["nom", "exercicis"],
                                         },
                                     },
                                 },
@@ -745,10 +773,10 @@ def generar_microcicle(
                 logger.warning(f"Sessió amb ID '{sessio_id}' no trobada, ignorant")
                 continue
 
-            # Aplicar contingut a cada part
+            # Aplicar exercicis a cada part
             for part_data in parts_data:
                 nom_part = part_data.get("nom")
-                contingut = part_data.get("contingut")
+                exercicis_data = part_data.get("exercicis", [])
 
                 # Buscar part corresponent
                 part = next((p for p in sessio.estructura.parts if p.nom == nom_part), None)
@@ -758,8 +786,15 @@ def generar_microcicle(
                     )
                     continue
 
-                # Assignar contingut
-                part.contingut = contingut
+                exercicis = []
+                for ex_data in exercicis_data:
+                    try:
+                        exercicis.append(Exercici(**ex_data))
+                    except ValidationError as e:
+                        logger.warning(
+                            f"Exercici invàlid a sessió '{sessio_id}', part '{nom_part}', ignorat: {e}"
+                        )
+                part.exercicis = exercicis
 
         # Verificar que totes les parts tenen contingut (advertir si no)
         for sessio in sessions:
