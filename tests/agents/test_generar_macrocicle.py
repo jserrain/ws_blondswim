@@ -343,8 +343,8 @@ def test_generar_mesocicle_sense_competicio_a_genera_build2_amb_avis(nedador_tes
         Competicio(
             id="comp1",
             nom="Competició B",
-            data_inici="2026-10-15",
-            data_fi="2026-10-17",
+            data_inici="2026-10-08",
+            data_fi="2026-10-10",
             classe="B",
             piscina="25m",
         ),
@@ -359,7 +359,7 @@ def test_generar_mesocicle_sense_competicio_a_genera_build2_amb_avis(nedador_tes
         historial=historial_test,
     )
 
-    # Verificar tipus (B a ~6.3 setmanes -> Build2)
+    # Verificar tipus (B a ~5.3 setmanes -> Build2)
     assert mesocicle.fase_objectiu == "Build2"
 
     # No hi ha avís perquè hi ha una competició B propera
