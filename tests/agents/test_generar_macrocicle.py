@@ -280,6 +280,7 @@ def test_generar_mesocicle_despres_cursa_genera_transicio(nedador_test, historia
         nom="Cursa 1",
         setmanes="1",
         dates="01/09/2026-07/09/2026",
+        tipus="Cursa",
         fase_objectiu="Cursa",
         metodologia_dominant="",
         volum_min=0,
@@ -326,8 +327,8 @@ def test_generar_mesocicle_despres_cursa_genera_transicio(nedador_test, historia
     assert len(macrocicle.mesocicles) == 2
 
 
-def test_generar_mesocicle_sense_competicio_a_genera_base_amb_avis(nedador_test, historial_test):
-    """Verifica que sense competició A genera Base amb avís."""
+def test_generar_mesocicle_sense_competicio_a_genera_build2_amb_avis(nedador_test, historial_test):
+    """Verifica que sense competició A però amb una B propera genera Build2."""
     # Crear macrocicle buit
     macrocicle = Macrocicle(
         nom="Macrocicle 2026-2027",
@@ -358,13 +359,86 @@ def test_generar_mesocicle_sense_competicio_a_genera_base_amb_avis(nedador_test,
         historial=historial_test,
     )
 
+    # Verificar tipus (B a ~6.3 setmanes -> Build2)
+    assert mesocicle.fase_objectiu == "Build2"
+
+    # No hi ha avís perquè hi ha una competició B propera
+    assert len(avisos) == 0
+
+
+def test_generar_mesocicle_sense_competicio_a_ni_b_genera_base_amb_avis(nedador_test, historial_test):
+    """Verifica que sense competició A ni B genera Base amb avís."""
+    # Crear macrocicle buit
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[],
+    )
+
+    # Només competició C
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició C",
+            data_inici="2026-10-15",
+            data_fi="2026-10-17",
+            classe="C",
+            piscina="25m",
+        ),
+    ]
+
+    # Generar mesocicle
+    mesocicle, avisos = generar_mesocicle(
+        nedador=nedador_test,
+        macrocicle=macrocicle,
+        competicions=competicions,
+        enriquir_amb_llm=False,
+        historial=historial_test,
+    )
+
     # Verificar tipus
     assert mesocicle.fase_objectiu == "Base"
 
     # Verificar avís
     assert len(avisos) == 1
-    assert avisos[0]["tipus_avis"] == "cap_competicio_a_restant"
-    assert "No queda cap competició classe A" in avisos[0]["missatge"]
+    assert avisos[0]["tipus_avis"] == "cap_competicio_a_ni_b_restant"
+    assert "No queda cap competició classe A ni B" in avisos[0]["missatge"]
+
+
+def test_generar_mesocicle_competicio_b_a_8_setmanes_genera_build1(nedador_test, historial_test):
+    """Verifica que una competició B a 8 setmanes (i cap A) genera Build1."""
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-01",
+        data_fi="2027-06-30",
+        mesocicles=[],
+    )
+
+    # B a 8 setmanes vista (2026-09-01 + 56 dies = 2026-10-27)
+    competicions = [
+        Competicio(
+            id="comp1",
+            nom="Competició B a 8 setmanes",
+            data_inici="2026-10-27",
+            data_fi="2026-10-29",
+            classe="B",
+            piscina="25m",
+        ),
+    ]
+
+    mesocicle, avisos = generar_mesocicle(
+        nedador=nedador_test,
+        macrocicle=macrocicle,
+        competicions=competicions,
+        enriquir_amb_llm=False,
+        historial=historial_test,
+    )
+
+    assert mesocicle.fase_objectiu == "Build1"
+    assert len(avisos) == 0
 
 
 def test_generar_mesocicle_enriquir_amb_llm_canvia_fase_objectiu(nedador_test, historial_test):

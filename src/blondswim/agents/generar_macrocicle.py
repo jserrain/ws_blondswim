@@ -456,13 +456,13 @@ def generar_mesocicle(
     data_inici_mesocicle = data_inici_macro + timedelta(weeks=setmanes_assignades)
     setmana_inici = setmanes_assignades + 1
 
-    # 2. Calcular setmanes fins la propera competició A
+    # 2. Calcular setmanes fins la propera competició A (per Peak/Cursa/Transicio)
     competicions_a = [c for c in competicions if c.classe == "A"]
     competicions_a_ordenades = sorted(competicions_a, key=lambda c: c.data_inici)
-    
+
     propera_comp_a = None
     setmanes_fins_a = None
-    
+
     for comp in competicions_a_ordenades:
         data_comp = datetime.fromisoformat(comp.data_inici)
         if data_comp >= data_inici_mesocicle:
@@ -471,24 +471,39 @@ def generar_mesocicle(
             setmanes_fins_a = dies_fins_comp / 7.0
             break
 
+    # 2b. Calcular setmanes fins la propera competició A O B (per Base/Build1/Build2)
+    competicions_ab = [c for c in competicions if c.classe in ("A", "B")]
+    competicions_ab_ordenades = sorted(competicions_ab, key=lambda c: c.data_inici)
+
+    propera_comp_ab = None
+    setmanes_fins_ab = None
+
+    for comp in competicions_ab_ordenades:
+        data_comp = datetime.fromisoformat(comp.data_inici)
+        if data_comp >= data_inici_mesocicle:
+            propera_comp_ab = comp
+            dies_fins_comp = (data_comp - data_inici_mesocicle).days
+            setmanes_fins_ab = dies_fins_comp / 7.0
+            break
+
     # 3. Classificació determinista del tipus
     ultim_mesocicle = macrocicle.mesocicles[-1] if macrocicle.mesocicles else None
-    
-    if ultim_mesocicle and ultim_mesocicle.fase_objectiu == "Cursa":
+
+    if ultim_mesocicle and ultim_mesocicle.tipus == "Cursa":
         tipus = "Transicio"
-    elif propera_comp_a is None:
+    elif propera_comp_a is not None and setmanes_fins_a <= 0:
+        tipus = "Cursa"
+    elif propera_comp_a is not None and setmanes_fins_a <= 3:
+        tipus = "Peak"
+    elif propera_comp_ab is None:
         tipus = "Base"
         avisos.append({
-            "tipus_avis": "cap_competicio_a_restant",
-            "missatge": "No queda cap competició classe A al calendari. Generant mesocicle Base.",
+            "tipus_avis": "cap_competicio_a_ni_b_restant",
+            "missatge": "No queda cap competició classe A ni B al calendari. Generant mesocicle Base.",
         })
-    elif setmanes_fins_a <= 0:
-        tipus = "Cursa"
-    elif setmanes_fins_a <= 3:
-        tipus = "Peak"
-    elif setmanes_fins_a <= 6:
+    elif setmanes_fins_ab <= 6:
         tipus = "Build2"
-    elif setmanes_fins_a <= 10:
+    elif setmanes_fins_ab <= 10:
         tipus = "Build1"
     else:
         tipus = "Base"
