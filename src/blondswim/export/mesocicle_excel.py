@@ -1,6 +1,5 @@
 """Export mesocicle data to Excel format."""
 
-import re
 from contextlib import suppress
 from datetime import date, timedelta
 from pathlib import Path
@@ -11,6 +10,7 @@ from openpyxl.styles import Font
 from blondswim.models.macrocicle import Mesocicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import Sessio
+from blondswim.utils.dates import parsejar_rang_dates
 
 _DIES_ORDRE = {
     "dilluns": 0,
@@ -32,28 +32,6 @@ _COLUMNES = [
     "Dia", "Treball", "Execució", "Descans", "Material",
     "Intensitat", "Objectiu", "Temps (min)", "Volum (m)",
 ]
-
-
-def _parsejar_rang_dates(dates: str) -> tuple[date, date]:
-    """
-    Parseja Microcicle.dates en un dels dos formats possibles:
-    - "21-27/09/2026" (mateix mes)
-    - "28/09-04/10/2026" (creua mes)
-
-    Retorna (data_inici, data_fi). Llança ValueError si el format no
-    es reconeix.
-    """
-    m = re.match(r"^(\d{1,2})-(\d{1,2})/(\d{1,2})/(\d{4})$", dates)
-    if m:
-        dia_ini, dia_fi, mes, any_ = (int(x) for x in m.groups())
-        return date(any_, mes, dia_ini), date(any_, mes, dia_fi)
-
-    m = re.match(r"^(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{1,2})/(\d{4})$", dates)
-    if m:
-        dia_ini, mes_ini, dia_fi, mes_fi, any_ = (int(x) for x in m.groups())
-        return date(any_, mes_ini, dia_ini), date(any_, mes_fi, dia_fi)
-
-    raise ValueError(f"Format de dates no reconegut: {dates!r}")
 
 
 def _etiqueta_mes(data_inici: date, data_fi: date) -> str:
@@ -123,7 +101,7 @@ def exportar_mesocicle_excel(
         data_fi = None
         if microcicle:
             try:
-                data_inici, data_fi = _parsejar_rang_dates(microcicle.dates)
+                data_inici, data_fi = parsejar_rang_dates(microcicle.dates)
             except ValueError:
                 data_inici = None
 

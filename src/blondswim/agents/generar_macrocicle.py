@@ -1,7 +1,7 @@
 """Generació de macrocicles a partir del calendari de competicions."""
 
 import logging
-from datetime import date, timedelta
+from datetime import date
 
 from blondswim.agents import context_competicio, periodificacio
 from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
@@ -9,6 +9,7 @@ from blondswim.models.calendari import Competicio
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador
+from blondswim.utils.dates import seguent_dilluns
 
 logger = logging.getLogger(__name__)
 
@@ -537,13 +538,13 @@ def generar_mesocicle(
     enriquir_amb_llm: bool = True,
     historial: list[SessioRealitzada] | None = None,
     data_referencia: date | None = None,
-    dies_marge: int = 1,
 ) -> tuple[Mesocicle, list[dict]]:
     """
-    Genera UN sol mesocicle: el bloc que conté la data de referència + marge.
+    Genera UN sol mesocicle: el bloc que conté el primer dia de planificació.
 
-    1. Calcula inici_generacio = data_referencia + dies_marge dies
-       (data_referencia = date.today() si és None).
+    1. Calcula inici_generacio = seguent_dilluns(data_referencia) (G2):
+       la mateixa data si és dilluns, si no el dilluns següent
+       (data_referencia = avui si és None). Mai es comença a mitja setmana.
     2. Crida periodificar_temporada() UNA vegada per obtenir tots els
        SetmanaPlan de la temporada.
     3. Busca el bloc que conté inici_generacio i construeix el Mesocicle
@@ -558,8 +559,7 @@ def generar_mesocicle(
         competicions: Llista de totes les competicions del calendari
         enriquir_amb_llm: Si True, enriquir fase_objectiu amb LLM (default: True)
         historial: Historial de sessions realitzades per estimar volums (default: None)
-        data_referencia: Data de referència (default: None -> date.today())
-        dies_marge: Dies de marge afegits a data_referencia (default: 1)
+        data_referencia: Data de referència (default: None -> avui)
 
     Returns:
         Tupla amb:
@@ -575,7 +575,7 @@ def generar_mesocicle(
     if data_referencia is None:
         data_referencia = periodificacio.avui()
 
-    inici_generacio = data_referencia + timedelta(days=dies_marge)
+    inici_generacio = seguent_dilluns(data_referencia)
 
     data_inici = date.fromisoformat(macrocicle.data_inici)
     data_fi = date.fromisoformat(macrocicle.data_fi)

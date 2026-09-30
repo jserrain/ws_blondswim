@@ -17,6 +17,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from blondswim.models.calendari import Competicio
+from blondswim.utils.dates import dilluns_setmana
 
 Fase = Literal["Base", "Build1", "Build2", "Peak", "Cursa", "Transicio"]
 
@@ -51,7 +52,7 @@ def avui() -> date:
 
 def _dilluns_de(data: date) -> date:
     """Retorna el dilluns de la setmana ISO que conté `data`."""
-    return data - timedelta(days=data.weekday())
+    return dilluns_setmana(data)
 
 
 def _repartir_blocs(n_setmanes: int) -> list[int]:

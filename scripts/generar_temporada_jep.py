@@ -10,7 +10,7 @@ mesura que avança la temporada real) -> exportar_mesocicle_excel().
 import argparse
 import json
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 import anthropic
@@ -27,6 +27,7 @@ from blondswim.export.mesocicle_excel import exportar_mesocicle_excel
 from blondswim.models.calendari import Competicio
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.nedador import Nedador
+from blondswim.utils.dates import seguent_dilluns
 
 TEMPORADA_DATA_INICI = "2026-08-18"
 TEMPORADA_DATA_FI = "2027-07-09"
@@ -98,7 +99,7 @@ def main() -> int:
 
     print("\n3. Periodificant la temporada...")
     data_ref_efectiva = data_referencia or avui()
-    inici_generacio = data_ref_efectiva + timedelta(days=1)
+    inici_generacio = seguent_dilluns(data_ref_efectiva)
     inici_finestra = max(
         _dilluns_de(date.fromisoformat(TEMPORADA_DATA_INICI)),
         _dilluns_de(inici_generacio),

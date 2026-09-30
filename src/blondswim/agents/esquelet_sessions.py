@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from blondswim.models.macrocicle import Microcicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import EstructuraSessio, PartSessio, Sessio
+from blondswim.utils.dates import parsejar_rang_dates
 
 _DIES_ORDRE = {
     "dilluns": 0,
@@ -77,10 +78,8 @@ def _assignar_rols(dies_actius: list[str]) -> dict[str, str]:
 
 def _dilluns_microcicle(microcicle: Microcicle) -> date | None:
     """Retorna el dilluns del microcicle a partir del camp `dates`."""
-    from blondswim.export.mesocicle_excel import _parsejar_rang_dates
-
     try:
-        dilluns, _ = _parsejar_rang_dates(microcicle.dates)
+        dilluns, _ = parsejar_rang_dates(microcicle.dates)
         return dilluns
     except ValueError:
         return None

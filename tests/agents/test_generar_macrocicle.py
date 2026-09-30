@@ -230,7 +230,7 @@ def test_generar_mesocicle_enriquir_amb_llm_canvia_fase_objectiu(nedador_test, h
             competicions=competicions,
             enriquir_amb_llm=True,
             historial=historial_test,
-            data_referencia=date(2026, 9, 30),
+            data_referencia=date(2026, 9, 28),
         )
 
     # Verificar que s'ha cridat l'API
@@ -275,7 +275,7 @@ def test_generar_mesocicle_sense_enriquir_llm_no_crida_api(nedador_test, histori
             competicions=competicions,
             enriquir_amb_llm=False,
             historial=historial_test,
-            data_referencia=date(2026, 9, 30),
+            data_referencia=date(2026, 9, 28),
         )
 
     # Verificar que NO s'ha cridat l'API
@@ -322,7 +322,7 @@ def test_generar_mesocicle_fallback_si_llm_falla(nedador_test, historial_test):
             competicions=competicions,
             enriquir_amb_llm=True,
             historial=historial_test,
-            data_referencia=date(2026, 9, 30),
+            data_referencia=date(2026, 9, 28),
         )
 
     # Verificar que fase_objectiu és el determinista (fallback)
@@ -362,7 +362,7 @@ def test_generar_mesocicle_sense_historial_volums_de_taula(nedador_test):
         competicions=competicions,
         enriquir_amb_llm=False,
         historial=None,
-        data_referencia=date(2026, 9, 30),
+        data_referencia=date(2026, 9, 28),
     )
 
     # El bloc Base conté només la setmana 40 (bloc curt, 1 setmana de càrrega):
@@ -406,7 +406,7 @@ def test_generar_mesocicle_peak_retalla_volums(
         competicions=competicions,
         enriquir_amb_llm=False,
         historial=historial_test,
-        data_referencia=date(2026, 9, 1),
+        data_referencia=date(2026, 8, 31),
     )
 
     assert mesocicle.fase_objectiu == "Peak"
@@ -660,7 +660,7 @@ def test_generar_mesocicle_omple_microcicles_i_tipus(nedador_test, historial_tes
         competicions=competicions,
         enriquir_amb_llm=False,
         historial=historial_test,
-        data_referencia=date(2026, 9, 30),
+        data_referencia=date(2026, 9, 28),
     )
 
     # El camp tipus ha d'estar fixat
@@ -675,7 +675,7 @@ def test_generar_mesocicle_omple_microcicles_i_tipus(nedador_test, historial_tes
 
 
 def test_generar_mesocicle_data_referencia_30_09_2026(nedador_test, historial_test):
-    """Amb data_referencia=30/09/2026 genera el bloc Base 40-42 amb sessions_des_de."""
+    """G2: un dimecres (30/09/2026) la planificació comença el dilluns següent (05/10)."""
     macrocicle = Macrocicle(
         nom="Macrocicle 2026-2027",
         temporada="2026-2027",
@@ -705,14 +705,10 @@ def test_generar_mesocicle_data_referencia_30_09_2026(nedador_test, historial_te
     )
 
     assert mesocicle.tipus == "Base"
-    assert len(mesocicle.microcicles) == 3
-    assert [m.dates for m in mesocicle.microcicles] == [
-        "28/09-04/10/2026",
-        "05-11/10/2026",
-        "12-18/10/2026",
-    ]
-    assert mesocicle.microcicles[0].sessions_des_de == date(2026, 10, 1)
+    assert mesocicle.microcicles[0].dates == "05-11/10/2026"
+    assert mesocicle.microcicles[0].sessions_des_de == date(2026, 10, 5)
     assert all(m.sessions_des_de is None for m in mesocicle.microcicles[1:])
+    assert "28/09-04/10/2026" not in [m.dates for m in mesocicle.microcicles]
 
 
 def test_generar_mesocicle_data_referencia_none_usa_today(
@@ -752,7 +748,7 @@ def test_generar_mesocicle_data_referencia_none_usa_today(
     )
 
     assert mesocicle.tipus == "Base"
-    assert mesocicle.microcicles[0].sessions_des_de == date(2026, 10, 1)
+    assert mesocicle.microcicles[0].sessions_des_de == date(2026, 10, 5)
 
 
 # --- F1 + F2: paràmetres de volum i terra setmanal ---
