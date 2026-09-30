@@ -9,7 +9,7 @@ from blondswim.models.nedador import Nedador
 
 @pytest.fixture
 def nedador_base() -> Nedador:
-    """Nedador amb configuració estàndard (4 dies + dissabte opcional)."""
+    """Nedador amb configuració estàndard (4 dies, sense dia opcional)."""
     return Nedador(
         id="test",
         nom="Test Nedador",
@@ -18,7 +18,7 @@ def nedador_base() -> Nedador:
         proves_objectiu=["100m lliure"],
         mode_ritme="temps",
         dies_disponibles=["dilluns", "dimarts", "dimecres", "dijous"],
-        dia_opcional="dissabte",
+        dia_opcional=None,
     )
 
 
@@ -51,16 +51,16 @@ def test_setmana_qualitat_totes_sessions_qualitat(nedador_base):
 
     sessions = generar_esquelet_sessions(nedador_base, microcicle)
 
-    # 5 sessions (4 dies + 1 opcional)
-    assert len(sessions) == 5
+    # 4 sessions (només dies_disponibles)
+    assert len(sessions) == 4
 
     # Totes haurien de ser tipus_sessio="qualitat"
     for sessio in sessions:
         assert sessio.tipus_sessio == "qualitat"
 
 
-def test_setmana_carrega_amb_dies_qualitat_dc_i_opcional_son_qualitat(nedador_base):
-    """Setmana càrrega amb dies_qualitat=True: dimecres i dissabte són qualitat."""
+def test_setmana_carrega_amb_dies_qualitat_dc_es_qualitat(nedador_base):
+    """Setmana càrrega amb dies_qualitat=True: dimecres és qualitat."""
     microcicle = Microcicle(
         setmana=2,
         dates="8-14/10/2026",
@@ -73,11 +73,11 @@ def test_setmana_carrega_amb_dies_qualitat_dc_i_opcional_son_qualitat(nedador_ba
 
     sessions = generar_esquelet_sessions(nedador_base, microcicle)
 
-    assert len(sessions) == 5
+    assert len(sessions) == 4
 
-    # Dimecres i dissabte haurien de ser "qualitat"
+    # Dimecres hauria de ser "qualitat", la resta "carrega"
     for sessio in sessions:
-        if sessio.dia in ["dimecres", "dissabte"]:
+        if sessio.dia == "dimecres":
             assert sessio.tipus_sessio == "qualitat"
         else:
             assert sessio.tipus_sessio == "carrega"
@@ -97,7 +97,7 @@ def test_setmana_carrega_sense_dies_qualitat_totes_carrega(nedador_base):
 
     sessions = generar_esquelet_sessions(nedador_base, microcicle)
 
-    assert len(sessions) == 5
+    assert len(sessions) == 4
 
     # Totes haurien de ser "carrega"
     for sessio in sessions:
@@ -118,7 +118,7 @@ def test_setmana_descarrega_totes_descarrega(nedador_base):
 
     sessions = generar_esquelet_sessions(nedador_base, microcicle)
 
-    assert len(sessions) == 5
+    assert len(sessions) == 4
 
     # Totes haurien de ser "descarrega"
     for sessio in sessions:
@@ -139,7 +139,7 @@ def test_setmana_taper_percentatges_descarrega(nedador_base):
 
     sessions = generar_esquelet_sessions(nedador_base, microcicle)
 
-    assert len(sessions) == 5
+    assert len(sessions) == 4
 
     # Totes haurien de ser tipus_sessio="taper"
     for sessio in sessions:
@@ -163,11 +163,10 @@ def test_nombre_sessions_coincideix_amb_dies_actius(nedador_base, nedador_sense_
         test_css=False,
     )
 
-    # Nedador amb opcional: 4 + 1 = 5 sessions
+    # Ambdós nedadors tenen 4 dies disponibles -> 4 sessions
     sessions_amb_opcional = generar_esquelet_sessions(nedador_base, microcicle)
-    assert len(sessions_amb_opcional) == 5
+    assert len(sessions_amb_opcional) == 4
 
-    # Nedador sense opcional: 4 sessions
     sessions_sense_opcional = generar_esquelet_sessions(nedador_sense_opcional, microcicle)
     assert len(sessions_sense_opcional) == 4
 
@@ -179,7 +178,7 @@ def test_suma_volum_total_sessions_igual_volum_objectiu(nedador_base):
         dates="1-7/10/2026",
         mesocicle_id="meso1",
         tipus_base="carrega",
-        volum_objectiu=15123,  # Nombre que no es divideix exactament per 5
+        volum_objectiu=15123,  # Nombre que no es divideix exactament per 4
         dies_qualitat=False,
         test_css=False,
     )
@@ -257,11 +256,11 @@ def test_id_sessio_format_correcte(nedador_base):
         # Format: {mesocicle_id}_s{setmana}_{dia}
         assert sessio.id.startswith("meso2_s3_")
         assert sessio.microcicle_setmana == 3
-        assert sessio.dia in ["dilluns", "dimarts", "dimecres", "dijous", "dissabte"]
+        assert sessio.dia in ["dilluns", "dimarts", "dimecres", "dijous"]
 
 
-def test_es_dia_opcional_marcat_correctament(nedador_base, nedador_sense_opcional):
-    """Només la sessió del dia_opcional té es_dia_opcional=True."""
+def test_cap_sessio_es_dia_opcional(nedador_base, nedador_sense_opcional):
+    """Amb 4 dies d'aigua, cap sessió és dia opcional."""
     microcicle = Microcicle(
         setmana=1,
         dates="1-7/10/2026",
@@ -272,17 +271,10 @@ def test_es_dia_opcional_marcat_correctament(nedador_base, nedador_sense_opciona
         test_css=False,
     )
 
-    # Nedador amb dia opcional (dissabte)
     sessions_amb_opcional = generar_esquelet_sessions(nedador_base, microcicle)
-    
     for sessio in sessions_amb_opcional:
-        if sessio.dia == "dissabte":
-            assert sessio.es_dia_opcional is True
-        else:
-            assert sessio.es_dia_opcional is False
+        assert sessio.es_dia_opcional is False
 
-    # Nedador sense dia opcional
     sessions_sense_opcional = generar_esquelet_sessions(nedador_sense_opcional, microcicle)
-    
     for sessio in sessions_sense_opcional:
         assert sessio.es_dia_opcional is False
