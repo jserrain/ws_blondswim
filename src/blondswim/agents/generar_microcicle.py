@@ -751,12 +751,21 @@ def generar_microcicle(
 
         # Cridar API
         client = get_llm_client()
+        max_tokens = 4096
         response = client.messages.create(
             model=DEFAULT_MODEL,
-            max_tokens=4096,
+            max_tokens=max_tokens,
             tools=tools,
             tool_choice={"type": "tool", "name": "retornar_contingut_sessions"},
             messages=[{"role": "user", "content": prompt}],
+        )
+
+        # Log de diagnòstic de la resposta de l'API
+        usage = getattr(response, "usage", None)
+        output_tokens = getattr(usage, "output_tokens", None) if usage else None
+        logger.info(
+            f"Resposta API setmana {setmana}: stop_reason={response.stop_reason}, "
+            f"output_tokens={output_tokens}, max_tokens={max_tokens}"
         )
 
         # Parsejar resposta
@@ -773,6 +782,11 @@ def generar_microcicle(
 
         sessions_data = tool_use_block.input.get("sessions", [])
 
+        logger.info(
+            f"Setmana {setmana}: sessions rebudes={len(sessions_data)}, "
+            f"esperades={len(sessions)}"
+        )
+
         # Aplicar contingut a les sessions originals
         for sessio_data in sessions_data:
             sessio_id = sessio_data.get("sessio_id")
@@ -781,7 +795,10 @@ def generar_microcicle(
             # Buscar sessió corresponent
             sessio = next((s for s in sessions if s.id == sessio_id), None)
             if not sessio:
-                logger.warning(f"Sessió amb ID '{sessio_id}' no trobada, ignorant")
+                logger.warning(
+                    f"Sessió amb ID '{sessio_id}' no trobada, ignorant. "
+                    f"IDs esperats: {[s.id for s in sessions]}"
+                )
                 continue
 
             # Aplicar exercicis a cada part
@@ -793,24 +810,34 @@ def generar_microcicle(
                 part = next((p for p in sessio.estructura.parts if p.nom == nom_part), None)
                 if not part:
                     logger.warning(
-                        f"Part '{nom_part}' no trobada a sessió '{sessio_id}', ignorant"
+                        f"Part '{nom_part}' no trobada a sessió '{sessio_id}', ignorant. "
+                        f"Noms esperats: {[p.nom for p in sessio.estructura.parts]}"
                     )
                     continue
 
                 exercicis = []
+                n_rebuts = len(exercicis_data)
+                n_descartats = 0
                 for ex_data in exercicis_data:
                     try:
                         exercicis.append(Exercici(**ex_data))
                     except ValidationError as e:
+                        n_descartats += 1
                         logger.warning(
                             f"Exercici invàlid a sessió '{sessio_id}', part '{nom_part}', ignorat: {e}"
                         )
                 part.exercicis = exercicis
 
+                logger.info(
+                    f"Setmana {setmana}, sessió '{sessio_id}', part '{nom_part}': "
+                    f"exercicis rebuts={n_rebuts}, vàlids={len(exercicis)}, "
+                    f"descartats={n_descartats}"
+                )
+
         # Verificar que totes les parts tenen contingut (advertir si no)
         for sessio in sessions:
             for part in sessio.estructura.parts:
-                if part.contingut is None:
+                if not part.exercicis:
                     logger.warning(
                         f"Part '{part.nom}' de sessió '{sessio.id}' sense contingut assignat"
                     )
