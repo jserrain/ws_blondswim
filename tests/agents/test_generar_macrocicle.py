@@ -325,8 +325,8 @@ def test_generar_mesocicle_fallback_si_llm_falla(nedador_test, historial_test):
 
 
 
-def test_generar_mesocicle_sense_historial_volums_zero(nedador_test):
-    """Verifica que sense històric els volums són 0 i apareix l'avís."""
+def test_generar_mesocicle_sense_historial_volums_de_taula(nedador_test):
+    """Sense històric els volums surten de la taula i s'avisa de l'ACWR omès."""
     macrocicle = Macrocicle(
         nom="Macrocicle 2026-2027",
         temporada="2026-2027",
@@ -355,15 +355,12 @@ def test_generar_mesocicle_sense_historial_volums_zero(nedador_test):
         data_referencia=date(2026, 9, 30),
     )
 
-    assert mesocicle.volum_min == 0
-    assert mesocicle.volum_max == 0
-    assert mesocicle.volum_mitja_previst == 0
+    # El bloc Base conté només la setmana 40 (bloc curt): volum = min de Base.
+    assert mesocicle.volum_min == 12000
+    assert mesocicle.volum_max == 12000
 
-    avisos_historial = [
-        a for a in avisos if a.get("tipus_avis") == "sense_historial"
-    ]
-    assert len(avisos_historial) == 1
-    assert "Sense històric del nedador" in avisos_historial[0]["missatge"]
+    avisos_acwr = [a for a in avisos if a.get("tipus_avis") == "acwr_omet"]
+    assert len(avisos_acwr) == 1
 
 
 def test_generar_mesocicle_peak_retalla_volums(
@@ -401,10 +398,11 @@ def test_generar_mesocicle_peak_retalla_volums(
     )
 
     assert mesocicle.fase_objectiu == "Peak"
-    # Base: 12000 / 13200 / 12600 -> Peak (50%): 6000 / 6600 / 6300
-    assert mesocicle.volum_min == 6000
-    assert mesocicle.volum_max == 6600
-    assert mesocicle.volum_mitja_previst == 6300
+    # Peak: VOLUM_REFERENCIA_TAPER (13000) × FACTORS_PEAK.
+    # El bloc Peak té 2 setmanes: 13000×0.60=7800 i 13000×0.45=5850.
+    assert mesocicle.volum_min == 5850
+    assert mesocicle.volum_max == 7800
+    assert mesocicle.volum_mitja_previst == 6825
 
 
 def _crear_mesocicle(
@@ -481,11 +479,12 @@ def test_generar_microcicles_base_4_setmanes():
     assert microcicles[0].test_css is True
     assert all(not m.test_css for m in microcicles[1:])
 
-    # Volum creixent a les 3 primeres, cau a la 4a
+    # Base (12000, 14000) interpolat sobre 3 setmanes de càrrega: 12000/13000/14000
     assert microcicles[0].volum_objectiu == 12000
-    assert microcicles[1].volum_objectiu == 13500
-    assert microcicles[2].volum_objectiu == 15000
-    assert microcicles[3].volum_objectiu == round(12000 * 0.7)
+    assert microcicles[1].volum_objectiu == 13000
+    assert microcicles[2].volum_objectiu == 14000
+    # Descàrrega = 0.7 × càrrega anterior (14000) = 9800
+    assert microcicles[3].volum_objectiu == 9800
 
     # dies_qualitat False per Base
     assert all(not m.dies_qualitat for m in microcicles)

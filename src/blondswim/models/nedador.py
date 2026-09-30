@@ -72,3 +72,4 @@ class Nedador(BaseModel):
     ritmes_cursa_objectiu: list[RitmeCursaObjectiu] = []
     dies_disponibles: list[str] = ["dilluns", "dimarts", "dimecres", "dijous"]
     dia_opcional: str | None = None
+    piscina_m: int = 25

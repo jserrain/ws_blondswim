@@ -12,18 +12,33 @@ from blondswim.models.nedador import Nedador
 
 logger = logging.getLogger(__name__)
 
-PERCENTATGES_VOLUM_PER_TIPUS: dict[str, float] = {
-    "Base": 1.0,
-    "Build1": 0.95,
-    "Build2": 0.85,
-    "Peak": 0.5,
-    "Transicio": 0.4,
-    "Cursa": 0.35,
+# Volum setmanal (min, max) per fase de càrrega. La progressió dins la fase
+# s'interpola linealment entre min i max al llarg de TOTES les setmanes de
+# càrrega de la fase (no per bloc).
+VOLUM_SETMANAL_CARREGA: dict[str, tuple[int, int]] = {
+    "Base": (12000, 14000),
+    "Build1": (12500, 13500),
+    "Build2": (12000, 13000),
 }
 
-# Progressió de volum dins d'un mesocicle: el volum màxim és un 10% superior
-# al mínim (el nedador només entrena els dies_disponibles, sense dia opcional).
-PROGRESSIO_BLOC: float = 1.10
+# Setmana de descàrrega: -30% respecte la setmana de càrrega anterior del bloc.
+FACTOR_DESCARREGA: float = 0.7
+
+# Setmana amb prova B: -20%. Si coincideix amb descàrrega s'aplica el mínim
+# dels dos factors (no el producte).
+FACTOR_PROVA_B: float = 0.8
+
+# Volum de referència per a les fases de taper/cursa/transició.
+VOLUM_REFERENCIA_TAPER: int = 13000
+
+# Factors de taper per setmana de Peak (Bosquet 2007): -40%, -55%.
+FACTORS_PEAK: list[float] = [0.60, 0.45]
+
+FACTOR_CURSA: float = 0.5
+FACTOR_TRANSICIO: float = 0.5
+
+# Llindar de l'Acute:Chronic Workload Ratio per limitar pics de volum.
+ACWR_MAX: float = 1.3
 
 
 def _arrodonir_a_25(volum: float) -> int:
@@ -31,38 +46,48 @@ def _arrodonir_a_25(volum: float) -> int:
     return round(volum / 25) * 25
 
 
-def _calcular_volums_mesocicle(
-    nedador: Nedador,
+def _volum_carrega_fase(
+    fase: str,
+    index_carrega: int,
+    n_carrega: int,
+) -> int:
+    """
+    Volum d'una setmana de càrrega d'una fase Base/Build1/Build2.
+
+    Interpolació lineal entre el min i el max de la fase al llarg de les
+    n_carrega setmanes de càrrega de la fase (index_carrega 0-based).
+    """
+    vmin, vmax = VOLUM_SETMANAL_CARREGA[fase]
+    if n_carrega <= 1:
+        return _arrodonir_a_25(vmax)
+    volum = vmin + (vmax - vmin) * index_carrega / (n_carrega - 1)
+    return _arrodonir_a_25(volum)
+
+
+def _volum_peak(index_dins_bloc: int) -> int:
+    """Volum d'una setmana de Peak segons FACTORS_PEAK (últim factor si cal)."""
+    factor = FACTORS_PEAK[min(index_dins_bloc, len(FACTORS_PEAK) - 1)]
+    return _arrodonir_a_25(VOLUM_REFERENCIA_TAPER * factor)
+
+
+def _volum_historic_setmanal(
     historial: list[SessioRealitzada],
-    tipus: str,
-    percentatges: dict[str, float] = PERCENTATGES_VOLUM_PER_TIPUS,
-) -> tuple[int, int, int]:
+) -> dict[tuple[int, int], int]:
     """
-    Calcula (volum_min, volum_max, volum_mitja_previst) per un mesocicle
-    d'un tipus donat.
+    Agrupa l'històric real per setmana ISO i suma el volum total setmanal.
 
-    volum_per_sessio = mitjana de SessioRealitzada.volum_total_m sobre
-    tot l'històric rebut (si l'històric és buit, retorna (0, 0, 0)).
-
-    volum_min = volum_per_sessio × len(nedador.dies_disponibles) × pct_fase
-    volum_max = _arrodonir_a_25(volum_min × PROGRESSIO_BLOC)
-    volum_mitja_previst = mitjana(volum_min, volum_max)
-
-    Tots tres valors s'arrodoneixen a múltiples de 25m.
+    Retorna {(any_iso, setmana_iso): volum_total_m}.
     """
-    if not historial:
-        return 0, 0, 0
-
-    volum_per_sessio = sum(s.volum_total_m for s in historial) / len(historial)
-
-    dies_base = len(nedador.dies_disponibles)
-    factor = percentatges.get(tipus, 1.0)
-    
-    volum_min = _arrodonir_a_25(volum_per_sessio * dies_base * factor)
-    volum_max = _arrodonir_a_25(volum_min * PROGRESSIO_BLOC)
-    volum_mitja_previst = _arrodonir_a_25((volum_min + volum_max) / 2)
-
-    return volum_min, volum_max, volum_mitja_previst
+    setmanes: dict[tuple[int, int], int] = {}
+    for sessio in historial:
+        try:
+            data = date.fromisoformat(sessio.data)
+        except (ValueError, TypeError):
+            continue
+        any_iso, setmana_iso, _ = data.isocalendar()
+        clau = (any_iso, setmana_iso)
+        setmanes[clau] = setmanes.get(clau, 0) + sessio.volum_total_m
+    return setmanes
 
 
 def generar_macrocicle(
@@ -232,13 +257,6 @@ Retorna NOMÉS la descripció ampliada usant la tool retornar_fase_objectiu."""
         return mesocicle.fase_objectiu
 
 
-def _interpolar_volum(volum_inici: int, volum_fi: int, index: int, total: int) -> int:
-    """Interpolació lineal entre volum_inici i volum_fi en total passos."""
-    if total <= 1:
-        return volum_fi
-    return round(volum_inici + (volum_fi - volum_inici) * index / (total - 1))
-
-
 def _format_dates(dilluns: date, diumenge: date) -> str:
     """Format de dates d'un microcicle: 'DD-DD/MM/YYYY' o 'DD/MM-DD/MM/YYYY'."""
     if dilluns.month == diumenge.month:
@@ -280,54 +298,45 @@ def _tipus_base_i_notes(
 
 def _volum_setmana(
     plan: periodificacio.SetmanaPlan,
-    mesocicle: Mesocicle,
-    n_setmanes_bloc: int,
+    index_carrega_fase: int,
+    n_carrega_fase: int,
+    volum_carrega_anterior: int | None,
 ) -> int:
     """
     Volum objectiu d'una setmana del bloc, amb R4 (proves B) aplicat.
 
-    - Descàrrega: 70% de volum_min.
-    - Base/Build1/Build2 (càrrega): interpolació min->max dins el bloc.
-    - Peak: interpolació max->min (decreixent cap a la cursa).
-    - Cursa/Transicio: volum_mitja_previst.
+    - Base/Build1/Build2 (càrrega): interpolació min->max de la fase al llarg
+      de totes les setmanes de càrrega de la fase.
+    - Descàrrega: FACTOR_DESCARREGA × setmana de càrrega anterior del bloc.
+    - Peak: VOLUM_REFERENCIA_TAPER × FACTORS_PEAK[index_dins_bloc].
+    - Cursa/Transicio: VOLUM_REFERENCIA_TAPER × factor.
+    - Prova B: × FACTOR_PROVA_B; si també és descàrrega, min dels dos factors.
     """
     fase = plan.fase
 
     if fase in ("Base", "Build1", "Build2"):
         if plan.es_descarrega:
-            volum = round(mesocicle.volum_min * 0.7)
+            base = volum_carrega_anterior
+            if base is None:
+                base = _volum_carrega_fase(fase, 0, max(1, n_carrega_fase))
+            volum = _arrodonir_a_25(base * FACTOR_DESCARREGA)
         else:
-            n_carrega = max(1, n_setmanes_bloc - 1)
-            if n_carrega == 1:
-                volum = mesocicle.volum_max
-            else:
-                volum = _interpolar_volum(
-                    mesocicle.volum_min,
-                    mesocicle.volum_max,
-                    plan.index_dins_bloc,
-                    n_carrega,
-                )
+            volum = _volum_carrega_fase(fase, index_carrega_fase, n_carrega_fase)
     elif fase == "Peak":
-        if n_setmanes_bloc <= 1:
-            volum = mesocicle.volum_mitja_previst
-        else:
-            volum = _interpolar_volum(
-                mesocicle.volum_max,
-                mesocicle.volum_min,
-                plan.index_dins_bloc,
-                n_setmanes_bloc,
-            )
-    else:  # Cursa, Transicio
-        volum = mesocicle.volum_mitja_previst
+        volum = _volum_peak(plan.index_dins_bloc)
+    elif fase == "Cursa":
+        volum = _arrodonir_a_25(VOLUM_REFERENCIA_TAPER * FACTOR_CURSA)
+    else:  # Transicio
+        volum = _arrodonir_a_25(VOLUM_REFERENCIA_TAPER * FACTOR_TRANSICIO)
 
-    # R4: setmana amb prova B -> volum x 0.8 (o el mínim si és descàrrega).
+    # R4: setmana amb prova B -> volum x FACTOR_PROVA_B (o el mínim si és descàrrega).
     te_prova_b = any(c.classe == "B" for c in plan.competicions_b_c)
     if te_prova_b:
-        volum_b = round(volum * 0.8)
         if plan.es_descarrega:
-            volum = min(volum, volum_b)
+            factor = min(FACTOR_DESCARREGA, FACTOR_PROVA_B)
+            volum = _arrodonir_a_25(volum / FACTOR_DESCARREGA * factor)
         else:
-            volum = volum_b
+            volum = _arrodonir_a_25(volum * FACTOR_PROVA_B)
 
     return volum
 
@@ -336,16 +345,20 @@ def generar_microcicles_mesocicle(
     mesocicle: Mesocicle,
     plans: list[periodificacio.SetmanaPlan],
     sessions_des_de: date | None = None,
+    plans_fase: list[periodificacio.SetmanaPlan] | None = None,
 ) -> list[Microcicle]:
     """
     Genera la llista de Microcicle (una per setmana) d'un mesocicle a partir
     dels SetmanaPlan del seu bloc.
 
     Args:
-        mesocicle: Mesocicle amb tipus i volums ja fixats
+        mesocicle: Mesocicle amb tipus ja fixat
         plans: SetmanaPlan del bloc d'aquest mesocicle (ordenats)
         sessions_des_de: Data a partir de la qual es generaran sessions
             (només s'assigna al primer microcicle)
+        plans_fase: Tots els SetmanaPlan de la mateixa fase (per interpolar el
+            volum de càrrega al llarg de la fase sencera). Si és None, s'usa
+            només el bloc.
 
     Returns:
         Llista de Microcicle ordenada per setmana ascendent
@@ -358,15 +371,39 @@ def generar_microcicles_mesocicle(
         )
 
     es_base = mesocicle.tipus == "Base"
-    n_setmanes_bloc = len(plans)
+    fase = mesocicle.tipus
+
+    # Índex de càrrega dins la fase sencera (per interpolar min->max).
+    plans_fase = plans_fase if plans_fase is not None else plans
+    plans_carrega_fase = [
+        p for p in plans_fase if not p.es_descarrega
+    ]
+    n_carrega_fase = len(plans_carrega_fase)
+    index_carrega_per_setmana = {
+        (p.any_iso, p.setmana_iso): i
+        for i, p in enumerate(plans_carrega_fase)
+    }
 
     microcicles: list[Microcicle] = []
+    volum_carrega_anterior: int | None = None
     for i, plan in enumerate(plans):
         es_primer_del_bloc = plan.index_dins_bloc == 0
         tipus_base, notes, dies_qualitat, test_css = _tipus_base_i_notes(
             plan, es_base, es_primer_del_bloc
         )
-        volum = _volum_setmana(plan, mesocicle, n_setmanes_bloc)
+
+        index_carrega = index_carrega_per_setmana.get(
+            (plan.any_iso, plan.setmana_iso), 0
+        )
+        volum = _volum_setmana(
+            plan,
+            index_carrega,
+            n_carrega_fase,
+            volum_carrega_anterior,
+        )
+
+        if fase in ("Base", "Build1", "Build2") and not plan.es_descarrega:
+            volum_carrega_anterior = volum
 
         microcicles.append(
             Microcicle(
@@ -383,6 +420,76 @@ def generar_microcicles_mesocicle(
         )
 
     return microcicles
+
+
+def _aplicar_guard_acwr(
+    microcicles: list[Microcicle],
+    historial: list[SessioRealitzada],
+    avisos: list[dict],
+) -> None:
+    """
+    Limita el volum de cada microcicle planificat perquè el ràtio
+    agut:crònic (ACWR) no superi ACWR_MAX.
+
+    - crònic = mitjana de volum setmanal de les 4 setmanes anteriors
+      (històric real per setmanes passades, planificat per la resta).
+    - Si planificat / crònic > ACWR_MAX, es capa a ACWR_MAX × crònic i
+      s'afegeix l'avís "acwr_limitat".
+    - Si no hi ha prou històric (crònic = 0), s'omet amb avís.
+    """
+    historic_setmanal = _volum_historic_setmanal(historial)
+    if not historic_setmanal:
+        avisos.append({
+            "tipus_avis": "acwr_omet",
+            "missatge": (
+                "Sense històric suficient per calcular l'ACWR; "
+                "no s'aplica el límit de càrrega aguda:crònica."
+            ),
+        })
+        return
+
+    # Volums planificats per setmana ISO (per consultar les 4 anteriors).
+    planificat: dict[tuple[int, int], int] = {}
+    for micro in microcicles:
+        any_iso = micro.setmana // 100
+        setmana_iso = micro.setmana % 100
+        planificat[(any_iso, setmana_iso)] = micro.volum_objectiu
+
+    for micro in microcicles:
+        any_iso = micro.setmana // 100
+        setmana_iso = micro.setmana % 100
+
+        # 4 setmanes anteriors (ISO, restant setmanes correctament).
+        anteriors: list[int] = []
+        any_c, setm_c = any_iso, setmana_iso
+        for _ in range(4):
+            setm_c -= 1
+            if setm_c < 1:
+                any_c -= 1
+                setm_c = 52
+            clau = (any_c, setm_c)
+            if clau in planificat:
+                anteriors.append(planificat[clau])
+            elif clau in historic_setmanal:
+                anteriors.append(historic_setmanal[clau])
+
+        if not anteriors:
+            continue
+
+        cronic = sum(anteriors) / len(anteriors)
+        if cronic <= 0:
+            continue
+
+        limit = _arrodonir_a_25(ACWR_MAX * cronic)
+        if micro.volum_objectiu > limit:
+            micro.volum_objectiu = limit
+            avisos.append({
+                "tipus_avis": "acwr_limitat",
+                "missatge": (
+                    f"Setmana {micro.setmana}: volum limitat a {limit}m "
+                    f"per ACWR (crònic {round(cronic)}m, màx {ACWR_MAX})."
+                ),
+            })
 
 
 def generar_mesocicle(
@@ -458,17 +565,7 @@ def generar_mesocicle(
     plans_bloc = [p for p in plans if p.bloc_id == bloc_id]
     tipus = plans_bloc[0].fase
 
-    # 3. Calcular volums a partir de l'històric
-    volum_min, volum_max, volum_mitja_previst = _calcular_volums_mesocicle(
-        nedador, historial, tipus
-    )
-    if not historial:
-        avisos.append({
-            "tipus_avis": "sense_historial",
-            "missatge": "Sense històric del nedador: volums del mesocicle no estimats (0).",
-        })
-
-    # 4. Crear Mesocicle
+    # 3. Crear Mesocicle (volums es deriven dels microcicles generats)
     numero_mesocicle = len(macrocicle.mesocicles) + 1
     mesocicle_id = f"meso_{numero_mesocicle}"
 
@@ -492,22 +589,35 @@ def generar_mesocicle(
         tipus=tipus,
         fase_objectiu=tipus,
         metodologia_dominant="",
-        volum_min=volum_min,
-        volum_max=volum_max,
-        volum_mitja_previst=volum_mitja_previst,
+        volum_min=0,
+        volum_max=0,
+        volum_mitja_previst=0,
         microcicles=[],
     )
 
-    # 5. Generar microcicles a partir dels SetmanaPlan del bloc.
+    # 4. Generar microcicles a partir dels SetmanaPlan del bloc.
     #    sessions_des_de només s'aplica al microcicle que conté inici_generacio.
-    mesocicle.microcicles = generar_microcicles_mesocicle(mesocicle, plans_bloc)
+    plans_fase = [p for p in plans if p.fase == tipus]
+    mesocicle.microcicles = generar_microcicles_mesocicle(
+        mesocicle, plans_bloc, plans_fase=plans_fase
+    )
     for micro in mesocicle.microcicles:
         plan = next(p for p in plans_bloc if p.setmana_iso == micro.setmana)
         if plan.dilluns <= inici_generacio <= plan.diumenge:
             micro.sessions_des_de = inici_generacio
             break
 
-    # 6. Enriquir fase_objectiu amb LLM si està habilitat
+    # 5. Guard ACWR sobre els microcicles planificats.
+    _aplicar_guard_acwr(mesocicle.microcicles, historial, avisos)
+
+    # 6. Derivar volums del mesocicle a partir dels microcicles.
+    volums = [m.volum_objectiu for m in mesocicle.microcicles]
+    if volums:
+        mesocicle.volum_min = min(volums)
+        mesocicle.volum_max = max(volums)
+        mesocicle.volum_mitja_previst = _arrodonir_a_25(sum(volums) / len(volums))
+
+    # 7. Enriquir fase_objectiu amb LLM si està habilitat
     if enriquir_amb_llm:
         mesocicle.fase_objectiu = _enriquir_fase_objectiu_amb_llm(mesocicle, nedador.id)
 
