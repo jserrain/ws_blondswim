@@ -232,7 +232,8 @@ def periodificar_temporada(
                     })
                 for k in range(mida):
                     idx = i + k
-                    es_descarrega = k == mida - 1
+                    # Un bloc d'1 setmana és de càrrega (no hi ha descàrrega).
+                    es_descarrega = mida > 1 and k == mida - 1
                     plans.append(_crear_plan(
                         setmanes[idx], fase, bloc_id, k, es_descarrega, competicions
                     ))

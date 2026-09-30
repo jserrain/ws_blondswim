@@ -59,7 +59,8 @@ def _volum_carrega_fase(
     """
     vmin, vmax = VOLUM_SETMANAL_CARREGA[fase]
     if n_carrega <= 1:
-        return _arrodonir_a_25(vmax)
+        # Una sola setmana de càrrega: mínim de la fase (conservador, ACWR).
+        return _arrodonir_a_25(vmin)
     volum = vmin + (vmax - vmin) * index_carrega / (n_carrega - 1)
     return _arrodonir_a_25(volum)
 

@@ -79,31 +79,55 @@ def sessions_test(nedador_test: Nedador) -> list[Sessio]:
     return generar_esquelet_sessions(nedador_test, microcicle)
 
 
-def _tool_use_sessio(sessio: Sessio, n_exercicis: int = 1, stop_reason: str = "tool_use"):
-    """Construeix una resposta mock amb tool_use per a UNA sessió."""
+def _volum_valid(sessio: Sessio) -> int:
+    """Punt mig del rang de la sessió (múltiple de 25); volum_total si no hi ha rang."""
+    if sessio.volum_min is not None and sessio.volum_max is not None:
+        return round((sessio.volum_min + sessio.volum_max) / 2 / 25) * 25
+    return round(sessio.volum_total / 25) * 25
+
+
+def _tool_use_sessio(
+    sessio: Sessio,
+    n_exercicis: int = 1,
+    stop_reason: str = "tool_use",
+    volum: int | None = None,
+):
+    """
+    Construeix una resposta mock amb tool_use per a UNA sessió.
+
+    El volum total dels exercicis és exactament `volum` (per defecte, el punt
+    mig del rang de la sessió, per no disparar el reintent per volum).
+    El primer exercici absorbeix el volum; la resta són 1x25m.
+    """
+    objectiu = volum if volum is not None else _volum_valid(sessio)
+    n_total = len(sessio.estructura.parts) * n_exercicis
+    distancia_principal = objectiu - 25 * (n_total - 1)
+    assert distancia_principal >= 25 and distancia_principal % 25 == 0
+
+    def _exercici(nom_part: str, distancia: int) -> dict:
+        return {
+            "series": 1,
+            "distancia_m": distancia,
+            "execucio": f"Exercici test {nom_part}",
+            "descans": "c/20\"",
+            "material": None,
+            "intensitat": "A1",
+            "objectiu": "Test",
+        }
+
+    parts = []
+    primer = True
+    for p in sessio.estructura.parts:
+        exercicis = []
+        for _ in range(n_exercicis):
+            exercicis.append(_exercici(p.nom, distancia_principal if primer else 25))
+            primer = False
+        parts.append({"nom": p.nom, "exercicis": exercicis})
+
     block = MagicMock()
     block.type = "tool_use"
     block.name = "retornar_contingut_sessio"
-    block.input = {
-        "parts": [
-            {
-                "nom": p.nom,
-                "exercicis": [
-                    {
-                        "series": 4,
-                        "distancia_m": 50,
-                        "execucio": f"Exercici test {p.nom}",
-                        "descans": "c/20\"",
-                        "material": None,
-                        "intensitat": "A1",
-                        "objectiu": "Test",
-                    }
-                    for _ in range(n_exercicis)
-                ],
-            }
-            for p in sessio.estructura.parts
-        ],
-    }
+    block.input = {"parts": parts}
     response = MagicMock()
     response.content = [block]
     response.stop_reason = stop_reason
@@ -1614,9 +1638,8 @@ def test_log_setmana_sessions_sense_contingut(
 
     mock_client = MagicMock()
     mock_client.messages.create.side_effect = [
-        _tool_use_sessio(sessions[0]),
-        _tool_use_sessio(sessions[0]),
-        _buit(), _buit(),
+        _tool_use_sessio(sessions[0]),  # sessió 0: volum vàlid, 1 crida
+        _buit(), _buit(),               # sessió 1: buit + reintent buit
     ]
 
     with caplog.at_level(logging.WARNING), patch(
