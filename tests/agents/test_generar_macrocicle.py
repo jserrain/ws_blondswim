@@ -363,8 +363,8 @@ def test_generar_mesocicle_sense_historial_volums_de_taula(nedador_test):
     )
 
     # El bloc Base conté només la setmana 40 (bloc curt, 1 setmana de càrrega):
-    # la interpolació min->max amb n_carrega=1 retorna el max de la fase.
-    volum_base = VOLUM_SETMANAL_CARREGA["Base"][1]
+    # amb n_carrega=1 s'usa el mínim de la fase (conservador, ACWR).
+    volum_base = VOLUM_SETMANAL_CARREGA["Base"][0]
     assert mesocicle.volum_min == volum_base
     assert mesocicle.volum_max == volum_base
 
@@ -543,10 +543,10 @@ def test_generar_microcicles_base_2_setmanes_bloc_parcial():
     assert len(microcicles) == 2
     assert [m.tipus_base for m in microcicles] == ["carrega", "descarrega"]
 
-    # Interpolació entre min i max (1 setmana de càrrega -> max)
-    vmin, vmax = VOLUM_SETMANAL_CARREGA["Base"]
-    assert microcicles[0].volum_objectiu == vmax
-    assert microcicles[1].volum_objectiu == round(vmax * FACTOR_DESCARREGA / 25) * 25
+    # 1 setmana de càrrega a la fase -> s'usa el mínim del rang.
+    vmin, _vmax = VOLUM_SETMANAL_CARREGA["Base"]
+    assert microcicles[0].volum_objectiu == vmin
+    assert microcicles[1].volum_objectiu == round(vmin * FACTOR_DESCARREGA / 25) * 25
 
     # test_css només a la primera
     assert microcicles[0].test_css is True
