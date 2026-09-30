@@ -47,20 +47,13 @@ src/blondswim/agents/generar_macrocicle.py
     volum_per_sessio = sum(s.volum_total_m for s in historial) / len(historial)
 
     dies_base = len(nedador.dies_disponibles)
-    volum_min = volum_per_sessio * dies_base
-    if nedador.dia_opcional is not None:
-        volum_max = volum_per_sessio * (dies_base + 1)
-    else:
-        volum_max = volum_min
-    volum_mitja_previst = (volum_min + volum_max) / 2
-
     factor = percentatges.get(tipus, 1.0)
+    
+    volum_min = _arrodonir_a_25(volum_per_sessio * dies_base * factor)
+    volum_max = _arrodonir_a_25(volum_min * PROGRESSIO_BLOC)
+    volum_mitja_previst = _arrodonir_a_25((volum_min + volum_max) / 2)
 
-    return (
-        round(volum_min * factor),
-        round(volum_max * factor),
-        round(volum_mitja_previst * factor),
-    )
+    return volum_min, volum_max, volum_mitja_previst
 
 
 def generar_macrocicle(
@@ -286,13 +279,11 @@ src/blondswim/agents/generar_macrocicle.py
     volum_per_sessio = mitjana de SessioRealitzada.volum_total_m sobre
     tot l'històric rebut (si l'històric és buit, retorna (0, 0, 0)).
 
-    volum_min = volum_per_sessio * len(nedador.dies_disponibles)
-    volum_max = volum_per_sessio * (len(nedador.dies_disponibles) + 1)
-      si nedador.dia_opcional no és None, altrament volum_max = volum_min
+    volum_min = volum_per_sessio × len(nedador.dies_disponibles) × pct_fase
+    volum_max = _arrodonir_a_25(volum_min × PROGRESSIO_BLOC)
     volum_mitja_previst = mitjana(volum_min, volum_max)
 
-    Tots tres valors multiplicats pel percentatges.get(tipus, 1.0)
-    corresponent, i arrodonits a enter.
+    Tots tres valums s'arrodoneixen a múltiples de 25m.
     """
     if not historial:
         return 0, 0, 0
