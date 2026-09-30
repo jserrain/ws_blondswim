@@ -22,6 +22,9 @@ from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Mesocicle
 from blondswim.models.nedador import Nedador
 
+# Default de Nedador.volum_setmanal_min i de generar_microcicles_mesocicle().
+VOLUM_SETMANAL_MIN_TEST = Nedador.model_fields["volum_setmanal_min"].default
+
 
 @pytest.fixture
 def nedador_test() -> Nedador:
@@ -495,8 +498,9 @@ def test_generar_microcicles_base_4_setmanes():
     assert microcicles[0].volum_objectiu == vmin
     assert microcicles[1].volum_objectiu == round((vmin + vmax) / 2 / 25) * 25
     assert microcicles[2].volum_objectiu == vmax
-    # Descàrrega = FACTOR_DESCARREGA × càrrega anterior (vmax)
-    assert microcicles[3].volum_objectiu == round(vmax * FACTOR_DESCARREGA / 25) * 25
+    # Descàrrega = FACTOR_DESCARREGA × càrrega anterior (vmax), amb terra (F2)
+    esperat = max(round(vmax * FACTOR_DESCARREGA / 25) * 25, VOLUM_SETMANAL_MIN_TEST)
+    assert microcicles[3].volum_objectiu == esperat
 
     # dies_qualitat False per Base
     assert all(not m.dies_qualitat for m in microcicles)
@@ -546,7 +550,8 @@ def test_generar_microcicles_base_2_setmanes_bloc_parcial():
     # 1 setmana de càrrega a la fase -> s'usa el mínim del rang.
     vmin, _vmax = VOLUM_SETMANAL_CARREGA["Base"]
     assert microcicles[0].volum_objectiu == vmin
-    assert microcicles[1].volum_objectiu == round(vmin * FACTOR_DESCARREGA / 25) * 25
+    esperat = max(round(vmin * FACTOR_DESCARREGA / 25) * 25, VOLUM_SETMANAL_MIN_TEST)
+    assert microcicles[1].volum_objectiu == esperat
 
     # test_css només a la primera
     assert microcicles[0].test_css is True
@@ -748,3 +753,70 @@ def test_generar_mesocicle_data_referencia_none_usa_today(
 
     assert mesocicle.tipus == "Base"
     assert mesocicle.microcicles[0].sessions_des_de == date(2026, 10, 1)
+
+
+# --- F1 + F2: paràmetres de volum i terra setmanal ---
+
+
+def test_nedador_defaults_volum_i_temps():
+    """Nedador té volum_setmanal_min=12000 i minuts_max_sessio=105 per defecte."""
+    nedador = Nedador(
+        id="x", nom="X", categoria="master", proves_objectiu=[], mode_ritme="temps"
+    )
+    assert nedador.volum_setmanal_min == 12000
+    assert nedador.minuts_max_sessio == 105
+    assert nedador.dia_opcional is None
+
+
+def test_descarrega_mai_sota_el_terra_i_avisa():
+    """La descàrrega no baixa del terra; s'emet l'avís descarrega_insuficient."""
+    mesocicle = _crear_mesocicle("Build1", "1-4", 0, 0, 0)
+    plans = _plans_bloc("Build1", 4)
+    avisos: list[dict] = []
+
+    microcicles = generar_microcicles_mesocicle(
+        mesocicle, plans, volum_setmanal_min=12000, avisos=avisos
+    )
+
+    assert microcicles[3].tipus_base == "descarrega"
+    assert microcicles[3].volum_objectiu == 12000
+    assert all(m.volum_objectiu >= 12000 for m in microcicles)
+    insuf = [a for a in avisos if a["tipus_avis"] == "descarrega_insuficient"]
+    assert len(insuf) == 1
+
+
+def test_terra_configurable_per_nedador():
+    """Amb un terra més alt, totes les setmanes amb terra el respecten."""
+    mesocicle = _crear_mesocicle("Build2", "1-4", 0, 0, 0)
+    plans = _plans_bloc("Build2", 4)
+
+    microcicles = generar_microcicles_mesocicle(mesocicle, plans, volum_setmanal_min=13000)
+
+    assert all(m.volum_objectiu >= 13000 for m in microcicles)
+    assert all(m.volum_objectiu % 25 == 0 for m in microcicles)
+
+
+def test_peak_cursa_transicio_sense_terra():
+    """Taper i transició poden quedar per sota del terra (Bosquet)."""
+    for fase, n in (("Peak", 2), ("Cursa", 1), ("Transicio", 1)):
+        mesocicle = _crear_mesocicle(fase, "1", 0, 0, 0)
+        microcicles = generar_microcicles_mesocicle(
+            mesocicle, _plans_bloc(fase, n), volum_setmanal_min=12000
+        )
+        assert any(m.volum_objectiu < 12000 for m in microcicles), fase
+
+
+def test_setmana_amb_prova_b_sense_terra():
+    """Setmana amb prova B: s'aplica FACTOR_PROVA_B encara que quedi sota el terra."""
+    prova_b = Competicio(
+        id="b1", nom="B", data_inici="2026-09-12", data_fi="2026-09-12",
+        classe="B", piscina="25m",
+    )
+    mesocicle = _crear_mesocicle("Build1", "1-4", 0, 0, 0)
+    plans = _plans_bloc("Build1", 4, competicions_b_c_per_setmana={0: [prova_b]})
+
+    microcicles = generar_microcicles_mesocicle(mesocicle, plans, volum_setmanal_min=12000)
+
+    vmin, _vmax = VOLUM_SETMANAL_CARREGA["Build1"]
+    assert microcicles[0].volum_objectiu == round(vmin * FACTOR_PROVA_B / 25) * 25
+    assert microcicles[0].volum_objectiu < 12000

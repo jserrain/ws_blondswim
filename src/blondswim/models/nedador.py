@@ -73,3 +73,7 @@ class Nedador(BaseModel):
     dies_disponibles: list[str] = ["dilluns", "dimarts", "dimecres", "dijous"]
     dia_opcional: str | None = None
     piscina_m: int = 25
+    # Terra de volum setmanal (càrrega/qualitat/descàrrega; no taper ni transició).
+    volum_setmanal_min: int = 12000
+    # Durada màxima d'una sessió (F7, encara no validat).
+    minuts_max_sessio: int = 105

@@ -15,11 +15,17 @@ logger = logging.getLogger(__name__)
 # Volum setmanal (min, max) per fase de càrrega. La progressió dins la fase
 # s'interpola linealment entre min i max al llarg de TOTES les setmanes de
 # càrrega de la fase (no per bloc).
+# Rangs acordats 2026-09-30 (4 sessions/setmana): càrrega (Base) 13.600-15.000,
+# qualitat (Build) 12.000-13.600. Provisionals fins a F3 (base mòbil).
 VOLUM_SETMANAL_CARREGA: dict[str, tuple[int, int]] = {
-    "Base": (12000, 14000),
-    "Build1": (12500, 13500),
-    "Build2": (12000, 13000),
+    "Base": (13600, 15000),
+    "Build1": (12000, 13600),
+    "Build2": (12000, 13600),
 }
+
+# Tipus de setmana amb terra de volum (nedador.volum_setmanal_min).
+# Taper (Peak/Cursa) i transició NO en tenen (reducció Bosquet 41-60%).
+TIPUS_AMB_TERRA: frozenset[str] = frozenset({"carrega", "qualitat", "descarrega"})
 
 # Setmana de descàrrega: -30% respecte la setmana de càrrega anterior del bloc.
 FACTOR_DESCARREGA: float = 0.7
@@ -347,6 +353,8 @@ def generar_microcicles_mesocicle(
     plans: list[periodificacio.SetmanaPlan],
     sessions_des_de: date | None = None,
     plans_fase: list[periodificacio.SetmanaPlan] | None = None,
+    volum_setmanal_min: int = 12000,
+    avisos: list[dict] | None = None,
 ) -> list[Microcicle]:
     """
     Genera la llista de Microcicle (una per setmana) d'un mesocicle a partir
@@ -360,6 +368,11 @@ def generar_microcicles_mesocicle(
         plans_fase: Tots els SetmanaPlan de la mateixa fase (per interpolar el
             volum de càrrega al llarg de la fase sencera). Si és None, s'usa
             només el bloc.
+        volum_setmanal_min: Terra de volum per a setmanes de càrrega, qualitat
+            i descàrrega (F2). No s'aplica a taper, transició ni setmanes amb
+            prova B (taper B curt).
+        avisos: Llista on s'afegeix l'avís "descarrega_insuficient" quan el
+            terra aixeca una setmana de descàrrega (es muta si no és None).
 
     Returns:
         Llista de Microcicle ordenada per setmana ascendent
@@ -403,6 +416,25 @@ def generar_microcicles_mesocicle(
             volum_carrega_anterior,
         )
 
+        # F2: terra de volum (no taper/transició ni setmanes amb prova B).
+        te_prova_b = any(c.classe == "B" for c in plan.competicions_b_c)
+        if (
+            tipus_base in TIPUS_AMB_TERRA
+            and not te_prova_b
+            and volum < volum_setmanal_min
+        ):
+            if tipus_base == "descarrega" and avisos is not None:
+                avisos.append({
+                    "tipus_avis": "descarrega_insuficient",
+                    "missatge": (
+                        f"Setmana {plan.setmana_iso}: la descàrrega ({volum}m) "
+                        f"queda sota el mínim ({volum_setmanal_min}m) i s'aixeca "
+                        f"al mínim; la descàrrega s'ha de fer per intensitat, "
+                        f"no per volum."
+                    ),
+                })
+            volum = _arrodonir_a_25(volum_setmanal_min)
+
         if fase in ("Base", "Build1", "Build2") and not plan.es_descarrega:
             volum_carrega_anterior = volum
 
@@ -427,6 +459,7 @@ def _aplicar_guard_acwr(
     microcicles: list[Microcicle],
     historial: list[SessioRealitzada],
     avisos: list[dict],
+    volum_setmanal_min: int = 0,
 ) -> None:
     """
     Limita el volum de cada microcicle planificat perquè el ràtio
@@ -437,6 +470,8 @@ def _aplicar_guard_acwr(
     - Si planificat / crònic > ACWR_MAX, es capa a ACWR_MAX × crònic i
       s'afegeix l'avís "acwr_limitat".
     - Si no hi ha prou històric (crònic = 0), s'omet amb avís.
+    - Mai retalla per sota de volum_setmanal_min les setmanes amb terra
+      (càrrega/qualitat/descàrrega): l'ACWR és un avís, no una regla.
     """
     historic_setmanal = _volum_historic_setmanal(historial)
     if not historic_setmanal:
@@ -482,6 +517,8 @@ def _aplicar_guard_acwr(
             continue
 
         limit = _arrodonir_a_25(ACWR_MAX * cronic)
+        if micro.tipus_base in TIPUS_AMB_TERRA:
+            limit = max(limit, volum_setmanal_min)
         if micro.volum_objectiu > limit:
             micro.volum_objectiu = limit
             avisos.append({
@@ -600,7 +637,11 @@ def generar_mesocicle(
     #    sessions_des_de només s'aplica al microcicle que conté inici_generacio.
     plans_fase = [p for p in plans if p.fase == tipus]
     mesocicle.microcicles = generar_microcicles_mesocicle(
-        mesocicle, plans_bloc, plans_fase=plans_fase
+        mesocicle,
+        plans_bloc,
+        plans_fase=plans_fase,
+        volum_setmanal_min=nedador.volum_setmanal_min,
+        avisos=avisos,
     )
     for micro in mesocicle.microcicles:
         plan = next(p for p in plans_bloc if p.setmana_iso == micro.setmana)
@@ -609,7 +650,9 @@ def generar_mesocicle(
             break
 
     # 5. Guard ACWR sobre els microcicles planificats.
-    _aplicar_guard_acwr(mesocicle.microcicles, historial, avisos)
+    _aplicar_guard_acwr(
+        mesocicle.microcicles, historial, avisos, nedador.volum_setmanal_min
+    )
 
     # 6. Derivar volums del mesocicle a partir dels microcicles.
     volums = [m.volum_objectiu for m in mesocicle.microcicles]
