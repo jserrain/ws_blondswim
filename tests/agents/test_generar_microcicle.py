@@ -85,7 +85,6 @@ def _tool_use_sessio(sessio: Sessio, n_exercicis: int = 1, stop_reason: str = "t
     block.type = "tool_use"
     block.name = "retornar_contingut_sessio"
     block.input = {
-        "sessio_id": sessio.id,
         "parts": [
             {
                 "nom": p.nom,
@@ -176,7 +175,6 @@ def test_part_sense_resposta_es_queda_buida(
     block.type = "tool_use"
     block.name = "retornar_contingut_sessio"
     block.input = {
-        "sessio_id": sessions_test[0].id,
         "parts": [
             {
                 "nom": "Escalfament",
@@ -1406,3 +1404,208 @@ def test_warning_volum_fora_10_percent(
 def test_max_tokens_sessio_constant():
     """La constant de max_tokens per sessió és 4096."""
     assert MAX_TOKENS_SESSIO == 4096
+
+
+def test_parts_com_string_json_es_parseja(nedador_test, metodologia_test, sessions_test):
+    """Si 'parts' arriba com a string JSON, es deserialitza i s'aplica."""
+    sessions = sessions_test[:1]
+    sessio = sessions[0]
+
+    parts_list = [
+        {
+            "nom": p.nom,
+            "exercicis": [
+                {
+                    "series": 4,
+                    "distancia_m": 50,
+                    "execucio": f"Exercici {p.nom}",
+                    "descans": None,
+                    "material": None,
+                    "intensitat": "A1",
+                    "objectiu": "Test",
+                }
+            ],
+        }
+        for p in sessio.estructura.parts
+    ]
+
+    block = MagicMock()
+    block.type = "tool_use"
+    block.name = "retornar_contingut_sessio"
+    block.input = {"parts": json.dumps(parts_list)}
+    response = MagicMock()
+    response.content = [block]
+    response.stop_reason = "tool_use"
+    response.usage = MagicMock(output_tokens=100)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = response
+
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
+
+    assert mock_client.messages.create.call_count == 1
+    for part in resultat[0].estructura.parts:
+        assert len(part.exercicis) == 1
+
+
+def test_parts_buit_reintenta_un_cop(nedador_test, metodologia_test, sessions_test):
+    """Si 'parts' és buit, es reintenta una vegada i s'aplica la resposta bona."""
+    sessions = sessions_test[:1]
+    sessio = sessions[0]
+
+    buit = MagicMock()
+    buit.type = "tool_use"
+    buit.name = "retornar_contingut_sessio"
+    buit.input = {"parts": []}
+    response_buit = MagicMock()
+    response_buit.content = [buit]
+    response_buit.stop_reason = "tool_use"
+    response_buit.usage = MagicMock(output_tokens=10)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        response_buit,
+        _tool_use_sessio(sessio),
+    ]
+
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
+
+    assert mock_client.messages.create.call_count == 2
+    assert all(part.exercicis for part in resultat[0].estructura.parts)
+
+
+def test_parts_buit_dos_cops_deixa_sessio_buida(
+    nedador_test, metodologia_test, sessions_test, caplog
+):
+    """Si 'parts' és buit dues vegades, s'avisa i la sessió queda buida."""
+    sessions = sessions_test[:1]
+
+    def _buit():
+        block = MagicMock()
+        block.type = "tool_use"
+        block.name = "retornar_contingut_sessio"
+        block.input = {"parts": []}
+        response = MagicMock()
+        response.content = [block]
+        response.stop_reason = "tool_use"
+        response.usage = MagicMock(output_tokens=10)
+        return response
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [_buit(), _buit()]
+
+    with caplog.at_level(logging.WARNING), patch(
+        "blondswim.agents.generar_microcicle.get_llm_client",
+        return_value=mock_client,
+    ):
+        resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
+
+    assert mock_client.messages.create.call_count == 2
+    assert all(not part.exercicis for part in resultat[0].estructura.parts)
+    assert any("encara buit després del reintent" in r.message for r in caplog.records)
+
+
+def test_distancia_no_multiple_25_s_arrodoneix(
+    nedador_test, metodologia_test, sessions_test, caplog
+):
+    """Una distancia_m no múltiple de 25 s'arrodoneix i no es descarta."""
+    sessions = sessions_test[:1]
+    sessio = sessions[0]
+
+    block = MagicMock()
+    block.type = "tool_use"
+    block.name = "retornar_contingut_sessio"
+    block.input = {
+        "parts": [
+            {
+                "nom": sessio.estructura.parts[0].nom,
+                "exercicis": [
+                    {
+                        "series": 1,
+                        "distancia_m": 60,
+                        "execucio": "Test",
+                        "descans": None,
+                        "material": None,
+                        "intensitat": "A1",
+                        "objectiu": "Test",
+                    }
+                ],
+            }
+        ]
+    }
+    response = MagicMock()
+    response.content = [block]
+    response.stop_reason = "tool_use"
+    response.usage = MagicMock(output_tokens=10)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = response
+
+    with caplog.at_level(logging.INFO), patch(
+        "blondswim.agents.generar_microcicle.get_llm_client",
+        return_value=mock_client,
+    ):
+        resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
+
+    part = resultat[0].estructura.parts[0]
+    assert len(part.exercicis) == 1
+    assert part.exercicis[0].distancia_m == 50
+    assert any("arrodonida a 50" in r.message for r in caplog.records)
+
+
+def test_log_setmana_generada_correctament(
+    nedador_test, metodologia_test, sessions_test, caplog
+):
+    """Si totes les sessions tenen contingut, es loga 'generada correctament'."""
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        _tool_use_sessio(s) for s in sessions_test
+    ]
+
+    with caplog.at_level(logging.INFO), patch(
+        "blondswim.agents.generar_microcicle.get_llm_client",
+        return_value=mock_client,
+    ):
+        generar_microcicle(nedador_test, sessions_test, metodologia_test)
+
+    assert any("generada correctament" in r.message for r in caplog.records)
+
+
+def test_log_setmana_sessions_sense_contingut(
+    nedador_test, metodologia_test, sessions_test, caplog
+):
+    """Si alguna sessió queda sense contingut, es loga el WARNING corresponent."""
+    sessions = sessions_test[:2]
+
+    def _buit():
+        block = MagicMock()
+        block.type = "tool_use"
+        block.name = "retornar_contingut_sessio"
+        block.input = {"parts": []}
+        response = MagicMock()
+        response.content = [block]
+        response.stop_reason = "tool_use"
+        response.usage = MagicMock(output_tokens=10)
+        return response
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        _tool_use_sessio(sessions[0]),
+        _buit(), _buit(),
+    ]
+
+    with caplog.at_level(logging.WARNING), patch(
+        "blondswim.agents.generar_microcicle.get_llm_client",
+        return_value=mock_client,
+    ):
+        generar_microcicle(nedador_test, sessions, metodologia_test)
+
+    assert any(
+        "1 sessions sense contingut" in r.message for r in caplog.records
+    )

@@ -629,7 +629,13 @@ def _construir_tools_sessio() -> list[dict]:
                                         "type": "object",
                                         "properties": {
                                             "series": {"type": "integer"},
-                                            "distancia_m": {"type": "integer"},
+                                            "distancia_m": {
+                                                "type": "integer",
+                                                "enum": [
+                                                    25, 50, 75, 100, 150, 200,
+                                                    250, 300, 400, 500, 600, 800,
+                                                ],
+                                            },
                                             "execucio": {"type": "string"},
                                             "descans": {"type": "string"},
                                             "material": {"type": "string"},
@@ -656,7 +662,7 @@ def _construir_tools_sessio() -> list[dict]:
                         },
                     },
                 },
-                "required": ["sessio_id", "parts"],
+                "required": ["parts"],
             },
         }
     ]
@@ -719,24 +725,40 @@ def _extreure_tool_use_sessio(response) -> dict | None:
     return None
 
 
+def _extreure_parts(sessio_data: dict) -> list[dict]:
+    """
+    Retorna la llista de parts del tool_use, tolerant a formats inesperats.
+
+    Si "parts" és un string JSON, el deserialitza. Si no és una llista,
+    retorna una llista buida.
+    """
+    parts = sessio_data.get("parts")
+    if isinstance(parts, str):
+        try:
+            parts = json.loads(parts)
+        except json.JSONDecodeError:
+            logger.warning("El camp 'parts' és un string no parsejable com a JSON")
+            return []
+    if not isinstance(parts, list):
+        return []
+    return parts
+
+
+def _arrodonir_distancia_25(distancia_m: int) -> int:
+    """Arrodoneix a múltiple de 25 (mínim 25)."""
+    return max(25, round(distancia_m / 25) * 25)
+
+
 def _aplicar_contingut_sessio(sessio: Sessio, sessio_data: dict, setmana: int) -> None:
     """Aplica els exercicis del tool_use a les parts de la sessió."""
-    sessio_id = sessio_data.get("sessio_id")
-    if sessio_id != sessio.id:
-        logger.warning(
-            f"Setmana {setmana}: sessio_id rebut '{sessio_id}' no coincideix "
-            f"amb l'esperat '{sessio.id}', ignorant"
-        )
-        return
-
-    for part_data in sessio_data.get("parts", []):
+    for part_data in _extreure_parts(sessio_data):
         nom_part = part_data.get("nom")
         exercicis_data = part_data.get("exercicis", [])
 
         part = next((p for p in sessio.estructura.parts if p.nom == nom_part), None)
         if not part:
             logger.warning(
-                f"Part '{nom_part}' no trobada a sessió '{sessio_id}', ignorant. "
+                f"Part '{nom_part}' no trobada a sessió '{sessio.id}', ignorant. "
                 f"Noms esperats: {[p.nom for p in sessio.estructura.parts]}"
             )
             continue
@@ -745,17 +767,26 @@ def _aplicar_contingut_sessio(sessio: Sessio, sessio_data: dict, setmana: int) -
         n_rebuts = len(exercicis_data)
         n_descartats = 0
         for ex_data in exercicis_data:
+            distancia = ex_data.get("distancia_m")
+            if isinstance(distancia, int) and distancia % 25 != 0:
+                arrodonida = _arrodonir_distancia_25(distancia)
+                logger.info(
+                    f"Setmana {setmana}, sessió '{sessio.id}', part '{nom_part}': "
+                    f"distancia_m={distancia} no és múltiple de 25, "
+                    f"arrodonida a {arrodonida}"
+                )
+                ex_data = {**ex_data, "distancia_m": arrodonida}
             try:
                 exercicis.append(Exercici(**ex_data))
             except ValidationError as e:
                 n_descartats += 1
                 logger.warning(
-                    f"Exercici invàlid a sessió '{sessio_id}', part '{nom_part}', ignorat: {e}"
+                    f"Exercici invàlid a sessió '{sessio.id}', part '{nom_part}', ignorat: {e}"
                 )
         part.exercicis = exercicis
 
         logger.info(
-            f"Setmana {setmana}, sessió '{sessio_id}', part '{nom_part}': "
+            f"Setmana {setmana}, sessió '{sessio.id}', part '{nom_part}': "
             f"exercicis rebuts={n_rebuts}, vàlids={len(exercicis)}, "
             f"descartats={n_descartats}"
         )
@@ -911,6 +942,20 @@ def generar_microcicle(
                 )
                 continue
 
+            if not _extreure_parts(sessio_data):
+                logger.info(
+                    f"Setmana {setmana}, sessió '{sessio.id}': 'parts' buit o absent. "
+                    f"Claus rebudes: {list(sessio_data.keys())}. Reintentant."
+                )
+                response = _cridar_api_sessio(client, prompt, tools)
+                sessio_data = _extreure_tool_use_sessio(response)
+                if not sessio_data or not _extreure_parts(sessio_data):
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': 'parts' encara "
+                        f"buit després del reintent. Es deixa la sessió buida."
+                    )
+                    continue
+
             _aplicar_contingut_sessio(sessio, sessio_data, setmana)
 
             # Verificar volum dins ±10% de l'objectiu
@@ -933,6 +978,18 @@ def generar_microcicle(
                     logger.warning(
                         f"Part '{part.nom}' de sessió '{sessio.id}' sense contingut assignat"
                     )
+
+        # Log de resum de la setmana
+        sessions_sense_contingut = [
+            s for s in sessions
+            if not any(part.exercicis for part in s.estructura.parts)
+        ]
+        if sessions_sense_contingut:
+            logger.warning(
+                f"Setmana {setmana}: {len(sessions_sense_contingut)} sessions sense contingut"
+            )
+        else:
+            logger.info(f"Setmana {setmana} generada correctament")
 
         return sessions
 
