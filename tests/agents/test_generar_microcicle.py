@@ -143,8 +143,8 @@ def test_omple_contingut_sense_tocar_percentatges(
             nedador_test, sessions_test, metodologia_test, historial=[]
         )
 
-    # Una crida per sessió
-    assert mock_client.messages.create.call_count == len(sessions_test)
+    # Una crida inicial per sessió + un reintent per volum fora de rang
+    assert mock_client.messages.create.call_count == 2 * len(sessions_test)
 
     # Verificar que exercicis s'ha omplert
     for sessio in resultat:
@@ -256,8 +256,8 @@ def test_few_shot_buit_no_trenca(nedador_test, metodologia_test, sessions_test):
         # Amb historial=[]
         generar_microcicle(nedador_test, sessions_test, metodologia_test, historial=[])
 
-    # Una crida per sessió, dues vegades
-    assert mock_client.messages.create.call_count == 2 * len(sessions_test)
+    # Una crida inicial + un reintent per sessió, dues vegades
+    assert mock_client.messages.create.call_count == 4 * len(sessions_test)
 
 
 def test_extreure_few_shot_prioritza_rellevants():
@@ -366,6 +366,9 @@ def _sessio_esquelet(dia: str, setmana: int = 1) -> Sessio:
         estructura=EstructuraSessio(parts=parts),
         es_dia_opcional=False,
         notes=None,
+        rol="mitjana",
+        volum_min=2800,
+        volum_max=3200,
     )
 
 
@@ -1313,7 +1316,8 @@ def test_una_crida_per_sessio(nedador_test, metodologia_test, sessions_test):
     ):
         resultat = generar_microcicle(nedador_test, sessions_test, metodologia_test)
 
-    assert mock_client.messages.create.call_count == len(sessions_test)
+    # Una crida inicial per sessió + un reintent per volum fora de rang
+    assert mock_client.messages.create.call_count == 2 * len(sessions_test)
     assert len(resultat) == len(sessions_test)
     for sessio in resultat:
         assert all(part.exercicis for part in sessio.estructura.parts)
@@ -1327,6 +1331,7 @@ def test_retry_en_max_tokens(nedador_test, metodologia_test, sessions_test):
     mock_client.messages.create.side_effect = [
         _tool_use_sessio(sessions[0], stop_reason="max_tokens"),
         _tool_use_sessio(sessions[0], stop_reason="tool_use"),
+        _tool_use_sessio(sessions[0], stop_reason="tool_use"),
     ]
 
     with patch(
@@ -1334,7 +1339,8 @@ def test_retry_en_max_tokens(nedador_test, metodologia_test, sessions_test):
     ):
         resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
 
-    assert mock_client.messages.create.call_count == 2
+    # 1 crida truncada + 1 reintent per concisió + 1 reintent per volum
+    assert mock_client.messages.create.call_count == 3
     segon_prompt = mock_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
     assert "màxim 3 exercicis per part" in segon_prompt
     assert all(part.exercicis for part in resultat[0].estructura.parts)
@@ -1363,8 +1369,8 @@ def test_max_tokens_doble_deixa_sessio_buida(
     assert any("truncada de nou" in r.message for r in caplog.records)
 
 
-def test_volum_objectiu_sessio_al_prompt(nedador_test, metodologia_test, sessions_test):
-    """El prompt inclou el volum objectiu per sessió (total / n sessions, a 25)."""
+def test_rol_i_rang_al_prompt(nedador_test, metodologia_test, sessions_test):
+    """El prompt inclou el rol i el rang de volum de la sessió."""
     mock_client = MagicMock()
     mock_client.messages.create.side_effect = [
         _tool_use_sessio(s) for s in sessions_test
@@ -1376,21 +1382,25 @@ def test_volum_objectiu_sessio_al_prompt(nedador_test, metodologia_test, session
         generar_microcicle(nedador_test, sessions_test, metodologia_test)
 
     primer_prompt = mock_client.messages.create.call_args_list[0].kwargs["messages"][0]["content"]
-    expected = round(
-        sum(s.volum_total for s in sessions_test) / len(sessions_test) / 25
-    ) * 25
-    assert f"volum_objectiu: {expected}m" in primer_prompt
+    sessio = sessions_test[0]
+    assert f"rol: {sessio.rol}" in primer_prompt
+    assert f"volum_min: {sessio.volum_min}m" in primer_prompt
+    assert f"volum_max: {sessio.volum_max}m" in primer_prompt
 
 
-def test_warning_volum_fora_10_percent(
+def test_volum_fora_rang_reintenta_un_cop(
     nedador_test, metodologia_test, sessions_test, caplog
 ):
-    """S'avisa si el volum generat queda fora del ±10% de l'objectiu."""
+    """Si el volum queda fora del rang, es reintenta una vegada amb el missatge."""
     sessions = sessions_test[:1]
+    sessio = sessions[0]
 
-    # 5 parts x 1 exercici x 200m = 1000m, lluny de 3750m
+    # 5 parts x 1 exercici x 200m = 1000m, lluny del rang [2800, 3200]
     mock_client = MagicMock()
-    mock_client.messages.create.return_value = _tool_use_sessio(sessions[0])
+    mock_client.messages.create.side_effect = [
+        _tool_use_sessio(sessio),
+        _tool_use_sessio(sessio),
+    ]
 
     with caplog.at_level(logging.WARNING), patch(
         "blondswim.agents.generar_microcicle.get_llm_client",
@@ -1398,7 +1408,11 @@ def test_warning_volum_fora_10_percent(
     ):
         generar_microcicle(nedador_test, sessions, metodologia_test)
 
-    assert any("fora del ±10%" in r.message for r in caplog.records)
+    assert mock_client.messages.create.call_count == 2
+    segon_prompt = mock_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
+    assert "El volum ha estat 1000 m" in segon_prompt
+    assert f"entre {sessio.volum_min} i {sessio.volum_max} m" in segon_prompt
+    assert any("fora del rang" in r.message for r in caplog.records)
 
 
 def test_max_tokens_sessio_constant():
@@ -1446,7 +1460,8 @@ def test_parts_com_string_json_es_parseja(nedador_test, metodologia_test, sessio
     ):
         resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
 
-    assert mock_client.messages.create.call_count == 1
+    # 1 crida inicial + 1 reintent per volum fora de rang
+    assert mock_client.messages.create.call_count == 2
     for part in resultat[0].estructura.parts:
         assert len(part.exercicis) == 1
 
@@ -1469,6 +1484,7 @@ def test_parts_buit_reintenta_un_cop(nedador_test, metodologia_test, sessions_te
     mock_client.messages.create.side_effect = [
         response_buit,
         _tool_use_sessio(sessio),
+        _tool_use_sessio(sessio),
     ]
 
     with patch(
@@ -1476,7 +1492,8 @@ def test_parts_buit_reintenta_un_cop(nedador_test, metodologia_test, sessions_te
     ):
         resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
 
-    assert mock_client.messages.create.call_count == 2
+    # 1 buit + 1 reintent parts + 1 reintent volum
+    assert mock_client.messages.create.call_count == 3
     assert all(part.exercicis for part in resultat[0].estructura.parts)
 
 
@@ -1566,7 +1583,7 @@ def test_log_setmana_generada_correctament(
     mock_client = MagicMock()
     mock_client.messages.create.side_effect = [
         _tool_use_sessio(s) for s in sessions_test
-    ]
+    ] * 2
 
     with caplog.at_level(logging.INFO), patch(
         "blondswim.agents.generar_microcicle.get_llm_client",
@@ -1596,6 +1613,7 @@ def test_log_setmana_sessions_sense_contingut(
 
     mock_client = MagicMock()
     mock_client.messages.create.side_effect = [
+        _tool_use_sessio(sessions[0]),
         _tool_use_sessio(sessions[0]),
         _buit(), _buit(),
     ]

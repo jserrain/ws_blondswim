@@ -171,23 +171,84 @@ def test_nombre_sessions_coincideix_amb_dies_actius(nedador_base, nedador_sense_
     assert len(sessions_sense_opcional) == 4
 
 
-def test_suma_volum_total_sessions_igual_volum_objectiu(nedador_base):
-    """Suma de volum_total de totes les sessions = volum_objectiu exactament."""
+def test_rols_assignats_per_dia(nedador_base):
+    """Cada dia actiu rep el rol fix de ROLS_PER_DIA."""
     microcicle = Microcicle(
         setmana=1,
         dates="1-7/10/2026",
         mesocicle_id="meso1",
         tipus_base="carrega",
-        volum_objectiu=15123,  # Nombre que no es divideix exactament per 4
+        volum_objectiu=15000,
         dies_qualitat=False,
         test_css=False,
     )
 
     sessions = generar_esquelet_sessions(nedador_base, microcicle)
 
-    # La suma ha de ser exactament igual al volum objectiu
-    suma_volum = sum(s.volum_total for s in sessions)
-    assert suma_volum == microcicle.volum_objectiu
+    rols = {s.dia: s.rol for s in sessions}
+    assert rols["dilluns"] == "mitjana"
+    assert rols["dimarts"] == "qualitat"
+    assert rols["dimecres"] == "mitjana"
+    assert rols["dijous"] == "llarga"
+
+
+def test_volum_total_es_punt_mig_del_rang(nedador_base):
+    """volum_total és el punt mig del rang [volum_min, volum_max]."""
+    microcicle = Microcicle(
+        setmana=1,
+        dates="1-7/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="carrega",
+        volum_objectiu=15000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+
+    sessions = generar_esquelet_sessions(nedador_base, microcicle)
+
+    for sessio in sessions:
+        assert sessio.volum_min is not None
+        assert sessio.volum_max is not None
+        assert sessio.volum_min <= sessio.volum_total <= sessio.volum_max
+        mig = round((sessio.volum_min + sessio.volum_max) / 2 / 25) * 25
+        assert sessio.volum_total == mig
+
+
+def test_rangs_clampats_en_carrega(nedador_base):
+    """En setmana de càrrega, els rangs queden dins [2800, 4500]."""
+    microcicle = Microcicle(
+        setmana=1,
+        dates="1-7/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="carrega",
+        volum_objectiu=15000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+
+    sessions = generar_esquelet_sessions(nedador_base, microcicle)
+
+    for sessio in sessions:
+        assert sessio.volum_min >= 2800
+        assert sessio.volum_max <= 4500
+
+
+def test_rangs_no_clampats_en_descarrega(nedador_base):
+    """En setmana de descàrrega, els rangs poden baixar de 2800m."""
+    microcicle = Microcicle(
+        setmana=4,
+        dates="22-28/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="descarrega",
+        volum_objectiu=8000,
+        dies_qualitat=False,
+        test_css=False,
+    )
+
+    sessions = generar_esquelet_sessions(nedador_base, microcicle)
+
+    # Amb volum baix, algun rang ha de quedar per sota de 2800
+    assert any(s.volum_min < 2800 for s in sessions)
 
 
 def test_contingut_totes_parts_es_none(nedador_base):

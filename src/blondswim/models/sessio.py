@@ -69,3 +69,6 @@ class Sessio(BaseModel):
     estructura: EstructuraSessio
     es_dia_opcional: bool = False  # True si correspon al dia opcional del nedador
     notes: str | None = None
+    rol: Literal["llarga", "mitjana", "qualitat"] | None = None
+    volum_min: int | None = None
+    volum_max: int | None = None

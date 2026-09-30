@@ -700,11 +700,6 @@ def _resum_sessions_generades(sessions: list[Sessio]) -> str:
     return "\n".join(linies) if linies else "(cap sessió generada encara)"
 
 
-def _volum_objectiu_sessio(sessions: list[Sessio]) -> int:
-    """Volum objectiu per sessió: total de la setmana / n sessions, a múltiple de 25."""
-    volum_total = sum(s.volum_total for s in sessions)
-    return round(volum_total / len(sessions) / 25) * 25
-
 
 def _cridar_api_sessio(client, prompt: str, tools: list[dict]):
     """Fa una crida a l'API per generar el contingut d'una sessió."""
@@ -845,7 +840,6 @@ def generar_microcicle(
             raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
 
         setmana = sessions[0].microcicle_setmana
-        volum_per_sessio = _volum_objectiu_sessio(sessions)
 
         client = get_llm_client()
         tools = _construir_tools_sessio()
@@ -868,7 +862,8 @@ def generar_microcicle(
 
             sessions_setmana_text = (
                 f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
-                f"tipus: {sessio.tipus_sessio} | volum_objectiu: {volum_per_sessio}m"
+                f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
             )
 
             resum_previ = _resum_sessions_generades(sessions)
@@ -897,6 +892,9 @@ def generar_microcicle(
                 exemples_series=exemples_text,
                 sessions_setmana=sessions_setmana_text,
                 resum_sessions_previ=resum_previ,
+                rol=sessio.rol,
+                volum_min=sessio.volum_min,
+                volum_max=sessio.volum_max,
             )
 
             # Crida inicial
@@ -958,18 +956,30 @@ def generar_microcicle(
 
             _aplicar_contingut_sessio(sessio, sessio_data, setmana)
 
-            # Verificar volum dins ±10% de l'objectiu
+            # Verificar volum dins el rang flexible (amb marge del 10%)
             volum_sessio = sum(
                 ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
             )
-            if volum_per_sessio > 0:
-                desviacio = abs(volum_sessio - volum_per_sessio) / volum_per_sessio
-                if desviacio > 0.10:
+            if sessio.volum_min is not None and sessio.volum_max is not None:
+                fora_rang = (
+                    volum_sessio < sessio.volum_min * 0.9
+                    or volum_sessio > sessio.volum_max * 1.1
+                )
+                if fora_rang:
                     logger.warning(
                         f"Setmana {setmana}, sessió '{sessio.id}': volum generat "
-                        f"{volum_sessio}m fora del ±10% de l'objectiu "
-                        f"{volum_per_sessio}m (desviació {desviacio:.1%})"
+                        f"{volum_sessio}m fora del rang "
+                        f"[{sessio.volum_min}, {sessio.volum_max}]m. Reintentant."
                     )
+                    prompt_volum = (
+                        prompt
+                        + f"\n\nEl volum ha estat {volum_sessio} m; ha d'estar "
+                        f"entre {sessio.volum_min} i {sessio.volum_max} m."
+                    )
+                    response = _cridar_api_sessio(client, prompt_volum, tools)
+                    sessio_data = _extreure_tool_use_sessio(response)
+                    if sessio_data and _extreure_parts(sessio_data):
+                        _aplicar_contingut_sessio(sessio, sessio_data, setmana)
 
         # Verificar que totes les parts tenen contingut (advertir si no)
         for sessio in sessions:

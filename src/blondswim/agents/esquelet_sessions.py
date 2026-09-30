@@ -16,6 +16,64 @@ _DIES_ORDRE = {
     "diumenge": 6,
 }
 
+# Rol fix per dia de la setmana (quan el dia hi és).
+ROLS_PER_DIA = {
+    "dilluns": "mitjana",
+    "dimarts": "qualitat",
+    "dimecres": "mitjana",
+    "dijous": "llarga",
+}
+
+# Rang de volum (metres) per rol, abans d'aplicar el factor de la setmana.
+RANGS_ROL = {
+    "llarga": (3800, 4500),
+    "mitjana": (3000, 3500),
+    "qualitat": (2800, 3200),
+}
+
+# Límit de volum per a setmanes de càrrega (carrega/qualitat).
+CLAMP_CARREGA = (2800, 4500)
+
+
+def _midpoint(rol: str) -> float:
+    """Punt mig del rang de volum d'un rol."""
+    minim, maxim = RANGS_ROL[rol]
+    return (minim + maxim) / 2
+
+
+def _arrodonir_25(valor: float) -> int:
+    """Arrodoneix a múltiple de 25 (mínim 25)."""
+    return max(25, round(valor / 25) * 25)
+
+
+def _assignar_rols(dies_actius: list[str]) -> dict[str, str]:
+    """
+    Assigna un rol a cada dia actiu.
+
+    Si el dia és a ROLS_PER_DIA, s'usa aquest rol. Si no, l'últim dia
+    disponible és "llarga", el segon "qualitat" i la resta "mitjana".
+    """
+    rols: dict[str, str] = {}
+    dies_no_mapatats = [dia for dia in dies_actius if dia not in ROLS_PER_DIA]
+
+    for dia in dies_actius:
+        if dia in ROLS_PER_DIA:
+            rols[dia] = ROLS_PER_DIA[dia]
+
+    if dies_no_mapatats:
+        # L'últim dia no mapatat és llarga, el segon qualitat, la resta mitjana.
+        ultim = dies_no_mapatats[-1]
+        segon = dies_no_mapatats[-2] if len(dies_no_mapatats) >= 2 else None
+        for dia in dies_no_mapatats:
+            if dia == ultim:
+                rols[dia] = "llarga"
+            elif segon is not None and dia == segon:
+                rols[dia] = "qualitat"
+            else:
+                rols[dia] = "mitjana"
+
+    return rols
+
 
 def _dilluns_microcicle(microcicle: Microcicle) -> date | None:
     """Retorna el dilluns del microcicle a partir del camp `dates`."""
@@ -64,11 +122,19 @@ def generar_esquelet_sessions(
     - "taper" i "transicio" -> percentatge_descarrega (reutilitzat, són setmanes
       de volum reduït similars; assumpció MVP a revisar)
 
-    volum_total de cada sessió: microcicle.volum_objectiu dividit a parts iguals
-    entre el nombre de sessions actives de la setmana (arrodonit; l'últim dia
-    absorbeix el residu d'arrodoniment perquè la suma quadri exactament amb
-    volum_objectiu). Assumpció MVP: repartiment igual que es podrà refinar més
-    endavant (p.ex. menys volum als dies de qualitat).
+    Cada sessió té un rol fix (ROLS_PER_DIA) i un rang de volum flexible
+    (RANGS_ROL) escalat pel factor de la setmana:
+
+        factor = microcicle.volum_objectiu / suma de punts migs dels rols
+                 d'una setmana completa (len(nedador.dies_disponibles) dies)
+
+    S'usa len(dies_disponibles) (no el nombre de sessions generades) perquè
+    les setmanes parcials no concentrin volum. El rang de cada sessió és
+    RANGS_ROL[rol] × factor, arrodonit a 25. En setmanes de càrrega
+    (carrega/qualitat) el rang es limita a CLAMP_CARREGA; en descàrrega,
+    taper i transició NO es limita (pot baixar de 2800m).
+
+    volum_total de cada sessió és el punt mig del rang, arrodonit a 25.
 
     Args:
         nedador: Nedador amb dies_disponibles
@@ -90,14 +156,21 @@ def generar_esquelet_sessions(
         if not dies_actius:
             return []
 
-    # Calcular volum per sessió (repartiment igual, assumpció MVP)
-    num_sessions = len(dies_actius)
-    volum_base = microcicle.volum_objectiu // num_sessions
-    residu = microcicle.volum_objectiu % num_sessions
+    # Assignar rols als dies actius
+    rols = _assignar_rols(dies_actius)
+
+    # Factor d'escala: volum_objectiu / suma de punts migs d'una setmana completa
+    dies_setmana_completa = nedador.dies_disponibles
+    suma_midpoints = sum(_midpoint(ROLS_PER_DIA.get(dia, "mitjana"))
+                         for dia in dies_setmana_completa)
+    factor = microcicle.volum_objectiu / suma_midpoints if suma_midpoints else 1.0
+
+    # Clampar només en setmanes de càrrega
+    es_carrega = microcicle.tipus_base in ("carrega", "qualitat")
 
     sessions = []
 
-    for i, dia in enumerate(dies_actius):
+    for dia in dies_actius:
         # Determinar tipus_sessio segons regles
         if microcicle.tipus_base == "qualitat":
             tipus_sessio = "qualitat"
@@ -110,10 +183,18 @@ def generar_esquelet_sessions(
             # descarrega, taper, transicio
             tipus_sessio = microcicle.tipus_base
 
-        # Calcular volum d'aquesta sessió (l'última absorbeix el residu)
-        volum_sessio = volum_base
-        if i == num_sessions - 1:
-            volum_sessio += residu
+        # Calcular rang de volum d'aquesta sessió segons el rol
+        rol = rols[dia]
+        minim_rol, maxim_rol = RANGS_ROL[rol]
+        volum_min = _arrodonir_25(minim_rol * factor)
+        volum_max = _arrodonir_25(maxim_rol * factor)
+
+        if es_carrega:
+            volum_min = max(volum_min, CLAMP_CARREGA[0])
+            volum_max = min(volum_max, CLAMP_CARREGA[1])
+
+        # volum_total = punt mig del rang
+        volum_sessio = _arrodonir_25((volum_min + volum_max) / 2)
 
         # Crear estructura de 5 parts amb percentatges segons tipus_sessio
         parts = _crear_parts_estandard(tipus_sessio, volum_sessio)
@@ -128,6 +209,9 @@ def generar_esquelet_sessions(
             estructura=EstructuraSessio(parts=parts),
             es_dia_opcional=False,
             notes=None,
+            rol=rol,
+            volum_min=volum_min,
+            volum_max=volum_max,
         )
         sessions.append(sessio)
 

@@ -80,7 +80,12 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 
    **IMPORTANT:** Retorna el camp `sessio_id` EXACTAMENT igual com apareix aquí, sense modificar-lo.
 
-   **VOLUM OBJECTIU DE LA SESSIÓ:** la suma de `series × distancia_m` de tots els exercicis de la sessió ha d'estar dins del **±10%** del `volum_objectiu` indicat. Si no hi arribes, ajusta el nombre de `series` o la `distancia_m` (sempre múltiple de 25) fins a quedar-hi dins.
+   **VOLUM FLEXIBLE:** la sessió ha de fer entre {volum_min} i {volum_max} m (piscina 25 m). La suma de `series × distancia_m` de tots els exercicis ha d'estar dins d'aquest rang. Si no hi arribes, ajusta el nombre de `series` o la `distancia_m` (sempre múltiple de 25) fins a quedar-hi dins.
+
+   **ROL DE LA SESSIÓ ({rol}):**
+   - `llarga`: aeròbic A1/A2 continu i sèries llargues.
+   - `mitjana`: mixta, tècnica + aeròbic.
+   - `qualitat`: A3/Velocitat/MPLA amb recuperacions àmplies, menys volum.
 
    **VARIETAT DINS LA SETMANA:** no repeteixis el mateix conjunt principal que les sessions ja generades aquesta setmana. Consulta el resum següent i varia el focus.
 
