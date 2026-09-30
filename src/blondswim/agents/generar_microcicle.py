@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from pydantic import ValidationError
+
 from blondswim.agents import context_competicio, seleccio_model, taper, validacio
 from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
@@ -15,7 +17,6 @@ from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Microcicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import Exercici, Sessio
-from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
