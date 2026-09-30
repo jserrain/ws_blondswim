@@ -143,15 +143,18 @@ def test_omple_contingut_sense_tocar_percentatges(
             nedador_test, sessions_test, metodologia_test, historial=[]
         )
 
-    # Una crida inicial per sessió + un reintent per volum fora de rang
-    assert mock_client.messages.create.call_count == 2 * len(sessions_test)
+    # Una crida per sessió (el volum mockejat ja és dins del rang)
+    assert mock_client.messages.create.call_count == len(sessions_test)
 
     # Verificar que exercicis s'ha omplert
     for sessio in resultat:
+        total = 0
         for part in sessio.estructura.parts:
             assert len(part.exercicis) == 1
             assert "Exercici test" in part.exercicis[0].execucio
-            assert part.exercicis[0].volum_m == 200
+            assert part.exercicis[0].volum_m > 0
+            total += part.exercicis[0].volum_m
+        assert sessio.volum_min * 0.9 <= total <= sessio.volum_max * 1.1
 
     # Verificar que res més ha canviat
     for i, sessio in enumerate(resultat):
@@ -256,8 +259,8 @@ def test_few_shot_buit_no_trenca(nedador_test, metodologia_test, sessions_test):
         # Amb historial=[]
         generar_microcicle(nedador_test, sessions_test, metodologia_test, historial=[])
 
-    # Una crida inicial + un reintent per sessió, dues vegades
-    assert mock_client.messages.create.call_count == 4 * len(sessions_test)
+    # Una crida per sessió, dues vegades (historial=None i historial=[])
+    assert mock_client.messages.create.call_count == 2 * len(sessions_test)
 
 
 def test_extreure_few_shot_prioritza_rellevants():
@@ -1316,8 +1319,8 @@ def test_una_crida_per_sessio(nedador_test, metodologia_test, sessions_test):
     ):
         resultat = generar_microcicle(nedador_test, sessions_test, metodologia_test)
 
-    # Una crida inicial per sessió + un reintent per volum fora de rang
-    assert mock_client.messages.create.call_count == 2 * len(sessions_test)
+    # Una crida per sessió (el volum mockejat ja és dins del rang)
+    assert mock_client.messages.create.call_count == len(sessions_test)
     assert len(resultat) == len(sessions_test)
     for sessio in resultat:
         assert all(part.exercicis for part in sessio.estructura.parts)
@@ -1331,7 +1334,6 @@ def test_retry_en_max_tokens(nedador_test, metodologia_test, sessions_test):
     mock_client.messages.create.side_effect = [
         _tool_use_sessio(sessions[0], stop_reason="max_tokens"),
         _tool_use_sessio(sessions[0], stop_reason="tool_use"),
-        _tool_use_sessio(sessions[0], stop_reason="tool_use"),
     ]
 
     with patch(
@@ -1339,8 +1341,8 @@ def test_retry_en_max_tokens(nedador_test, metodologia_test, sessions_test):
     ):
         resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
 
-    # 1 crida truncada + 1 reintent per concisió + 1 reintent per volum
-    assert mock_client.messages.create.call_count == 3
+    # 1 crida truncada + 1 reintent per concisió (volum ja vàlid)
+    assert mock_client.messages.create.call_count == 2
     segon_prompt = mock_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
     assert "màxim 3 exercicis per part" in segon_prompt
     assert all(part.exercicis for part in resultat[0].estructura.parts)
@@ -1395,10 +1397,10 @@ def test_volum_fora_rang_reintenta_un_cop(
     sessions = sessions_test[:1]
     sessio = sessions[0]
 
-    # 5 parts x 1 exercici x 200m = 1000m, lluny del rang [2800, 3200]
+    # Primera resposta amb volum=1000m, lluny del rang [2800, 3200]
     mock_client = MagicMock()
     mock_client.messages.create.side_effect = [
-        _tool_use_sessio(sessio),
+        _tool_use_sessio(sessio, volum=1000),
         _tool_use_sessio(sessio),
     ]
 
@@ -1484,7 +1486,6 @@ def test_parts_buit_reintenta_un_cop(nedador_test, metodologia_test, sessions_te
     mock_client.messages.create.side_effect = [
         response_buit,
         _tool_use_sessio(sessio),
-        _tool_use_sessio(sessio),
     ]
 
     with patch(
@@ -1492,8 +1493,8 @@ def test_parts_buit_reintenta_un_cop(nedador_test, metodologia_test, sessions_te
     ):
         resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
 
-    # 1 buit + 1 reintent parts + 1 reintent volum
-    assert mock_client.messages.create.call_count == 3
+    # 1 buit + 1 reintent parts (volum ja vàlid)
+    assert mock_client.messages.create.call_count == 2
     assert all(part.exercicis for part in resultat[0].estructura.parts)
 
 
