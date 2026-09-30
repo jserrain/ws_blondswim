@@ -41,12 +41,12 @@ tests/agents/test_generar_macrocicle.py
 <<<<<<< SEARCH
     # 3 sessions de 3000m -> volum_per_sessio = 3000
     # 4 dies disponibles -> volum_min = 12000
-    # + 1 dia opcional -> volum_max = 15000
-    # mitjana = 13500
+    # volum_max = 12000 × 1.10 = 13200
+    # mitjana = 12600
     assert mesocicle.fase_objectiu == "Base"
     assert mesocicle.volum_min == 12000
-    assert mesocicle.volum_max == 15000
-    assert mesocicle.volum_mitja_previst == 13500
+    assert mesocicle.volum_max == 13200
+    assert mesocicle.volum_mitja_previst == 12600
 
 
 @pytest.fixture

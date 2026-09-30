@@ -37,6 +37,7 @@ def nedador_test() -> Nedador:
         categoria="absolut",
         proves_objectiu=["100m lliure", "200m lliure"],
         mode_ritme="temps",
+        dia_opcional=None,
         ritmes_css=RitmesCSS(
             font="css_test",
             data_test="2026-09-01",
