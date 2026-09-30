@@ -5,7 +5,6 @@ Valida les funcions de validació d'espaiat, detecció de re-taper i classificac
 amb casos reals del calendari 2026-27 i casos sintètics.
 """
 
-import pytest
 
 from blondswim.agents.context_competicio import (
     classificar_pics,

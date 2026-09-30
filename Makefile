@@ -16,8 +16,14 @@ format:
 run-ingestion:
 	. .venv/bin/activate && python -m blondswim.ingestion.xlsx_to_json
 
+MODEL ?= deepseek/deepseek-chat
+
 aider:
+	export $$(cat .env | xargs) && aider --model $(MODEL)
+
+aidersonnet:
 	export $$(cat .env | xargs) && aider --model sonnet
+
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
