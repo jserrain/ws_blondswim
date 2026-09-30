@@ -21,6 +21,47 @@ PERCENTATGES_VOLUM_PER_TIPUS: dict[str, float] = {
     "Cursa": 0.35,
 }
 
+# Progressió de volum dins d'un mesocicle: el volum màxim és un 10% superior
+# al mínim (el nedador només entrena els dies_disponibles, sense dia opcional).
+PROGRESSIO_BLOC: float = 1.10
+```
+
+src/blondswim/agents/generar_macrocicle.py
+```python
+<<<<<<< SEARCH
+def _calcular_volums_mesocicle(
+    nedador: Nedador,
+    historial: list[SessioRealitzada],
+    tipus: str,
+    percentatges: dict[str, float] = PERCENTATGES_VOLUM_PER_TIPUS,
+) -> tuple[int, int, int]:
+
+# Progressió de volum dins d'un mesocicle: el volum màxim és un 10% superior
+# al mínim (el nedador només entrena els dies_disponibles, sense dia opcional).
+PROGRESSIO_BLOC: float = 1.10
+```
+
+src/blondswim/agents/generar_macrocicle.py
+```python
+<<<<<<< SEARCH
+    volum_per_sessio = sum(s.volum_total_m for s in historial) / len(historial)
+
+    dies_base = len(nedador.dies_disponibles)
+    volum_min = volum_per_sessio * dies_base
+    if nedador.dia_opcional is not None:
+        volum_max = volum_per_sessio * (dies_base + 1)
+    else:
+        volum_max = volum_min
+    volum_mitja_previst = (volum_min + volum_max) / 2
+
+    factor = percentatges.get(tipus, 1.0)
+
+    return (
+        round(volum_min * factor),
+        round(volum_max * factor),
+        round(volum_mitja_previst * factor),
+    )
+
 
 def generar_macrocicle(
     nedador_id: str,
@@ -189,12 +230,55 @@ Retorna NOMÉS la descripció ampliada usant la tool retornar_fase_objectiu."""
         return mesocicle.fase_objectiu
 
 
+def _arrodonir_a_25(volum: float) -> int:
+    """Arrodoneix un volum al múltiple de 25m més proper."""
+    return round(volum / 25) * 25
+
+
 def _calcular_volums_mesocicle(
     nedador: Nedador,
     historial: list[SessioRealitzada],
     tipus: str,
     percentatges: dict[str, float] = PERCENTATGES_VOLUM_PER_TIPUS,
 ) -> tuple[int, int, int]:
+```
+
+Now update the docstring of `_calcular_volums_mesocicle` to reflect the new logic:
+
+src/blondswim/agents/generar_macrocicle.py
+```python
+<<<<<<< SEARCH
+    volum_per_sessio = mitjana de SessioRealitzada.volum_total_m sobre
+    tot l'històric rebut (si l'històric és buit, retorna (0, 0, 0)).
+
+    volum_min = volum_per_sessio × len(nedador.dies_disponibles) × pct_fase
+    volum_max = volum_min × PROGRESSIO_BLOC
+    volum_mitja_previst = mitjana(volum_min, volum_max)
+
+    Tots tres valors s'arrodoneixen a múltiples de 25m.
+    """
+```
+
+src/blondswim/agents/generar_macrocicle.py
+```python
+<<<<<<< SEARCH
+    volum_per_sessio = sum(s.volum_total_m for s in historial) / len(historial)
+
+    dies_base = len(nedador.dies_disponibles)
+    volum_min = volum_per_sessio * dies_base
+    if nedador.dia_opcional is not None:
+        volum_max = volum_per_sessio * (dies_base + 1)
+    else:
+        volum_max = volum_min
+    volum_mitja_previst = (volum_min + volum_max) / 2
+
+    factor = percentatges.get(tipus, 1.0)
+
+    return (
+        round(volum_min * factor),
+        round(volum_max * factor),
+        round(volum_mitja_previst * factor),
+    )
     """
     Calcula (volum_min, volum_max, volum_mitja_previst) per un mesocicle
     d'un tipus donat.

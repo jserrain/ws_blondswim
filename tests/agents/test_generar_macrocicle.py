@@ -26,8 +26,27 @@ def nedador_test() -> Nedador:
         proves_objectiu=["200m lliure"],
         mode_ritme="temps",
         dies_disponibles=["dilluns", "dimarts", "dimecres", "dijous"],
-        dia_opcional="dissabte",
+        dia_opcional=None,
     )
+```
+
+Now update the expected volumes. With `historial_test` = 3 sessions of 3000m → `volum_per_sessio = 3000`, `dies_base = 4`, `factor = 1.0` (Base):
+
+- `volum_min = 3000 × 4 × 1.0 = 12000` → 12000
+- `volum_max = 12000 × 1.10 = 13200` → 13200
+- `volum_mitja_previst = (12000 + 13200) / 2 = 12600` → 12600
+
+tests/agents/test_generar_macrocicle.py
+```python
+<<<<<<< SEARCH
+    # 3 sessions de 3000m -> volum_per_sessio = 3000
+    # 4 dies disponibles -> volum_min = 12000
+    # + 1 dia opcional -> volum_max = 15000
+    # mitjana = 13500
+    assert mesocicle.fase_objectiu == "Base"
+    assert mesocicle.volum_min == 12000
+    assert mesocicle.volum_max == 15000
+    assert mesocicle.volum_mitja_previst == 13500
 
 
 @pytest.fixture
@@ -444,10 +463,27 @@ def test_generar_mesocicle_peak_retalla_volums(
     )
 
     assert mesocicle.fase_objectiu == "Peak"
-    # Base: 12000 / 15000 / 13500 -> Peak (50%): 6000 / 7500 / 6750
+    # Base: 12000 / 13200 / 12600 -> Peak (50%): 6000 / 6600 / 6300
     assert mesocicle.volum_min == 6000
-    assert mesocicle.volum_max == 7500
-    assert mesocicle.volum_mitja_previst == 6750
+    assert mesocicle.volum_max == 6600
+    assert mesocicle.volum_mitja_previst == 6300
+```
+
+Now the microcicle tests in `test_generar_macrocicle.py` use `_crear_mesocicle` with explicit volumes, so they're independent of the formula. But `test_generar_microcicles_base_4_setmanes` etc. pass explicit `volum_min=12000, volum_max=15000, volum_mitja_previst=13500`. Those are fine as-is since they test `generar_microcicles_mesocicle` directly with given values. Let me check the interpolation expectations:
+
+For Base 4 setmanes with `volum_min=12000, volum_max=15000`:
+- `n_carrega = 3`, interpolation min→max over 3 steps: index 0 → 12000, index 1 → 13500, index 2 → 15000. ✓ matches test.
+
+These tests don't need changing since they pass explicit values. Good.
+
+Now `test_generar_microcicle.py` — the `nedador_test` fixture doesn't set `dia_opcional`, so it uses the model default `"dissabte"`. The task says to set it to `None`. Let me update:
+
+tests/agents/test_generar_microcicle.py
+```python
+<<<<<<< SEARCH
+        proves_objectiu=["100m lliure", "200m lliure"],
+        mode_ritme="temps",
+        ritmes_css=RitmesCSS(
 
 
 def _crear_mesocicle(
