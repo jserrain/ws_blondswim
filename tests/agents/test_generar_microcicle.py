@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -410,12 +411,17 @@ def test_generar_i_validar_microcicle_setmana_trobada(nedador_test, metodologia_
         mesocicles=[mesocicle],
     )
 
-    # Mock resposta LLM: una per sessió (l'esquelet en genera 4)
+    # Mock resposta LLM: una per sessió, construïda a partir del sessio_id
+    # que apareix al prompt (l'esquelet en genera tantes com dies actius).
+    def _resposta_per_prompt(*args, **kwargs):
+        prompt = kwargs["messages"][0]["content"]
+        match = re.search(r'sessio_id: "([^"]+)"', prompt)
+        sessio_id = match.group(1)
+        dia = sessio_id.rsplit("_", 1)[-1]
+        return _tool_use_sessio(_sessio_esquelet(dia))
+
     mock_client = MagicMock()
-    mock_client.messages.create.side_effect = [
-        _tool_use_sessio(_sessio_esquelet(dia))
-        for dia in ["dilluns", "dimarts", "dimecres", "dijous"]
-    ]
+    mock_client.messages.create.side_effect = _resposta_per_prompt
 
     with patch(
         "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
@@ -1371,8 +1377,10 @@ def test_volum_objectiu_sessio_al_prompt(nedador_test, metodologia_test, session
         generar_microcicle(nedador_test, sessions_test, metodologia_test)
 
     primer_prompt = mock_client.messages.create.call_args_list[0].kwargs["messages"][0]["content"]
-    # 15000 / 4 = 3750 -> múltiple de 25
-    assert "volum_objectiu: 3750m" in primer_prompt
+    expected = round(
+        sum(s.volum_total for s in sessions_test) / len(sessions_test) / 25
+    ) * 25
+    assert f"volum_objectiu: {expected}m" in primer_prompt
 
 
 def test_warning_volum_fora_10_percent(
@@ -1385,12 +1393,11 @@ def test_warning_volum_fora_10_percent(
     mock_client = MagicMock()
     mock_client.messages.create.return_value = _tool_use_sessio(sessions[0])
 
-    with caplog.at_level(logging.WARNING):
-        with patch(
-            "blondswim.agents.generar_microcicle.get_llm_client",
-            return_value=mock_client,
-        ):
-            generar_microcicle(nedador_test, sessions, metodologia_test)
+    with caplog.at_level(logging.WARNING), patch(
+        "blondswim.agents.generar_microcicle.get_llm_client",
+        return_value=mock_client,
+    ):
+        generar_microcicle(nedador_test, sessions, metodologia_test)
 
     assert any("fora del ±10%" in r.message for r in caplog.records)
 
