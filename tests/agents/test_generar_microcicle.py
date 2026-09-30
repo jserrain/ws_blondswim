@@ -1,9 +1,9 @@
 """Tests per a la generació de contingut de microcicle amb LLM."""
 
 import json
-from datetime import date
 import logging
 import re
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pytest
