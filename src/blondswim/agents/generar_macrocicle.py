@@ -1,9 +1,9 @@
 """Generació de macrocicles a partir del calendari de competicions."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, timedelta
 
-from blondswim.agents import context_competicio
+from blondswim.agents import context_competicio, periodificacio
 from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
 from blondswim.models.calendari import Competicio
 from blondswim.models.historial import SessioRealitzada
@@ -239,16 +239,113 @@ def _interpolar_volum(volum_inici: int, volum_fi: int, index: int, total: int) -
     return round(volum_inici + (volum_fi - volum_inici) * index / (total - 1))
 
 
+def _format_dates(dilluns: date, diumenge: date) -> str:
+    """Format de dates d'un microcicle: 'DD-DD/MM/YYYY' o 'DD/MM-DD/MM/YYYY'."""
+    if dilluns.month == diumenge.month:
+        return f"{dilluns:%d}-{diumenge:%d}/{diumenge:%m}/{diumenge:%Y}"
+    return f"{dilluns:%d/%m}-{diumenge:%d/%m}/{diumenge:%Y}"
+
+
+def _tipus_base_i_notes(
+    plan: periodificacio.SetmanaPlan,
+    es_base: bool,
+    es_primer_del_bloc: bool,
+) -> tuple[str, str, bool, bool]:
+    """
+    Deriva (tipus_base, notes, dies_qualitat, test_css) d'un SetmanaPlan.
+
+    - Base/Build1/Build2: carrega/qualitat, descàrrega a l'última setmana del bloc.
+    - Peak: taper. Cursa: taper. Transicio: transicio.
+    """
+    fase = plan.fase
+
+    if fase in ("Base", "Build1", "Build2"):
+        if plan.es_descarrega:
+            return "descarrega", "Descàrrega", not es_base, False
+        tipus = "carrega" if es_base else "qualitat"
+        etiqueta = "Càrrega" if es_base else "Qualitat"
+        test_css = es_base and es_primer_del_bloc
+        notes = f"{etiqueta} + Test CSS" if test_css else etiqueta
+        return tipus, notes, not es_base, test_css
+
+    if fase == "Peak":
+        return "taper", "Taper", True, False
+
+    if fase == "Cursa":
+        return "taper", "Setmana de competició", True, False
+
+    # Transicio
+    return "transicio", "Recuperació post-competició", False, False
+
+
+def _volum_setmana(
+    plan: periodificacio.SetmanaPlan,
+    mesocicle: Mesocicle,
+    n_setmanes_bloc: int,
+) -> int:
+    """
+    Volum objectiu d'una setmana del bloc, amb R4 (proves B) aplicat.
+
+    - Descàrrega: 70% de volum_min.
+    - Base/Build1/Build2 (càrrega): interpolació min->max dins el bloc.
+    - Peak: interpolació max->min (decreixent cap a la cursa).
+    - Cursa/Transicio: volum_mitja_previst.
+    """
+    fase = plan.fase
+
+    if fase in ("Base", "Build1", "Build2"):
+        if plan.es_descarrega:
+            volum = round(mesocicle.volum_min * 0.7)
+        else:
+            n_carrega = max(1, n_setmanes_bloc - 1)
+            if n_carrega == 1:
+                volum = mesocicle.volum_max
+            else:
+                volum = _interpolar_volum(
+                    mesocicle.volum_min,
+                    mesocicle.volum_max,
+                    plan.index_dins_bloc,
+                    n_carrega,
+                )
+    elif fase == "Peak":
+        if n_setmanes_bloc <= 1:
+            volum = mesocicle.volum_mitja_previst
+        else:
+            volum = _interpolar_volum(
+                mesocicle.volum_max,
+                mesocicle.volum_min,
+                plan.index_dins_bloc,
+                n_setmanes_bloc,
+            )
+    else:  # Cursa, Transicio
+        volum = mesocicle.volum_mitja_previst
+
+    # R4: setmana amb prova B -> volum x 0.8 (o el mínim si és descàrrega).
+    te_prova_b = any(c.classe == "B" for c in plan.competicions_b_c)
+    if te_prova_b:
+        volum_b = round(volum * 0.8)
+        if plan.es_descarrega:
+            volum = min(volum, volum_b)
+        else:
+            volum = volum_b
+
+    return volum
+
+
 def generar_microcicles_mesocicle(
     mesocicle: Mesocicle,
-    data_inici_macrocicle: str,
+    plans: list[periodificacio.SetmanaPlan],
+    sessions_des_de: date | None = None,
 ) -> list[Microcicle]:
     """
-    Genera la llista de Microcicle (una per setmana) d'un mesocicle ja creat.
+    Genera la llista de Microcicle (una per setmana) d'un mesocicle a partir
+    dels SetmanaPlan del seu bloc.
 
     Args:
-        mesocicle: Mesocicle amb setmanes ("X-Y"), tipus i volums ja fixats
-        data_inici_macrocicle: Data d'inici del macrocicle (format ISO)
+        mesocicle: Mesocicle amb tipus i volums ja fixats
+        plans: SetmanaPlan del bloc d'aquest mesocicle (ordenats)
+        sessions_des_de: Data a partir de la qual es generaran sessions
+            (només s'assigna al primer microcicle)
 
     Returns:
         Llista de Microcicle ordenada per setmana ascendent
@@ -260,128 +357,32 @@ def generar_microcicles_mesocicle(
             "creats per generar_mesocicle()"
         )
 
-    # 1. Parsejar setmanes
-    parts = mesocicle.setmanes.split("-")
-    setmana_inici = int(parts[0])
-    setmana_fi = int(parts[1]) if len(parts) > 1 else setmana_inici
-    n_setmanes = setmana_fi - setmana_inici + 1
+    es_base = mesocicle.tipus == "Base"
+    n_setmanes_bloc = len(plans)
 
-    data_inici_macro = datetime.fromisoformat(data_inici_macrocicle)
-
-    # 2. Calcular tipus_base/volum/dies_qualitat/test_css/notes per setmana
-    tipus_base_per_setmana: list[str] = []
-    volum_per_setmana: list[int] = []
-    dies_qualitat_per_setmana: list[bool] = []
-    test_css_per_setmana: list[bool] = []
-    notes_per_setmana: list[str] = []
-
-    if mesocicle.tipus in ("Base", "Build1", "Build2"):
-        es_base = mesocicle.tipus == "Base"
-        tipus_carrega = "carrega" if es_base else "qualitat"
-        etiqueta_carrega = "Càrrega" if es_base else "Qualitat"
-
-        # Recórrer en blocs de fins a 4 setmanes
-        i = 0
-        while i < n_setmanes:
-            mida_bloc = min(4, n_setmanes - i)
-            te_descarrega = mida_bloc == 4
-            n_carrega = 3 if te_descarrega else mida_bloc
-
-            for j in range(mida_bloc):
-                idx = i + j
-                if te_descarrega and j == 3:
-                    # Setmana de descàrrega
-                    tipus_base_per_setmana.append("descarrega")
-                    volum_per_setmana.append(round(mesocicle.volum_min * 0.7))
-                    dies_qualitat_per_setmana.append(not es_base)
-                    test_css_per_setmana.append(False)
-                    notes_per_setmana.append("Descàrrega")
-                else:
-                    # Setmana de càrrega/qualitat
-                    tipus_base_per_setmana.append(tipus_carrega)
-                    if n_carrega == 1:
-                        volum = mesocicle.volum_max
-                    else:
-                        volum = _interpolar_volum(
-                            mesocicle.volum_min,
-                            mesocicle.volum_max,
-                            j,
-                            n_carrega,
-                        )
-                    volum_per_setmana.append(volum)
-                    dies_qualitat_per_setmana.append(not es_base)
-                    es_test_css = idx == 0 and es_base
-                    test_css_per_setmana.append(es_test_css)
-                    notes_per_setmana.append(
-                        f"{etiqueta_carrega} + Test CSS" if es_test_css else etiqueta_carrega
-                    )
-            i += mida_bloc
-
-    elif mesocicle.tipus == "Peak":
-        for i in range(n_setmanes):
-            tipus_base_per_setmana.append("taper")
-            dies_qualitat_per_setmana.append(True)
-            test_css_per_setmana.append(False)
-            notes_per_setmana.append("Taper")
-            if n_setmanes == 1:
-                volum_per_setmana.append(mesocicle.volum_mitja_previst)
-            else:
-                # i=0 (més lluny) = volum_max; i=n-1 (cursa) = volum_min
-                volum_per_setmana.append(
-                    _interpolar_volum(
-                        mesocicle.volum_max,
-                        mesocicle.volum_min,
-                        i,
-                        n_setmanes,
-                    )
-                )
-
-    elif mesocicle.tipus == "Cursa":
-        tipus_base_per_setmana.append("taper")
-        volum_per_setmana.append(mesocicle.volum_mitja_previst)
-        dies_qualitat_per_setmana.append(True)
-        test_css_per_setmana.append(False)
-        notes_per_setmana.append("Setmana de competició")
-
-    else:  # Transicio
-        tipus_base_per_setmana.append("transicio")
-        volum_per_setmana.append(mesocicle.volum_mitja_previst)
-        dies_qualitat_per_setmana.append(False)
-        test_css_per_setmana.append(False)
-        notes_per_setmana.append("Recuperació post-competició")
-
-    # 3. Crear els Microcicle
     microcicles: list[Microcicle] = []
-    for i in range(n_setmanes):
-        s = setmana_inici + i
-        data_inici_setmana = data_inici_macro + timedelta(weeks=s - 1)
-        data_fi_setmana = data_inici_setmana + timedelta(days=6)
-
-        if data_inici_setmana.month == data_fi_setmana.month:
-            dates = (
-                f"{data_inici_setmana:%d}-{data_fi_setmana:%d}"
-                f"/{data_fi_setmana:%m}/{data_fi_setmana:%Y}"
-            )
-        else:
-            dates = (
-                f"{data_inici_setmana:%d/%m}-{data_fi_setmana:%d/%m}"
-                f"/{data_fi_setmana:%Y}"
-            )
+    for i, plan in enumerate(plans):
+        es_primer_del_bloc = plan.index_dins_bloc == 0
+        tipus_base, notes, dies_qualitat, test_css = _tipus_base_i_notes(
+            plan, es_base, es_primer_del_bloc
+        )
+        volum = _volum_setmana(plan, mesocicle, n_setmanes_bloc)
 
         microcicles.append(
             Microcicle(
-                setmana=s,
-                dates=dates,
+                setmana=plan.setmana_iso,
+                dates=_format_dates(plan.dilluns, plan.diumenge),
                 mesocicle_id=mesocicle.id,
-                tipus_base=tipus_base_per_setmana[i],
-                notes=notes_per_setmana[i],
-                volum_objectiu=volum_per_setmana[i],
-                dies_qualitat=dies_qualitat_per_setmana[i],
-                test_css=test_css_per_setmana[i],
+                tipus_base=tipus_base,
+                notes=notes,
+                volum_objectiu=volum,
+                dies_qualitat=dies_qualitat,
+                test_css=test_css,
+                sessions_des_de=sessions_des_de if i == 0 else None,
             )
         )
 
-    return sorted(microcicles, key=lambda m: m.setmana)
+    return microcicles
 
 
 def generar_mesocicle(
@@ -390,44 +391,21 @@ def generar_mesocicle(
     competicions: list[Competicio],
     enriquir_amb_llm: bool = True,
     historial: list[SessioRealitzada] | None = None,
+    data_referencia: date | None = None,
+    dies_marge: int = 1,
 ) -> tuple[Mesocicle, list[dict]]:
     """
-    Decideix i afegeix seqüencialment el següent mesocicle al macrocicle,
-    segons la posició actual (últim mesocicle de macrocicle.mesocicles,
-    o data_inici del macrocicle si encara no n'hi ha cap).
+    Genera UN sol mesocicle: el bloc que conté la data de referència + marge.
 
-    1. Calcula la data de la posició actual (data_inici del macrocicle +
-       7 dies per cada setmana ja assignada als mesocicles existents).
-    2. Calcula les setmanes fins la propera competició classe A del
-       calendari (None si no en queda cap).
-    3. Classificació determinista del tipus de mesocicle:
-       - Si l'últim mesocicle existent és de tipus "Cursa" -> "Transicio"
-       - Si no queda cap competició A -> "Base"
-       - Si setmanes_fins_a <= 0 -> "Cursa"
-       - Si setmanes_fins_a <= 3 -> "Peak"
-       - Si setmanes_fins_a <= 6 -> "Build2"
-       - Si setmanes_fins_a <= 10 -> "Build1"
-       - Altrament -> "Base"
-    4. Duració: 1 setmana per "Transicio"/"Cursa"; per "Peak" les
-       setmanes exactes fins la competició; per "Base"/"Build1"/"Build2",
-       4 setmanes per defecte, retallada per no sobrepassar el final
-       del macrocicle (data_fi) ni la propera competició A.
-    5. Crea el Mesocicle (id incremental "meso_N", nom "<Tipus> N",
-       setmanes com a rang "X-Y" (numeració global dins el macrocicle),
-       dates calculades, fase_objectiu = nom del tipus, volum_min/max/
-       mitja_previst = 0 de moment (es podran ajustar més endavant),
-       microcicles=[]), i l'afegeix a macrocicle.mesocicles.
-    6. Si enriquir_amb_llm=True, crida una nova funció privada
-       _enriquir_fase_objectiu_amb_llm(mesocicle, nedador) que fa una
-       crida a l'API de Claude amb tool-use forçat perquè la resposta
-       sigui exclusivament {"fase_objectiu": str} -- no pot canviar cap
-       altre camp. Si l'API falla, fallback silenciós mantenint el
-       fase_objectiu determinista (logger.warning). Calca exactament
-       el patró ja existent a seleccio_model.py::_enriquir_justificacio_amb_llm.
-
-    Retorna (mesocicle, avisos): avisos inclou "cap competició classe A
-    restant" si escau, i "mesocicle retallat per falta de setmanes" si
-    la duració s'ha hagut de reduir.
+    1. Calcula inici_generacio = data_referencia + dies_marge dies
+       (data_referencia = date.today() si és None).
+    2. Crida periodificar_temporada() UNA vegada per obtenir tots els
+       SetmanaPlan de la temporada.
+    3. Busca el bloc que conté inici_generacio i construeix el Mesocicle
+       (tipus = fase del bloc) i els seus Microcicles.
+    4. El primer microcicle del bloc porta sessions_des_de = inici_generacio.
+    5. Si enriquir_amb_llm=True, enriqueix fase_objectiu amb LLM (fallback
+       silenciós si l'API falla).
 
     Args:
         nedador: Nedador per al qual es genera el mesocicle
@@ -435,121 +413,47 @@ def generar_mesocicle(
         competicions: Llista de totes les competicions del calendari
         enriquir_amb_llm: Si True, enriquir fase_objectiu amb LLM (default: True)
         historial: Historial de sessions realitzades per estimar volums (default: None)
+        data_referencia: Data de referència (default: None -> date.today())
+        dies_marge: Dies de marge afegits a data_referencia (default: 1)
 
     Returns:
         Tupla amb:
         - Mesocicle generat i afegit al macrocicle
         - Llista d'avisos
+
+    Raises:
+        ValueError: Si la data de referència cau fora de la temporada
     """
-    avisos = []
+    avisos: list[dict] = []
     historial = historial or []
 
-    # 1. Calcular data de posició actual
-    data_inici_macro = datetime.fromisoformat(macrocicle.data_inici)
-    
-    # Comptar setmanes ja assignades
-    setmanes_assignades = 0
-    for meso in macrocicle.mesocicles:
-        for micro in meso.microcicles:
-            setmanes_assignades = max(setmanes_assignades, micro.setmana)
-    
-    data_inici_mesocicle = data_inici_macro + timedelta(weeks=setmanes_assignades)
-    setmana_inici = setmanes_assignades + 1
+    if data_referencia is None:
+        data_referencia = date.today()
 
-    # 2. Calcular setmanes fins la propera competició A (per Peak/Cursa/Transicio)
-    competicions_a = [c for c in competicions if c.classe == "A"]
-    competicions_a_ordenades = sorted(competicions_a, key=lambda c: c.data_inici)
+    inici_generacio = data_referencia + timedelta(days=dies_marge)
 
-    propera_comp_a = None
-    setmanes_fins_a = None
+    data_inici = date.fromisoformat(macrocicle.data_inici)
+    data_fi = date.fromisoformat(macrocicle.data_fi)
 
-    for comp in competicions_a_ordenades:
-        data_comp = datetime.fromisoformat(comp.data_inici)
-        if data_comp >= data_inici_mesocicle:
-            propera_comp_a = comp
-            dies_fins_comp = (data_comp - data_inici_mesocicle).days
-            setmanes_fins_a = dies_fins_comp / 7.0
-            break
+    # 1. Periodificar tota la temporada (una sola vegada, determinista)
+    plans, avisos_periodificacio = periodificacio.periodificar_temporada(
+        competicions, data_inici, data_fi
+    )
+    avisos.extend(avisos_periodificacio)
 
-    # 2b. Calcular setmanes fins la propera competició A O B (per Base/Build1/Build2)
-    competicions_ab = [c for c in competicions if c.classe in ("A", "B")]
-    competicions_ab_ordenades = sorted(competicions_ab, key=lambda c: c.data_inici)
+    # 2. Buscar el bloc que conté inici_generacio
+    plans_bloc = [p for p in plans if p.dilluns <= inici_generacio <= p.diumenge]
+    if not plans_bloc:
+        raise ValueError(
+            f"La data de referència {inici_generacio.isoformat()} cau fora "
+            f"de la temporada ({macrocicle.data_inici} - {macrocicle.data_fi})"
+        )
 
-    propera_comp_ab = None
-    setmanes_fins_ab = None
+    bloc_id = plans_bloc[0].bloc_id
+    plans_bloc = [p for p in plans if p.bloc_id == bloc_id]
+    tipus = plans_bloc[0].fase
 
-    for comp in competicions_ab_ordenades:
-        data_comp = datetime.fromisoformat(comp.data_inici)
-        if data_comp >= data_inici_mesocicle:
-            propera_comp_ab = comp
-            dies_fins_comp = (data_comp - data_inici_mesocicle).days
-            setmanes_fins_ab = dies_fins_comp / 7.0
-            break
-
-    # 3. Classificació determinista del tipus
-    ultim_mesocicle = macrocicle.mesocicles[-1] if macrocicle.mesocicles else None
-
-    if ultim_mesocicle and ultim_mesocicle.tipus == "Cursa":
-        tipus = "Transicio"
-    elif propera_comp_a is not None and setmanes_fins_a <= 0:
-        tipus = "Cursa"
-    elif propera_comp_a is not None and setmanes_fins_a <= 3:
-        tipus = "Peak"
-    elif propera_comp_ab is None:
-        tipus = "Base"
-        avisos.append({
-            "tipus_avis": "cap_competicio_a_ni_b_restant",
-            "missatge": "No queda cap competició classe A ni B al calendari. Generant mesocicle Base.",
-        })
-    elif setmanes_fins_ab <= 6:
-        tipus = "Build2"
-    elif setmanes_fins_ab <= 10:
-        tipus = "Build1"
-    else:
-        tipus = "Base"
-
-    # 4. Calcular duració
-    if tipus in ("Transicio", "Cursa"):
-        duracio_setmanes = 1
-    elif tipus == "Peak" and setmanes_fins_a is not None:
-        duracio_setmanes = max(1, int(setmanes_fins_a))
-    else:
-        duracio_setmanes = 4
-    
-    # Retallar per no sobrepassar data_fi del macrocicle
-    data_fi_macro = datetime.fromisoformat(macrocicle.data_fi)
-    data_fi_mesocicle = data_inici_mesocicle + timedelta(weeks=duracio_setmanes)
-    
-    if data_fi_mesocicle > data_fi_macro:
-        setmanes_disponibles = (data_fi_macro - data_inici_mesocicle).days // 7
-        if setmanes_disponibles < duracio_setmanes:
-            duracio_setmanes = max(1, setmanes_disponibles)
-            avisos.append({
-                "tipus_avis": "mesocicle_retallat",
-                "missatge": f"Mesocicle retallat a {duracio_setmanes} setmanes per no sobrepassar el final del macrocicle.",
-            })
-    
-    # Retallar per no sobrepassar propera competició A
-    if propera_comp_a and tipus not in ("Peak", "Cursa"):
-        data_comp = datetime.fromisoformat(propera_comp_a.data_inici)
-        setmanes_fins_comp = (data_comp - data_inici_mesocicle).days // 7
-        if setmanes_fins_comp < duracio_setmanes:
-            duracio_setmanes = max(1, setmanes_fins_comp)
-            avisos.append({
-                "tipus_avis": "mesocicle_retallat",
-                "missatge": f"Mesocicle retallat a {duracio_setmanes} setmanes per no sobrepassar la propera competició A.",
-            })
-
-    # Recalcular data_fi amb duració final
-    data_fi_mesocicle = data_inici_mesocicle + timedelta(weeks=duracio_setmanes) - timedelta(days=1)
-    
-    setmana_fi = setmana_inici + duracio_setmanes - 1
-
-    # 5. Crear Mesocicle
-    numero_mesocicle = len(macrocicle.mesocicles) + 1
-    mesocicle_id = f"meso_{numero_mesocicle}"
-
-    # Calcular volums reals a partir de l'històric
+    # 3. Calcular volums a partir de l'històric
     volum_min, volum_max, volum_mitja_previst = _calcular_volums_mesocicle(
         nedador, historial, tipus
     )
@@ -559,30 +463,45 @@ def generar_mesocicle(
             "missatge": "Sense històric del nedador: volums del mesocicle no estimats (0).",
         })
 
+    # 4. Crear Mesocicle
+    numero_mesocicle = len(macrocicle.mesocicles) + 1
+    mesocicle_id = f"meso_{numero_mesocicle}"
+
+    primer = plans_bloc[0]
+    ultim = plans_bloc[-1]
+    setmana_inici = primer.setmana_iso
+    setmana_fi = ultim.setmana_iso
+
     mesocicle = Mesocicle(
         id=mesocicle_id,
         nom=f"{tipus} {numero_mesocicle}",
-        setmanes=f"{setmana_inici}-{setmana_fi}" if setmana_inici != setmana_fi else str(setmana_inici),
-        dates=f"{data_inici_mesocicle.strftime('%d/%m/%Y')}-{data_fi_mesocicle.strftime('%d/%m/%Y')}",
+        setmanes=(
+            f"{setmana_inici}-{setmana_fi}"
+            if setmana_inici != setmana_fi
+            else str(setmana_inici)
+        ),
+        dates=(
+            f"{primer.dilluns.strftime('%d/%m/%Y')}-"
+            f"{ultim.diumenge.strftime('%d/%m/%Y')}"
+        ),
         tipus=tipus,
         fase_objectiu=tipus,
-        metodologia_dominant="",  # Es pot omplir més endavant
+        metodologia_dominant="",
         volum_min=volum_min,
         volum_max=volum_max,
         volum_mitja_previst=volum_mitja_previst,
         microcicles=[],
     )
 
-    # Generar microcicles (una setmana per Microcicle)
+    # 5. Generar microcicles a partir dels SetmanaPlan del bloc
     mesocicle.microcicles = generar_microcicles_mesocicle(
-        mesocicle, macrocicle.data_inici
+        mesocicle, plans_bloc, sessions_des_de=inici_generacio
     )
 
     # 6. Enriquir fase_objectiu amb LLM si està habilitat
     if enriquir_amb_llm:
         mesocicle.fase_objectiu = _enriquir_fase_objectiu_amb_llm(mesocicle, nedador.id)
 
-    # Afegir al macrocicle
     macrocicle.mesocicles.append(mesocicle)
 
     return mesocicle, avisos

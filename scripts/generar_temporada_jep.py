@@ -7,9 +7,10 @@ mesocicle, com a demo -- la resta es generarien mesocicle a mesocicle a
 mesura que avança la temporada real) -> exportar_mesocicle_excel().
 """
 
+import argparse
 import json
 import sys
-from datetime import datetime
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -17,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from blondswim.agents.context_competicio import validar_espaiat_pics_a
 from blondswim.agents.generar_macrocicle import generar_macrocicle, generar_mesocicle
 from blondswim.agents.generar_microcicle import generar_contingut_mesocicle
+from blondswim.agents.periodificacio import periodificar_temporada
 from blondswim.agents.taper import generar_pla_taper_temporada
 from blondswim.export.mesocicle_excel import exportar_mesocicle_excel
 from blondswim.models.calendari import Competicio
@@ -27,9 +29,36 @@ TEMPORADA_DATA_INICI = "2026-08-18"
 TEMPORADA_DATA_FI = "2027-07-09"
 
 
+def _imprimir_taula_periodificacio(plans) -> None:
+    """Imprimeix la taula de periodificació per revisar-la manualment."""
+    print("\n   Setmana ISO | Dates                 | Fase      | Bloc     | Desc. | B/C")
+    print("   " + "-" * 78)
+    for p in plans:
+        bc = ", ".join(f"{c.classe}:{c.nom}" for c in p.competicions_b_c) or "-"
+        desc = "SÍ" if p.es_descarrega else "  "
+        dates = f"{p.dilluns:%d/%m/%Y}-{p.diumenge:%d/%m/%Y}"
+        print(
+            f"   {p.setmana_iso:>2}/{p.any_iso}     | {dates} | "
+            f"{p.fase:<9} | {p.bloc_id:<8} | {desc}    | {bc}"
+        )
+
+
 def main() -> int:
     import logging
     logging.basicConfig(level=logging.INFO)
+
+    parser = argparse.ArgumentParser(description="Genera la temporada 2026-27 d'en Jep.")
+    parser.add_argument(
+        "--data-referencia",
+        type=str,
+        default=None,
+        help="Data de referència (YYYY-MM-DD). Per defecte, avui.",
+    )
+    args = parser.parse_args()
+
+    data_referencia = (
+        date.fromisoformat(args.data_referencia) if args.data_referencia else None
+    )
 
     base_dir = Path(__file__).parent.parent
     data_processed = base_dir / "data" / "processed"
@@ -64,49 +93,32 @@ def main() -> int:
     for avis in avisos_macro:
         print(f"   ⚠ {avis}")
 
-    print("\n3. Generant mesocicles...")
-    total_setmanes = (
-        datetime.fromisoformat(TEMPORADA_DATA_FI)
-        - datetime.fromisoformat(TEMPORADA_DATA_INICI)
-    ).days // 7
+    print("\n3. Periodificant la temporada...")
+    plans, avisos_periodificacio = periodificar_temporada(
+        competicions,
+        date.fromisoformat(TEMPORADA_DATA_INICI),
+        date.fromisoformat(TEMPORADA_DATA_FI),
+    )
+    _imprimir_taula_periodificacio(plans)
+    for avis in avisos_periodificacio:
+        print(f"   ⚠ {avis}")
 
-    tots_els_avisos = list(avisos_macro)
-    while True:
-        setmanes_assignades = 0
-        for meso in macrocicle.mesocicles:
-            for micro in meso.microcicles:
-                setmanes_assignades = max(setmanes_assignades, micro.setmana)
-
-        if setmanes_assignades >= total_setmanes:
-            break
-
-        mesocicle, avisos = generar_mesocicle(
-            nedador=nedador,
-            macrocicle=macrocicle,
-            competicions=competicions,
-            historial=historial,
-            enriquir_amb_llm=True,
-        )
-        tots_els_avisos.extend(avisos)
-        n_setmanes = len(mesocicle.microcicles)
-        print(
-            f"   ✓ {mesocicle.nom} ({mesocicle.tipus}): "
-            f"setmanes {mesocicle.setmanes}, {n_setmanes} microcicles, "
-            f"volum {mesocicle.volum_min}-{mesocicle.volum_max}m"
-        )
-
-        if n_setmanes == 0:
-            print(
-                "   ✗ Mesocicle sense microcicles generats -- "
-                "aturant per evitar bucle infinit"
-            )
-            break
-
-    print(f"\n   Total: {len(macrocicle.mesocicles)} mesocicles generats")
-    if tots_els_avisos:
-        print(f"   {len(tots_els_avisos)} avisos acumulats:")
-        for avis in tots_els_avisos:
-            print(f"     ⚠ {avis}")
+    print("\n4. Generant el mesocicle de la data de referència...")
+    mesocicle, avisos = generar_mesocicle(
+        nedador=nedador,
+        macrocicle=macrocicle,
+        competicions=competicions,
+        historial=historial,
+        enriquir_amb_llm=True,
+        data_referencia=data_referencia,
+    )
+    print(
+        f"   ✓ {mesocicle.nom} ({mesocicle.tipus}): "
+        f"setmanes {mesocicle.setmanes}, {len(mesocicle.microcicles)} microcicles, "
+        f"volum {mesocicle.volum_min}-{mesocicle.volum_max}m"
+    )
+    for avis in avisos:
+        print(f"   ⚠ {avis}")
 
     output_dir = base_dir / "data" / "processed"
     macrocicle_path = output_dir / "macrocicle_temporada_26_27.json"
@@ -114,12 +126,7 @@ def main() -> int:
         json.dump(macrocicle.model_dump(), f, ensure_ascii=False, indent=2)
     print(f"\n   ✓ Macrocicle desat a {macrocicle_path}")
 
-    if not macrocicle.mesocicles:
-        print("\n✗ Cap mesocicle generat, aturant.")
-        return 1
-
-    primer_mesocicle = macrocicle.mesocicles[0]
-    print(f"\n4. Generant contingut LLM pel primer mesocicle ({primer_mesocicle.nom})...")
+    print(f"\n5. Generant contingut LLM pel mesocicle ({mesocicle.nom})...")
     print("   (Aquesta crida farà una petició real a l'API de Claude per setmana)")
 
     avisos_pics_a = validar_espaiat_pics_a(competicions)
@@ -133,7 +140,7 @@ def main() -> int:
             nedador=nedador,
             macrocicle=macrocicle,
             categoria=categoria_contingut,
-            mesocicle_id=primer_mesocicle.id,
+            mesocicle_id=mesocicle.id,
             pla_taper=pla_taper,
             avisos_pics_a=avisos_pics_a,
             historial=historial,
@@ -146,9 +153,9 @@ def main() -> int:
     for avis in avisos_contingut:
         print(f"   ⚠ Setmana {avis.get('setmana')}: {avis.get('error')}")
 
-    print("\n5. Exportant a Excel...")
-    output_path = output_dir / f"mesocicle_{nedador.nom.lower()}_{primer_mesocicle.id}.xlsx"
-    exportar_mesocicle_excel(nedador, primer_mesocicle, resultats, output_path)
+    print("\n6. Exportant a Excel...")
+    output_path = output_dir / f"mesocicle_{nedador.nom.lower()}_{mesocicle.id}.xlsx"
+    exportar_mesocicle_excel(nedador, mesocicle, resultats, output_path)
     print(f"   ✓ Excel exportat a {output_path}")
 
     print("\n" + "=" * 80)

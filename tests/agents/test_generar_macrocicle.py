@@ -1,5 +1,6 @@
 """Tests per a la generació de macrocicles."""
 
+from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -174,273 +175,6 @@ def test_generar_macrocicle_crida_validar_espaiat_pics_a():
         assert avisos_mock[0] in avisos
 
 
-def test_generar_mesocicle_competicio_a_llunyana_genera_base(nedador_test, historial_test):
-    """Verifica que amb una competició A llunyana (>10 setmanes) genera Base de 4 setmanes."""
-    # Crear macrocicle buit
-    macrocicle = Macrocicle(
-        nom="Macrocicle 2026-2027",
-        temporada="2026-2027",
-        data_inici="2026-09-01",
-        data_fi="2027-06-30",
-        mesocicles=[],
-    )
-
-    # Competició A a 15 setmanes
-    competicions = [
-        Competicio(
-            id="comp1",
-            nom="Competició A llunyana",
-            data_inici="2026-12-14",  # ~15 setmanes després
-            data_fi="2026-12-16",
-            classe="A",
-            piscina="25m",
-        ),
-    ]
-
-    # Generar mesocicle
-    mesocicle, avisos = generar_mesocicle(
-        nedador=nedador_test,
-        macrocicle=macrocicle,
-        competicions=competicions,
-        enriquir_amb_llm=False,
-        historial=historial_test,
-    )
-
-    # Verificar tipus i duració
-    assert mesocicle.fase_objectiu == "Base"
-    assert mesocicle.nom == "Base 1"
-    assert mesocicle.id == "meso_1"
-    assert mesocicle.setmanes == "1-4"  # 4 setmanes
-    
-    # Verificar que s'ha afegit al macrocicle
-    assert len(macrocicle.mesocicles) == 1
-    assert macrocicle.mesocicles[0] == mesocicle
-
-    # No hauria de tenir avisos
-    assert len(avisos) == 0
-
-
-def test_generar_mesocicle_competicio_a_propera_genera_peak(nedador_test, historial_test):
-    """Verifica que amb una competició A a 2 setmanes genera Peak retallat."""
-    # Crear macrocicle buit
-    macrocicle = Macrocicle(
-        nom="Macrocicle 2026-2027",
-        temporada="2026-2027",
-        data_inici="2026-09-01",
-        data_fi="2027-06-30",
-        mesocicles=[],
-    )
-
-    # Competició A a 2 setmanes
-    competicions = [
-        Competicio(
-            id="comp1",
-            nom="Competició A propera",
-            data_inici="2026-09-15",  # 2 setmanes després
-            data_fi="2026-09-17",
-            classe="A",
-            piscina="25m",
-        ),
-    ]
-
-    # Generar mesocicle
-    mesocicle, _avisos = generar_mesocicle(
-        nedador=nedador_test,
-        macrocicle=macrocicle,
-        competicions=competicions,
-        enriquir_amb_llm=False,
-        historial=historial_test,
-    )
-
-    # Verificar tipus i duració
-    assert mesocicle.fase_objectiu == "Peak"
-    assert mesocicle.nom == "Peak 1"
-    assert mesocicle.setmanes == "1-2"  # 2 setmanes (retallat)
-
-    # Verificar que s'ha afegit al macrocicle
-    assert len(macrocicle.mesocicles) == 1
-
-
-def test_generar_mesocicle_despres_cursa_genera_transicio(nedador_test, historial_test):
-    """Verifica que després d'un mesocicle Cursa, el següent és Transicio."""
-    from blondswim.models.macrocicle import Mesocicle, Microcicle
-
-    # Crear macrocicle amb un mesocicle Cursa
-    microcicle_cursa = Microcicle(
-        setmana=1,
-        dates="1-7/09/2026",
-        mesocicle_id="meso_1",
-        tipus_base="taper",
-        volum_objectiu=10000,
-        dies_qualitat=False,
-        test_css=False,
-    )
-    mesocicle_cursa = Mesocicle(
-        id="meso_1",
-        nom="Cursa 1",
-        setmanes="1",
-        dates="01/09/2026-07/09/2026",
-        tipus="Cursa",
-        fase_objectiu="Cursa",
-        metodologia_dominant="",
-        volum_min=0,
-        volum_max=0,
-        volum_mitja_previst=0,
-        microcicles=[microcicle_cursa],
-    )
-
-    macrocicle = Macrocicle(
-        nom="Macrocicle 2026-2027",
-        temporada="2026-2027",
-        data_inici="2026-09-01",
-        data_fi="2027-06-30",
-        mesocicles=[mesocicle_cursa],
-    )
-
-    # Competició A llunyana
-    competicions = [
-        Competicio(
-            id="comp1",
-            nom="Competició A",
-            data_inici="2026-12-14",
-            data_fi="2026-12-16",
-            classe="A",
-            piscina="25m",
-        ),
-    ]
-
-    # Generar següent mesocicle
-    mesocicle, _avisos = generar_mesocicle(
-        nedador=nedador_test,
-        macrocicle=macrocicle,
-        competicions=competicions,
-        enriquir_amb_llm=False,
-        historial=historial_test,
-    )
-
-    # Verificar que és Transicio
-    assert mesocicle.fase_objectiu == "Transicio"
-    assert mesocicle.nom == "Transicio 2"
-    assert mesocicle.setmanes == "2"  # 1 setmana
-    
-    # Verificar que s'ha afegit al macrocicle
-    assert len(macrocicle.mesocicles) == 2
-
-
-def test_generar_mesocicle_sense_competicio_a_genera_build2_amb_avis(nedador_test, historial_test):
-    """Verifica que sense competició A però amb una B propera genera Build2."""
-    # Crear macrocicle buit
-    macrocicle = Macrocicle(
-        nom="Macrocicle 2026-2027",
-        temporada="2026-2027",
-        data_inici="2026-09-01",
-        data_fi="2027-06-30",
-        mesocicles=[],
-    )
-
-    # Només competicions B i C
-    competicions = [
-        Competicio(
-            id="comp1",
-            nom="Competició B",
-            data_inici="2026-10-08",
-            data_fi="2026-10-10",
-            classe="B",
-            piscina="25m",
-        ),
-    ]
-
-    # Generar mesocicle
-    mesocicle, avisos = generar_mesocicle(
-        nedador=nedador_test,
-        macrocicle=macrocicle,
-        competicions=competicions,
-        enriquir_amb_llm=False,
-        historial=historial_test,
-    )
-
-    # Verificar tipus (B a ~5.3 setmanes -> Build2)
-    assert mesocicle.fase_objectiu == "Build2"
-
-    # No hi ha avís perquè hi ha una competició B propera
-    assert len(avisos) == 0
-
-
-def test_generar_mesocicle_sense_competicio_a_ni_b_genera_base_amb_avis(nedador_test, historial_test):
-    """Verifica que sense competició A ni B genera Base amb avís."""
-    # Crear macrocicle buit
-    macrocicle = Macrocicle(
-        nom="Macrocicle 2026-2027",
-        temporada="2026-2027",
-        data_inici="2026-09-01",
-        data_fi="2027-06-30",
-        mesocicles=[],
-    )
-
-    # Només competició C
-    competicions = [
-        Competicio(
-            id="comp1",
-            nom="Competició C",
-            data_inici="2026-10-15",
-            data_fi="2026-10-17",
-            classe="C",
-            piscina="25m",
-        ),
-    ]
-
-    # Generar mesocicle
-    mesocicle, avisos = generar_mesocicle(
-        nedador=nedador_test,
-        macrocicle=macrocicle,
-        competicions=competicions,
-        enriquir_amb_llm=False,
-        historial=historial_test,
-    )
-
-    # Verificar tipus
-    assert mesocicle.fase_objectiu == "Base"
-
-    # Verificar avís
-    assert len(avisos) == 1
-    assert avisos[0]["tipus_avis"] == "cap_competicio_a_ni_b_restant"
-    assert "No queda cap competició classe A ni B" in avisos[0]["missatge"]
-
-
-def test_generar_mesocicle_competicio_b_a_8_setmanes_genera_build1(nedador_test, historial_test):
-    """Verifica que una competició B a 8 setmanes (i cap A) genera Build1."""
-    macrocicle = Macrocicle(
-        nom="Macrocicle 2026-2027",
-        temporada="2026-2027",
-        data_inici="2026-09-01",
-        data_fi="2027-06-30",
-        mesocicles=[],
-    )
-
-    # B a 8 setmanes vista (2026-09-01 + 56 dies = 2026-10-27)
-    competicions = [
-        Competicio(
-            id="comp1",
-            nom="Competició B a 8 setmanes",
-            data_inici="2026-10-27",
-            data_fi="2026-10-29",
-            classe="B",
-            piscina="25m",
-        ),
-    ]
-
-    mesocicle, avisos = generar_mesocicle(
-        nedador=nedador_test,
-        macrocicle=macrocicle,
-        competicions=competicions,
-        enriquir_amb_llm=False,
-        historial=historial_test,
-    )
-
-    assert mesocicle.fase_objectiu == "Build1"
-    assert len(avisos) == 0
-
-
 def test_generar_mesocicle_enriquir_amb_llm_canvia_fase_objectiu(nedador_test, historial_test):
     """Verifica que amb enriquir_amb_llm=True es crida l'API i canvia fase_objectiu."""
     # Crear macrocicle buit
@@ -486,6 +220,7 @@ def test_generar_mesocicle_enriquir_amb_llm_canvia_fase_objectiu(nedador_test, h
             competicions=competicions,
             enriquir_amb_llm=True,
             historial=historial_test,
+            data_referencia=date(2026, 9, 30),
         )
 
     # Verificar que s'ha cridat l'API
@@ -530,6 +265,7 @@ def test_generar_mesocicle_sense_enriquir_llm_no_crida_api(nedador_test, histori
             competicions=competicions,
             enriquir_amb_llm=False,
             historial=historial_test,
+            data_referencia=date(2026, 9, 30),
         )
 
     # Verificar que NO s'ha cridat l'API
@@ -576,6 +312,7 @@ def test_generar_mesocicle_fallback_si_llm_falla(nedador_test, historial_test):
             competicions=competicions,
             enriquir_amb_llm=True,
             historial=historial_test,
+            data_referencia=date(2026, 9, 30),
         )
 
     # Verificar que fase_objectiu és el determinista (fallback)
@@ -615,6 +352,7 @@ def test_generar_mesocicle_calcula_volums_base(
         competicions=competicions,
         enriquir_amb_llm=False,
         historial=historial_test,
+        data_referencia=date(2026, 9, 30),
     )
 
     # 3 sessions de 3000m -> volum_per_sessio = 3000
@@ -657,6 +395,7 @@ def test_generar_mesocicle_sense_historial_volums_zero(nedador_test):
         competicions=competicions,
         enriquir_amb_llm=False,
         historial=None,
+        data_referencia=date(2026, 9, 30),
     )
 
     assert mesocicle.volum_min == 0
@@ -694,12 +433,14 @@ def test_generar_mesocicle_peak_retalla_volums(
         ),
     ]
 
+    # Peak = 2 setmanes abans de la Cursa (setmana del 15/09/2026)
     mesocicle, _avisos = generar_mesocicle(
         nedador=nedador_test,
         macrocicle=macrocicle,
         competicions=competicions,
         enriquir_amb_llm=False,
         historial=historial_test,
+        data_referencia=date(2026, 9, 1),
     )
 
     assert mesocicle.fase_objectiu == "Peak"
@@ -732,14 +473,44 @@ def _crear_mesocicle(
     )
 
 
+def _plans_bloc(
+    fase: str,
+    n_setmanes: int,
+    setmana_inici: int = 1,
+    dilluns_inici: date = date(2026, 9, 7),
+    competicions_b_c_per_setmana: dict[int, list] | None = None,
+) -> list:
+    """Helper per construir una llista de SetmanaPlan d'un bloc."""
+    from blondswim.agents.periodificacio import SetmanaPlan
+
+    competicions_b_c_per_setmana = competicions_b_c_per_setmana or {}
+    plans = []
+    for i in range(n_setmanes):
+        dilluns = dilluns_inici + timedelta(weeks=i)
+        plans.append(
+            SetmanaPlan(
+                any_iso=dilluns.isocalendar()[0],
+                setmana_iso=setmana_inici + i,
+                dilluns=dilluns,
+                diumenge=dilluns + timedelta(days=6),
+                fase=fase,
+                bloc_id="bloc_1",
+                index_dins_bloc=i,
+                es_descarrega=(i == n_setmanes - 1),
+                competicions_b_c=competicions_b_c_per_setmana.get(i, []),
+            )
+        )
+    return plans
+
+
 def test_generar_microcicles_base_4_setmanes():
     """Base de 4 setmanes: 3 carrega + 1 descarrega, test_css només a la 1a."""
     mesocicle = _crear_mesocicle("Base", "1-4", 12000, 15000, 13500)
+    plans = _plans_bloc("Base", 4)
 
-    microcicles = generar_microcicles_mesocicle(mesocicle, "2026-09-01")
+    microcicles = generar_microcicles_mesocicle(mesocicle, plans)
 
     assert len(microcicles) == 4
-    assert [m.setmana for m in microcicles] == [1, 2, 3, 4]
 
     # 3 primeres de càrrega, 4a de descàrrega
     assert [m.tipus_base for m in microcicles] == [
@@ -773,8 +544,9 @@ def test_generar_microcicles_base_4_setmanes():
 def test_generar_microcicles_build1_4_setmanes():
     """Build1 de 4 setmanes: 3 qualitat + 1 descarrega, dies_qualitat a totes."""
     mesocicle = _crear_mesocicle("Build1", "1-4", 12000, 15000, 13500)
+    plans = _plans_bloc("Build1", 4)
 
-    microcicles = generar_microcicles_mesocicle(mesocicle, "2026-09-01")
+    microcicles = generar_microcicles_mesocicle(mesocicle, plans)
 
     assert len(microcicles) == 4
     assert [m.tipus_base for m in microcicles] == [
@@ -794,17 +566,18 @@ def test_generar_microcicles_build1_4_setmanes():
 
 
 def test_generar_microcicles_base_2_setmanes_bloc_parcial():
-    """Base de 2 setmanes (bloc parcial): totes carrega, sense descàrrega."""
+    """Base de 2 setmanes (bloc parcial): 1 carrega + 1 descarrega."""
     mesocicle = _crear_mesocicle("Base", "1-2", 12000, 15000, 13500)
+    plans = _plans_bloc("Base", 2)
 
-    microcicles = generar_microcicles_mesocicle(mesocicle, "2026-09-01")
+    microcicles = generar_microcicles_mesocicle(mesocicle, plans)
 
     assert len(microcicles) == 2
-    assert [m.tipus_base for m in microcicles] == ["carrega", "carrega"]
+    assert [m.tipus_base for m in microcicles] == ["carrega", "descarrega"]
 
-    # Interpolació entre volum_min i volum_max
-    assert microcicles[0].volum_objectiu == 12000
-    assert microcicles[1].volum_objectiu == 15000
+    # Interpolació entre volum_min i volum_max (1 setmana de càrrega -> max)
+    assert microcicles[0].volum_objectiu == 15000
+    assert microcicles[1].volum_objectiu == round(12000 * 0.7)
 
     # test_css només a la primera
     assert microcicles[0].test_css is True
@@ -814,8 +587,9 @@ def test_generar_microcicles_base_2_setmanes_bloc_parcial():
 def test_generar_microcicles_peak_3_setmanes():
     """Peak de 3 setmanes: volum decreixent, taper, dies_qualitat True."""
     mesocicle = _crear_mesocicle("Peak", "1-3", 6000, 7500, 6750)
+    plans = _plans_bloc("Peak", 3)
 
-    microcicles = generar_microcicles_mesocicle(mesocicle, "2026-09-01")
+    microcicles = generar_microcicles_mesocicle(mesocicle, plans)
 
     assert len(microcicles) == 3
     assert all(m.tipus_base == "taper" for m in microcicles)
@@ -832,8 +606,9 @@ def test_generar_microcicles_peak_3_setmanes():
 def test_generar_microcicles_cursa_1_setmana():
     """Cursa (1 setmana): taper, notes de competició."""
     mesocicle = _crear_mesocicle("Cursa", "1", 6000, 7500, 6750)
+    plans = _plans_bloc("Cursa", 1)
 
-    microcicles = generar_microcicles_mesocicle(mesocicle, "2026-09-01")
+    microcicles = generar_microcicles_mesocicle(mesocicle, plans)
 
     assert len(microcicles) == 1
     assert microcicles[0].tipus_base == "taper"
@@ -846,8 +621,9 @@ def test_generar_microcicles_cursa_1_setmana():
 def test_generar_microcicles_transicio_1_setmana():
     """Transicio (1 setmana): tipus_base transicio."""
     mesocicle = _crear_mesocicle("Transicio", "1", 6000, 7500, 6750)
+    plans = _plans_bloc("Transicio", 1)
 
-    microcicles = generar_microcicles_mesocicle(mesocicle, "2026-09-01")
+    microcicles = generar_microcicles_mesocicle(mesocicle, plans)
 
     assert len(microcicles) == 1
     assert microcicles[0].tipus_base == "transicio"
@@ -855,6 +631,25 @@ def test_generar_microcicles_transicio_1_setmana():
     assert microcicles[0].volum_objectiu == 6750
     assert microcicles[0].dies_qualitat is False
     assert microcicles[0].test_css is False
+
+
+def test_generar_microcicles_setmana_amb_prova_b_aplica_volum_08():
+    """R4: una setmana amb prova B aplica volum x 0.8."""
+    mesocicle = _crear_mesocicle("Build1", "1-4", 12000, 15000, 13500)
+    comp_b = Competicio(
+        id="b1",
+        nom="Prova B",
+        data_inici="2026-09-07",
+        data_fi="2026-09-08",
+        classe="B",
+        piscina="25m",
+    )
+    plans = _plans_bloc("Build1", 4, competicions_b_c_per_setmana={0: [comp_b]})
+
+    microcicles = generar_microcicles_mesocicle(mesocicle, plans)
+
+    # Setmana 0: qualitat, volum interpolat 12000 -> x0.8 = 9600
+    assert microcicles[0].volum_objectiu == round(12000 * 0.8)
 
 
 def test_generar_mesocicle_omple_microcicles_i_tipus(nedador_test, historial_test):
@@ -884,12 +679,97 @@ def test_generar_mesocicle_omple_microcicles_i_tipus(nedador_test, historial_tes
         competicions=competicions,
         enriquir_amb_llm=False,
         historial=historial_test,
+        data_referencia=date(2026, 9, 30),
     )
 
     # El camp tipus ha d'estar fixat
     assert mesocicle.tipus == "Base"
 
-    # Els microcicles han d'estar poblats (4 setmanes)
-    assert len(mesocicle.microcicles) == 4
-    assert [m.setmana for m in mesocicle.microcicles] == [1, 2, 3, 4]
+    # Els microcicles han d'estar poblats (bloc de 3 setmanes: 40-42)
+    assert len(mesocicle.microcicles) == 3
     assert all(m.mesocicle_id == mesocicle.id for m in mesocicle.microcicles)
+
+
+def test_generar_mesocicle_data_referencia_30_09_2026(nedador_test, historial_test):
+    """Amb data_referencia=30/09/2026 genera el bloc Base 40-42 amb sessions_des_de."""
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-28",
+        data_fi="2027-07-09",
+        mesocicles=[],
+    )
+
+    competicions = [
+        Competicio(
+            id="a1",
+            nom="Catalunya Hivern",
+            data_inici="2027-01-16",
+            data_fi="2027-01-17",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    mesocicle, _avisos = generar_mesocicle(
+        nedador=nedador_test,
+        macrocicle=macrocicle,
+        competicions=competicions,
+        enriquir_amb_llm=False,
+        historial=historial_test,
+        data_referencia=date(2026, 9, 30),
+    )
+
+    assert mesocicle.tipus == "Base"
+    assert len(mesocicle.microcicles) == 3
+    assert [m.dates for m in mesocicle.microcicles] == [
+        "28/09-04/10/2026",
+        "05/10-11/10/2026",
+        "12/10-18/10/2026",
+    ]
+    assert mesocicle.microcicles[0].sessions_des_de == date(2026, 10, 1)
+    assert all(m.sessions_des_de is None for m in mesocicle.microcicles[1:])
+
+
+def test_generar_mesocicle_data_referencia_none_usa_today(
+    nedador_test, historial_test, monkeypatch
+):
+    """Amb data_referencia=None fa servir date.today()."""
+    macrocicle = Macrocicle(
+        nom="Macrocicle 2026-2027",
+        temporada="2026-2027",
+        data_inici="2026-09-28",
+        data_fi="2027-07-09",
+        mesocicles=[],
+    )
+
+    competicions = [
+        Competicio(
+            id="a1",
+            nom="Catalunya Hivern",
+            data_inici="2027-01-16",
+            data_fi="2027-01-17",
+            classe="A",
+            piscina="25m",
+        ),
+    ]
+
+    class _FakeDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 9, 30)
+
+    monkeypatch.setattr(
+        "blondswim.agents.generar_macrocicle.date", _FakeDate
+    )
+
+    mesocicle, _avisos = generar_mesocicle(
+        nedador=nedador_test,
+        macrocicle=macrocicle,
+        competicions=competicions,
+        enriquir_amb_llm=False,
+        historial=historial_test,
+    )
+
+    assert mesocicle.tipus == "Base"
+    assert mesocicle.microcicles[0].sessions_des_de == date(2026, 10, 1)

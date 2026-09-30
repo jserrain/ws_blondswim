@@ -1,8 +1,39 @@
 """Generació de l'esquelet de sessions d'un microcicle (100% determinista)."""
 
+from datetime import date, timedelta
+
 from blondswim.models.macrocicle import Microcicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import EstructuraSessio, PartSessio, Sessio
+
+_DIES_ORDRE = {
+    "dilluns": 0,
+    "dimarts": 1,
+    "dimecres": 2,
+    "dijous": 3,
+    "divendres": 4,
+    "dissabte": 5,
+    "diumenge": 6,
+}
+
+
+def _dilluns_microcicle(microcicle: Microcicle) -> date | None:
+    """Retorna el dilluns del microcicle a partir del camp `dates`."""
+    from blondswim.export.mesocicle_excel import _parsejar_rang_dates
+
+    try:
+        dilluns, _ = _parsejar_rang_dates(microcicle.dates)
+        return dilluns
+    except ValueError:
+        return None
+
+
+def _data_del_dia(microcicle: Microcicle, dia: str) -> date:
+    """Data concreta d'un dia de la setmana dins el microcicle."""
+    dilluns = _dilluns_microcicle(microcicle)
+    if dilluns is None:
+        return date.max
+    return dilluns + timedelta(days=_DIES_ORDRE[dia])
 
 
 def generar_esquelet_sessions(
@@ -51,6 +82,16 @@ def generar_esquelet_sessions(
     dies_actius = nedador.dies_disponibles.copy()
     if nedador.dia_opcional:
         dies_actius.append(nedador.dia_opcional)
+
+    # R5: no generar sessions de dies anteriors a sessions_des_de
+    if microcicle.sessions_des_de is not None:
+        dies_actius = [
+            dia
+            for dia in dies_actius
+            if _data_del_dia(microcicle, dia) >= microcicle.sessions_des_de
+        ]
+        if not dies_actius:
+            return []
 
     # Calcular volum per sessió (repartiment igual, assumpció MVP)
     num_sessions = len(dies_actius)

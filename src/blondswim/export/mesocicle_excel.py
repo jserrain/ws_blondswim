@@ -142,9 +142,13 @@ def exportar_mesocicle_excel(
         cell.font = Font(bold=True, size=12)
         row_idx += 1
 
+        sessions_des_de = microcicle.sessions_des_de if microcicle else None
+
         for sessio in sessions_setmana:
             if data_inici:
                 data_sessio = data_inici + timedelta(days=_DIES_ORDRE[sessio.dia])
+                if sessions_des_de is not None and data_sessio < sessions_des_de:
+                    continue
                 capçalera_dia = f"{sessio.dia.capitalize()} {data_sessio.day}"
             else:
                 capçalera_dia = sessio.dia.capitalize()

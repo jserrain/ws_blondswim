@@ -199,6 +199,74 @@ def test_exportar_mesocicle_setmana_mateix_mes(
     assert ws.cell(row=2, column=1).value == "Dimarts 6"
 
 
+def test_exportar_mesocicle_omet_dies_abans_de_sessions_des_de(
+    nedador_test, estructura_test, tmp_path
+):
+    """El 01/10/2026 surt com 'Dijous 1' i no hi apareixen els dies 28, 29 ni 30/09."""
+    from datetime import date
+
+    microcicle = Microcicle(
+        setmana=40,
+        dates="28/09-04/10/2026",
+        mesocicle_id="meso1",
+        tipus_base="carrega",
+        volum_objectiu=12000,
+        dies_qualitat=False,
+        test_css=True,
+        sessions_des_de=date(2026, 10, 1),
+    )
+    mesocicle = Mesocicle(
+        id="meso1",
+        nom="Base 1",
+        setmanes="40-42",
+        dates="28/09/2026-18/10/2026",
+        tipus="Base",
+        fase_objectiu="Base",
+        metodologia_dominant="",
+        volum_min=12000,
+        volum_max=15000,
+        volum_mitja_previst=13500,
+        microcicles=[microcicle],
+    )
+
+    def _sessio(dia: str) -> Sessio:
+        return Sessio(
+            id=f"meso1_s40_{dia}",
+            microcicle_setmana=40,
+            dia=dia,
+            tipus_sessio="carrega",
+            volum_total=400,
+            es_dia_opcional=False,
+            estructura=estructura_test,
+        )
+
+    resultats = {
+        40: [
+            _sessio("dilluns"),
+            _sessio("dimarts"),
+            _sessio("dimecres"),
+            _sessio("dijous"),
+        ]
+    }
+
+    output_path = tmp_path / "mesocicle_sessions_des_de.xlsx"
+    exportar_mesocicle_excel(
+        nedador=nedador_test,
+        mesocicle=mesocicle,
+        resultats=resultats,
+        output_path=output_path,
+    )
+
+    wb = openpyxl.load_workbook(output_path)
+    ws = wb.active
+    valors = [str(c.value) for row in ws.iter_rows() for c in row if c.value]
+
+    assert any("Dijous 1" in v for v in valors)
+    assert not any("Dilluns 28" in v for v in valors)
+    assert not any("Dimarts 29" in v for v in valors)
+    assert not any("Dimecres 30" in v for v in valors)
+
+
 def test_exportar_mesocicle_resultats_buit(nedador_test, mesocicle_test, tmp_path):
     """Amb resultats buit no es genera cap fila."""
     output_path = tmp_path / "mesocicle_buit.xlsx"

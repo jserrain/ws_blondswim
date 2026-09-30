@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel
@@ -16,6 +17,7 @@ class Microcicle(BaseModel):
     volum_objectiu: int  # metres
     dies_qualitat: bool  # Dc+Ds
     test_css: bool
+    sessions_des_de: date | None = None  # només l'omple el primer microcicle generat
     competicio_test_oficial: str | None = None
     test_avaluacio: str | None = None
     focus_especific: str | None = None
