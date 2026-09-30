@@ -48,6 +48,9 @@ tests/agents/test_generar_macrocicle.py
     assert mesocicle.volum_max == 13200
     assert mesocicle.volum_mitja_previst == 12600
 
+    # Sense avís de falta d'històric
+    assert not any(a.get("tipus_avis") == "sense_historial" for a in avisos)
+
 
 @pytest.fixture
 def historial_test() -> list[SessioRealitzada]:
@@ -342,49 +345,6 @@ def test_generar_mesocicle_fallback_si_llm_falla(nedador_test, historial_test):
     assert len(macrocicle.mesocicles) == 1
 
 
-def test_generar_mesocicle_calcula_volums_base(
-    nedador_test, historial_test
-):
-    """Verifica que un mesocicle Base calcula els volums a partir de l'històric."""
-    macrocicle = Macrocicle(
-        nom="Macrocicle 2026-2027",
-        temporada="2026-2027",
-        data_inici="2026-09-01",
-        data_fi="2027-06-30",
-        mesocicles=[],
-    )
-
-    competicions = [
-        Competicio(
-            id="comp1",
-            nom="Competició A llunyana",
-            data_inici="2026-12-14",
-            data_fi="2026-12-16",
-            classe="A",
-            piscina="25m",
-        ),
-    ]
-
-    mesocicle, avisos = generar_mesocicle(
-        nedador=nedador_test,
-        macrocicle=macrocicle,
-        competicions=competicions,
-        enriquir_amb_llm=False,
-        historial=historial_test,
-        data_referencia=date(2026, 9, 30),
-    )
-
-    # 3 sessions de 3000m -> volum_per_sessio = 3000
-    # 4 dies disponibles -> volum_min = 12000
-    # + 1 dia opcional -> volum_max = 15000
-    # mitjana = 13500
-    assert mesocicle.fase_objectiu == "Base"
-    assert mesocicle.volum_min == 12000
-    assert mesocicle.volum_max == 15000
-    assert mesocicle.volum_mitja_previst == 13500
-
-    # Sense avís de falta d'històric
-    assert not any(a.get("tipus_avis") == "sense_historial" for a in avisos)
 
 
 def test_generar_mesocicle_sense_historial_volums_zero(nedador_test):
