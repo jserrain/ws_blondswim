@@ -1,6 +1,7 @@
 """Script per inspeccionar les files al voltant de la fila 17."""
 
 from pathlib import Path
+
 import openpyxl
 
 def llegir_capçaleres(ws, header_row: int = 1) -> dict[str, int]:
@@ -45,7 +46,7 @@ def main():
         # Mostrar files del mateix mesocicle
         if str(meso).strip() == str(meso_fila_17).strip():
             marca = ">>> " if num_fila == 17 else "    "
-            print(f"{marca}{num_fila:<6} {str(setmana):<10} {str(meso):<8} {str(tipus_setmana):<40} {str(volum):<10}")
+            print(f"{marca}{num_fila:<6} {setmana!s:<10} {meso!s:<8} {tipus_setmana!s:<40} {volum!s:<10}")
 
 if __name__ == "__main__":
     main()

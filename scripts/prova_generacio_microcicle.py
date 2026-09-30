@@ -114,7 +114,7 @@ def main():
         print(f"     Complementàries: {', '.join(metodologia.metodologies_complementaries)}")
         print(f"     Força evidència: {metodologia.forca_evidencia}")
         print(f"     Justificació: {metodologia.justificacio[:100]}...")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — script CLI, volem mostrar qualsevol error
         print(f"   ✗ Error en seleccionar metodologia: {e}")
         return 1
 
@@ -125,7 +125,7 @@ def main():
         print(f"   ✓ Esquelet generat: {len(sessions)} sessions")
         for sessio in sessions:
             print(f"     - {sessio.dia}: {sessio.tipus_sessio} ({sessio.volum_total}m)")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — script CLI, volem mostrar qualsevol error
         print(f"   ✗ Error en generar esquelet: {e}")
         return 1
 
@@ -143,7 +143,7 @@ def main():
     except GeneracioMicrocicleError as e:
         print(f"   ✗ Error en generar contingut: {e}")
         return 1
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — script CLI, volem mostrar qualsevol error
         print(f"   ✗ Error inesperat: {e}")
         return 1
 
