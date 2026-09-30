@@ -816,3 +816,27 @@ def test_setmana_amb_prova_b_sense_terra():
     vmin, _vmax = VOLUM_SETMANAL_CARREGA["Build1"]
     assert microcicles[0].volum_objectiu == round(vmin * FACTOR_PROVA_B / 25) * 25
     assert microcicles[0].volum_objectiu < 12000
+
+
+# --- Fase H: classificació de la setmana ---
+
+
+def test_setmana_post_competicio_objectiu_minim_i_classificacio():
+    """La setmana posterior a una prova B té com a objectiu el mínim setmanal."""
+    # Bloc Build1 des del 07/09/2026; prova B diumenge 13/09 (setmana 0).
+    prova_b = Competicio(
+        id="b1", nom="B", data_inici="2026-09-13", data_fi="2026-09-13",
+        classe="B", piscina="25m",
+    )
+    mesocicle = _crear_mesocicle("Build1", "1-4", 0, 0, 0)
+    plans = _plans_bloc("Build1", 4)
+
+    microcicles = generar_microcicles_mesocicle(
+        mesocicle, plans, volum_setmanal_min=12000, competicions=[prova_b]
+    )
+
+    assert microcicles[0].dia_competicio == "diumenge"
+    assert microcicles[0].post_competicio is False
+    assert microcicles[1].post_competicio is True
+    assert microcicles[1].volum_objectiu == 12000
+    assert all(m.dia_competicio is None for m in microcicles[1:])

@@ -28,6 +28,7 @@ from blondswim.agents.generar_microcicle import (
     generar_contingut_mesocicle,
     generar_contingut_setmana,
 )
+from blondswim.agents.pla_setmanal import DIES_PLANTILLA, usa_plantilla
 from blondswim.agents.periodificacio import _dilluns_de, avui, periodificar_temporada
 from blondswim.agents.taper import generar_pla_taper_temporada
 from blondswim.export.mesocicle_excel import exportar_mesocicle_excel, exportar_setmana_excel
@@ -113,6 +114,13 @@ def main() -> int:
         f"({sum(1 for c in competicions if c.classe == 'A')} classe A)"
     )
     print(f"   ✓ Historial: {len(historial)} sessions")
+    if usa_plantilla(nedador):
+        print(f"   ✓ Plantilla setmanal: {', '.join(nedador.dies_disponibles)}")
+    else:
+        print(
+            f"   ⚠ dies_disponibles={nedador.dies_disponibles}: no és la plantilla "
+            f"{DIES_PLANTILLA}; es fa servir l'esquelet antic"
+        )
 
     print("\n2. Generant macrocicle...")
     macrocicle, avisos_macro = generar_macrocicle(
@@ -213,6 +221,7 @@ def main() -> int:
         volum = sum(
             ex.volum_m for s in sessions for p in s.estructura.parts for ex in p.exercicis
         )
+        print(f"   · {sessions[0].notes if sessions and sessions[0].notes else ''}")
         print(
             f"   ✓ Setmana {microcicle.setmana} ({microcicle.dates}): "
             f"{len(sessions)} sessions, {volum}m (objectiu {microcicle.volum_objectiu}m)"

@@ -42,6 +42,9 @@ class PartSessio(BaseModel):
     percentatge_descarrega: float
     contingut: str | None = None
     exercicis: list[Exercici] = []
+    # Part fixada pel codi (p.ex. la sèrie de control): l'LLM no la genera
+    # ni la modifica, i no compta per al pressupost d'intensitat.
+    fixa: bool = False
 
 class EstructuraSessio(BaseModel):
     """
@@ -69,6 +72,9 @@ class Sessio(BaseModel):
     estructura: EstructuraSessio
     es_dia_opcional: bool = False  # True si correspon al dia opcional del nedador
     notes: str | None = None
-    rol: Literal["llarga", "mitjana", "qualitat"] | None = None
+    rol: Literal[
+        "llarga", "mitjana", "qualitat",
+        "aerobica", "tecnica", "activacio", "recuperacio",
+    ] | None = None
     volum_min: int | None = None
     volum_max: int | None = None

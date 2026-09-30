@@ -8,7 +8,13 @@ from typing import Literal
 
 from pydantic import ValidationError
 
-from blondswim.agents import context_competicio, seleccio_model, taper, validacio
+from blondswim.agents import (
+    context_competicio,
+    pla_setmanal,
+    seleccio_model,
+    taper,
+    validacio,
+)
 from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
 from blondswim.models.calendari import Competicio
@@ -837,6 +843,9 @@ def _aplicar_contingut_sessio(sessio: Sessio, sessio_data: dict, setmana: int) -
         exercicis_data = part_data.get("exercicis", [])
 
         part = next((p for p in sessio.estructura.parts if p.nom == nom_part), None)
+        if part is not None and part.fixa:
+            logger.info(f"Part fixa '{nom_part}' a sessió '{sessio.id}': no es modifica")
+            continue
         if not part:
             logger.warning(
                 f"Part '{nom_part}' no trobada a sessió '{sessio.id}', ignorant. "
@@ -871,6 +880,34 @@ def _aplicar_contingut_sessio(sessio: Sessio, sessio_data: dict, setmana: int) -
             f"exercicis rebuts={n_rebuts}, vàlids={len(exercicis)}, "
             f"descartats={n_descartats}"
         )
+
+
+def _fmt_ritme(valor: float | None) -> str:
+    """Ritme per 100 m amb dos decimals, o "N/A" si no n'hi ha."""
+    return f"{valor:.2f}" if valor is not None else "N/A"
+
+
+def _problemes_sessio(sessio: Sessio) -> list[str]:
+    """
+    Problemes d'una sessió generada: volum fora del rang flexible (marge del
+    10%), pressupost d'intensitat/papallona del rol i regles de natació
+    (vegeu pla_setmanal.problemes_contingut).
+    """
+    problemes: list[str] = []
+    volum_sessio = sum(
+        ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
+    )
+    if sessio.volum_min is not None and sessio.volum_max is not None and (
+        volum_sessio < sessio.volum_min * 0.9 or volum_sessio > sessio.volum_max * 1.1
+    ):
+        problemes.append(
+            f"volum generat {volum_sessio}m fora del rang "
+            f"[{sessio.volum_min}, {sessio.volum_max}]m. "
+            f"El volum ha estat {volum_sessio} m; ha d'estar "
+            f"entre {sessio.volum_min} i {sessio.volum_max} m."
+        )
+    problemes.extend(pla_setmanal.problemes_contingut(sessio))
+    return problemes
 
 
 def generar_microcicle(
@@ -937,6 +974,13 @@ def generar_microcicle(
                 f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
             )
             for part in sessio.estructura.parts:
+                if part.fixa:
+                    volum_fix = sum(ex.volum_m for ex in part.exercicis)
+                    estructura_sessions_text += (
+                        f"  - {part.nom}: JA FIXADA pel sistema ({volum_fix}m) -- "
+                        f"no la generis ni la incloguis a la resposta\n"
+                    )
+                    continue
                 if sessio.tipus_sessio == "carrega":
                     perc = part.percentatge_carrega
                 elif sessio.tipus_sessio == "qualitat":
@@ -958,11 +1002,11 @@ def generar_microcicle(
                 proves_objectiu=", ".join(nedador.proves_objectiu),
                 categoria=nedador.categoria,
                 estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
-                zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
-                zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
-                zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
-                zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
-                zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                zona_recuperacio=_fmt_ritme(nedador.ritmes_css.recuperacio if nedador.ritmes_css else None),
+                zona_a1=_fmt_ritme(nedador.ritmes_css.a1 if nedador.ritmes_css else None),
+                zona_a2=_fmt_ritme(nedador.ritmes_css.a2 if nedador.ritmes_css else None),
+                zona_a3=_fmt_ritme(nedador.ritmes_css.a3 if nedador.ritmes_css else None),
+                zona_velocitat=_fmt_ritme(nedador.ritmes_css.velocitat if nedador.ritmes_css else None),
                 offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
                 offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
                 offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
@@ -981,6 +1025,9 @@ def generar_microcicle(
                 rol=sessio.rol,
                 volum_min=sessio.volum_min,
                 volum_max=sessio.volum_max,
+                descripcio_rol=pla_setmanal.descripcio_rol(sessio),
+                pressupost_sessio=pla_setmanal.text_pressupost(sessio),
+                context_setmana=sessio.notes or "Setmana sense competició",
             )
 
             # Crida inicial
@@ -1042,30 +1089,31 @@ def generar_microcicle(
 
             _aplicar_contingut_sessio(sessio, sessio_data, setmana)
 
-            # Verificar volum dins el rang flexible (amb marge del 10%)
-            volum_sessio = sum(
-                ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
-            )
-            if sessio.volum_min is not None and sessio.volum_max is not None:
-                fora_rang = (
-                    volum_sessio < sessio.volum_min * 0.9
-                    or volum_sessio > sessio.volum_max * 1.1
+            # Validar volum, pressupost d'intensitat i regles; UN reintent amb
+            # la llista de problemes si cal.
+            problemes = _problemes_sessio(sessio)
+            if problemes:
+                logger.warning(
+                    f"Setmana {setmana}, sessió '{sessio.id}': "
+                    + "; ".join(problemes)
+                    + ". Reintentant."
                 )
-                if fora_rang:
+                prompt_correccio = (
+                    prompt
+                    + "\n\nLa proposta anterior tenia aquests problemes. "
+                    + "Corregeix-los:\n"
+                    + "\n".join(f"- {p}" for p in problemes)
+                )
+                response = _cridar_api_sessio(client, prompt_correccio, tools)
+                sessio_data = _extreure_tool_use_sessio(response)
+                if sessio_data and _extreure_parts(sessio_data):
+                    _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+                problemes_finals = _problemes_sessio(sessio)
+                if problemes_finals:
                     logger.warning(
-                        f"Setmana {setmana}, sessió '{sessio.id}': volum generat "
-                        f"{volum_sessio}m fora del rang "
-                        f"[{sessio.volum_min}, {sessio.volum_max}]m. Reintentant."
+                        f"Setmana {setmana}, sessió '{sessio.id}': encara amb "
+                        f"problemes després del reintent: " + "; ".join(problemes_finals)
                     )
-                    prompt_volum = (
-                        prompt
-                        + f"\n\nEl volum ha estat {volum_sessio} m; ha d'estar "
-                        f"entre {sessio.volum_min} i {sessio.volum_max} m."
-                    )
-                    response = _cridar_api_sessio(client, prompt_volum, tools)
-                    sessio_data = _extreure_tool_use_sessio(response)
-                    if sessio_data and _extreure_parts(sessio_data):
-                        _aplicar_contingut_sessio(sessio, sessio_data, setmana)
 
         # Verificar que totes les parts tenen contingut (advertir si no)
         for sessio in sessions:

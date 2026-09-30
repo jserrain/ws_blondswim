@@ -77,3 +77,5 @@ class Nedador(BaseModel):
     volum_setmanal_min: int = 12000
     # Durada màxima d'una sessió (F7, encara no validat).
     minuts_max_sessio: int = 105
+    # Dia de descans amb rutina d'espatlla fora de l'aigua (opcional, 15 min).
+    rutina_espatlla_dia: str | None = None

@@ -21,6 +21,10 @@ class Microcicle(BaseModel):
     competicio_test_oficial: str | None = None
     test_avaluacio: str | None = None
     focus_especific: str | None = None
+    # Organització setmanal (pla_setmanal.classificar_setmana): dia de la
+    # competició A/B del cap de setmana i si la setmana segueix una competició.
+    dia_competicio: Literal["dissabte", "diumenge"] | None = None
+    post_competicio: bool = False
 
 class Mesocicle(BaseModel):
     """

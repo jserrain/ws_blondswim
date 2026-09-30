@@ -7,6 +7,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.styles import Font
 
+from blondswim.agents.pla_setmanal import ETIQUETA_ROL
 from blondswim.models.macrocicle import Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import Sessio
@@ -28,6 +29,16 @@ _MESOS_CA = {
     11: "Novembre", 12: "Desembre",
 }
 
+# Rutina d'espatlla fora de l'aigua (opcional, ~15 min): força-resistència de la
+# part posterior de l'espatlla i estabilitzadors de l'escàpula (factor de risc
+# amb evidència, vegeu fase3.md — Fase H).
+RUTINA_ESPATLLA: list[tuple[str, str]] = [
+    ("3x15", "Rotació externa amb goma elàstica, colze a 90° enganxat al cos (cada braç)"),
+    ("3x15", "Obertures amb goma elàstica (band pull-apart), braços estirats"),
+    ("3x10", "Y-T-W estirat de bocaterrosa, sense pes o 0,5-1 kg"),
+    ("3x12", "Flexions escapulars (serrat anterior), sense doblegar els colzes"),
+]
+
 _COLUMNES = [
     "Dia", "Treball", "Execució", "Descans", "Material",
     "Intensitat", "Objectiu", "Temps (min)", "Volum (m)",
@@ -48,6 +59,7 @@ def _escriure_setmana(
     microcicle: Microcicle | None,
     setmana: int,
     sessions: list[Sessio],
+    nedador: Nedador | None = None,
 ) -> int:
     """
     Escriu una setmana (capçalera + dies + exercicis + totals) a partir de
@@ -84,7 +96,21 @@ def _escriure_setmana(
 
     sessions_des_de = microcicle.sessions_des_de if microcicle else None
 
+    # Rutina d'espatlla en un dia de descans (si el nedador en té i cau dins la setmana).
+    dia_rutina = nedador.rutina_espatlla_dia if nedador else None
+    rutina_pendent = (
+        data_inici is not None
+        and dia_rutina in _DIES_ORDRE
+        and not any(s.dia == dia_rutina for s in sessions_setmana)
+    )
+    if rutina_pendent and sessions_des_de is not None:
+        rutina_pendent = data_inici + timedelta(days=_DIES_ORDRE[dia_rutina]) >= sessions_des_de
+
     for sessio in sessions_setmana:
+        if rutina_pendent and _DIES_ORDRE[sessio.dia] > _DIES_ORDRE[dia_rutina]:
+            row_idx = _escriure_rutina_espatlla(ws, row_idx, data_inici, dia_rutina)
+            rutina_pendent = False
+
         if data_inici:
             data_sessio = data_inici + timedelta(days=_DIES_ORDRE[sessio.dia])
             if sessions_des_de is not None and data_sessio < sessions_des_de:
@@ -92,6 +118,10 @@ def _escriure_setmana(
             capçalera_dia = f"{sessio.dia.capitalize()} {data_sessio.day}"
         else:
             capçalera_dia = sessio.dia.capitalize()
+        # Etiqueta del rol només per a les sessions de la plantilla setmanal
+        # (porten context a `notes`); la lògica antiga no canvia de format.
+        if sessio.rol in ETIQUETA_ROL and sessio.notes:
+            capçalera_dia += f" — {ETIQUETA_ROL[sessio.rol]}"
 
         cell = ws.cell(row=row_idx, column=1, value=capçalera_dia)
         cell.font = Font(bold=True)
@@ -124,7 +154,30 @@ def _escriure_setmana(
         ws.cell(row=row_idx, column=9, value=volum_total_dia).font = Font(bold=True)
         row_idx += 1
 
+    if rutina_pendent:
+        row_idx = _escriure_rutina_espatlla(ws, row_idx, data_inici, dia_rutina)
+
     return row_idx + 1  # línia en blanc entre setmanes
+
+
+def _escriure_rutina_espatlla(ws, row_idx: int, data_inici: date, dia: str) -> int:
+    """Escriu el bloc de la rutina d'espatlla (dia de descans). Retorna la fila següent."""
+    data = data_inici + timedelta(days=_DIES_ORDRE[dia])
+    cell = ws.cell(
+        row=row_idx,
+        column=1,
+        value=(
+            f"{dia.capitalize()} {data.day} — Descans a l'aigua. "
+            "Rutina d'espatlla (opcional, 15 min, fora de l'aigua)"
+        ),
+    )
+    cell.font = Font(bold=True)
+    row_idx += 1
+    for treball, execucio in RUTINA_ESPATLLA:
+        ws.cell(row=row_idx, column=2, value=treball)
+        ws.cell(row=row_idx, column=3, value=execucio)
+        row_idx += 1
+    return row_idx
 
 
 def _ajustar_amplades(ws) -> None:
@@ -184,6 +237,7 @@ def exportar_mesocicle_excel(
             microcicles_per_setmana.get(setmana),
             setmana,
             resultats[setmana],
+            nedador,
         )
 
     _ajustar_amplades(ws)
@@ -220,7 +274,7 @@ def exportar_setmana_excel(
     ws = wb.active
     ws.title = f"Setmana {microcicle.setmana}"
 
-    _escriure_setmana(ws, 1, mesocicle, microcicle, microcicle.setmana, sessions)
+    _escriure_setmana(ws, 1, mesocicle, microcicle, microcicle.setmana, sessions, nedador)
 
     _ajustar_amplades(ws)
     wb.save(output_path)

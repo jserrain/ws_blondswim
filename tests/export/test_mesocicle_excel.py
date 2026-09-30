@@ -348,3 +348,32 @@ def test_exportar_setmana_igual_que_dins_del_mesocicle(
     )
 
     assert _valors(path_setmana) == _valors(path_meso)
+
+
+# --- Fase H: rol a la capçalera i rutina d'espatlla ---
+
+
+def test_exportar_setmana_rol_i_rutina_espatlla(mesocicle_test, estructura_test, tmp_path):
+    """Sessions de plantilla: etiqueta del rol; rutina d'espatlla el dimecres (descans)."""
+    nedador = Nedador(
+        id="jep", nom="Jep", categoria="master", proves_objectiu=["100m lliure"],
+        mode_ritme="temps", dies_disponibles=["dilluns", "dimarts", "dijous", "divendres"],
+        rutina_espatlla_dia="dimecres",
+    )
+    microcicle = mesocicle_test.microcicles[1]  # 05-11/10/2026
+    sessions = []
+    for dia, rol in (("dilluns", "aerobica"), ("dimarts", "qualitat"), ("dijous", "tecnica")):
+        s = _sessio(2, dia, estructura_test)
+        s.rol = rol
+        s.notes = "Setmana sense competició"
+        sessions.append(s)
+
+    path = exportar_setmana_excel(
+        nedador, mesocicle_test, microcicle, sessions, tmp_path / "h.xlsx"
+    )
+    primeres = [f[0] for f in _valors(path) if f[0]]
+
+    assert "Dilluns 5 — Aeròbic i tècnica" in primeres
+    assert "Dimarts 6 — Qualitat" in primeres
+    rutina = next(i for i, v in enumerate(primeres) if v.startswith("Dimecres 7 — Descans"))
+    assert primeres.index("Dimarts 6 — Qualitat") < rutina < primeres.index("Dijous 8 — Tècnica")

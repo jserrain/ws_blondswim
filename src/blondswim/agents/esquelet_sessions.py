@@ -2,6 +2,7 @@
 
 from datetime import date, timedelta
 
+from blondswim.agents import pla_setmanal
 from blondswim.models.macrocicle import Microcicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import EstructuraSessio, PartSessio, Sessio
@@ -142,6 +143,9 @@ def generar_esquelet_sessions(
     Returns:
         Llista de Sessio amb estructura de parts fixada però contingut=None
     """
+    if pla_setmanal.usa_plantilla(nedador):
+        return _esquelet_plantilla(nedador, microcicle)
+
     # Determinar dies actius de la setmana
     dies_actius = nedador.dies_disponibles.copy()
 
@@ -257,3 +261,76 @@ def _crear_parts_estandard(tipus_sessio: str, volum_total: int) -> list[PartSess
         parts.append(part)
 
     return parts
+
+
+def _esquelet_plantilla(nedador: Nedador, microcicle: Microcicle) -> list[Sessio]:
+    """
+    Esquelet amb la plantilla setmanal (pla_setmanal): rols segons el tipus de
+    setmana (normal, competició dissabte/diumenge, post-competició), volum
+    repartit per pesos de rol, parts pròpies de cada rol i sèrie de control
+    fixa cada dilluns.
+    """
+    rols = pla_setmanal.rols_setmana(microcicle.dia_competicio, microcicle.post_competicio)
+    dies = sorted(rols, key=lambda d: _DIES_ORDRE[d])
+
+    # Pes de la setmana completa (les setmanes parcials no concentren volum).
+    suma_pesos = sum(pla_setmanal.PES_ROL[rols[d]] for d in dies)
+    volum_max_temps = nedador.minuts_max_sessio * pla_setmanal.METRES_PER_MINUT
+    notes = pla_setmanal.context_setmana(
+        microcicle.dia_competicio, microcicle.post_competicio
+    )
+
+    if microcicle.sessions_des_de is not None:
+        dies = [
+            d for d in dies if _data_del_dia(microcicle, d) >= microcicle.sessions_des_de
+        ]
+
+    sessions: list[Sessio] = []
+    for dia in dies:
+        rol = rols[dia]
+        objectiu = microcicle.volum_objectiu * pla_setmanal.PES_ROL[rol] / suma_pesos
+        objectiu = min(objectiu, volum_max_temps)
+        volum_sessio = _arrodonir_25(objectiu)
+        volum_min = _arrodonir_25(objectiu * (1 - pla_setmanal.MARGE_RANG_SESSIO))
+        volum_max = _arrodonir_25(
+            min(objectiu * (1 + pla_setmanal.MARGE_RANG_SESSIO), volum_max_temps)
+        )
+
+        parts: list[PartSessio] = []
+        volum_fix = 0
+        if dia == "dilluns":
+            control = pla_setmanal.part_serie_control(nedador)
+            volum_fix = sum(ex.volum_m for ex in control.exercicis)
+        volum_variable = max(volum_sessio - volum_fix, 0)
+
+        for i, (nom, pct) in enumerate(pla_setmanal.PARTS_ROL[rol]):
+            pct_sessio = round(pct * volum_variable / volum_sessio, 1) if volum_sessio else 0
+            parts.append(
+                PartSessio(
+                    nom=nom,
+                    percentatge_carrega=pct_sessio,
+                    percentatge_qualitat=pct_sessio,
+                    percentatge_descarrega=pct_sessio,
+                    contingut=None,
+                )
+            )
+            if i == 0 and volum_fix:
+                parts.append(control)
+
+        sessions.append(
+            Sessio(
+                id=f"{microcicle.mesocicle_id}_s{microcicle.setmana}_{dia}",
+                microcicle_setmana=microcicle.setmana,
+                dia=dia,
+                tipus_sessio=microcicle.tipus_base,
+                volum_total=volum_sessio,
+                estructura=EstructuraSessio(parts=parts),
+                es_dia_opcional=False,
+                notes=notes,
+                rol=rol,
+                volum_min=volum_min,
+                volum_max=volum_max,
+            )
+        )
+
+    return sessions

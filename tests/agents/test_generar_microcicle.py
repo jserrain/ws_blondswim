@@ -1763,3 +1763,115 @@ def test_generar_contingut_setmana_dilluns_fora_del_macrocicle(nedador_test, met
             avisos_pics_a=[],
             metodologia=metodologia_test,
         )
+
+
+# --- Fase H: pressupost d'intensitat i parts fixes ---
+
+
+def _nedador_plantilla() -> Nedador:
+    return Nedador(
+        id="jep",
+        nom="Jep",
+        categoria="master",
+        proves_objectiu=["100m lliure", "100m estils"],
+        mode_ritme="temps",
+        dies_disponibles=["dilluns", "dimarts", "dijous", "divendres"],
+        ritmes_css=RitmesCSS(font="css_test", a1=87.1, a2=82.09, a3=78.24, velocitat=67.55),
+    )
+
+
+def _resposta_parts(parts: list[dict]):
+    block = MagicMock()
+    block.type = "tool_use"
+    block.name = "retornar_contingut_sessio"
+    block.input = {"parts": parts}
+    response = MagicMock()
+    response.content = [block]
+    response.stop_reason = "tool_use"
+    response.usage = MagicMock(output_tokens=100)
+    return response
+
+
+def _parts_valides(sessio: Sessio, extra: dict | None = None) -> list[dict]:
+    """Una part principal amb el volum que falta (A1) i 2x25 A1 a la resta."""
+    variables = [p for p in sessio.estructura.parts if not p.fixa]
+    fix = sum(ex.volum_m for p in sessio.estructura.parts if p.fixa for ex in p.exercicis)
+    objectiu = sessio.volum_total - fix - 50 * (len(variables) - 1)
+    if extra:
+        objectiu -= extra["series"] * extra["distancia_m"]
+    parts = []
+    for i, p in enumerate(variables):
+        exercicis = (
+            [{"series": objectiu // 100, "distancia_m": 100, "execucio": "Crol",
+              "intensitat": "A1"}]
+            if i == 0
+            else [{"series": 2, "distancia_m": 25, "execucio": "Crol", "intensitat": "A1"}]
+        )
+        if extra and i == 0:
+            exercicis.append(extra)
+        parts.append({"nom": p.nom, "exercicis": exercicis})
+    return parts
+
+
+def test_pressupost_superat_reintenta_amb_els_problemes(metodologia_test):
+    """Làctic a la qualitat de Base -> reintent amb la llista de problemes."""
+    nedador = _nedador_plantilla()
+    microcicle = Microcicle(
+        setmana=41, dates="05-11/10/2026", mesocicle_id="meso_1", tipus_base="carrega",
+        volum_objectiu=13600, dies_qualitat=False, test_css=False,
+    )
+    sessio = next(
+        s for s in generar_esquelet_sessions(nedador, microcicle) if s.rol == "qualitat"
+    )
+    lactic = {"series": 4, "distancia_m": 50, "execucio": "Crol", "intensitat": "MPLA"}
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        _resposta_parts(_parts_valides(sessio, extra=lactic)),
+        _resposta_parts(_parts_valides(sessio)),
+    ]
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        generar_microcicle(nedador, [sessio], metodologia_test)
+
+    assert mock_client.messages.create.call_count == 2
+    primer = mock_client.messages.create.call_args_list[0].kwargs["messages"][0]["content"]
+    segon = mock_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
+    assert "MPLA/TOLA (làctic): màxim 0 m" in primer
+    assert "Qualitat de Base" in primer
+    assert "MPLA/TOLA: 200 m, per sobre del màxim de 0 m" in segon
+    intensitats = {
+        ex.intensitat for p in sessio.estructura.parts for ex in p.exercicis
+    }
+    assert "MPLA" not in intensitats
+
+
+def test_part_fixa_no_es_demana_ni_es_sobreescriu(metodologia_test):
+    """La sèrie de control del dilluns no va al prompt com a part a generar."""
+    nedador = _nedador_plantilla()
+    microcicle = Microcicle(
+        setmana=41, dates="05-11/10/2026", mesocicle_id="meso_1", tipus_base="carrega",
+        volum_objectiu=13600, dies_qualitat=False, test_css=False,
+    )
+    dilluns = generar_esquelet_sessions(nedador, microcicle)[0]
+    parts = _parts_valides(dilluns)
+    parts.append({
+        "nom": "Sèrie de control",
+        "exercicis": [{"series": 8, "distancia_m": 50, "execucio": "x", "intensitat": "A3"}],
+    })
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _resposta_parts(parts)
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        generar_microcicle(nedador, [dilluns], metodologia_test)
+
+    prompt = mock_client.messages.create.call_args_list[0].kwargs["messages"][0]["content"]
+    assert "Sèrie de control: JA FIXADA pel sistema (400m)" in prompt
+    control = next(p for p in dilluns.estructura.parts if p.fixa)
+    assert [(e.series, e.distancia_m, e.intensitat) for e in control.exercicis] == [
+        (4, 100, "A2")
+    ]
+    assert mock_client.messages.create.call_count == 1

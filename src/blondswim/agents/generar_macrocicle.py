@@ -3,7 +3,7 @@
 import logging
 from datetime import date
 
-from blondswim.agents import context_competicio, periodificacio
+from blondswim.agents import context_competicio, periodificacio, pla_setmanal
 from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
 from blondswim.models.calendari import Competicio
 from blondswim.models.historial import SessioRealitzada
@@ -356,6 +356,7 @@ def generar_microcicles_mesocicle(
     plans_fase: list[periodificacio.SetmanaPlan] | None = None,
     volum_setmanal_min: int = 12000,
     avisos: list[dict] | None = None,
+    competicions: list[Competicio] | None = None,
 ) -> list[Microcicle]:
     """
     Genera la llista de Microcicle (una per setmana) d'un mesocicle a partir
@@ -374,6 +375,10 @@ def generar_microcicles_mesocicle(
             prova B (taper B curt).
         avisos: Llista on s'afegeix l'avís "descarrega_insuficient" quan el
             terra aixeca una setmana de descàrrega (es muta si no és None).
+        competicions: Calendari (A/B) per classificar cada setmana
+            (dia_competicio, post_competicio). La setmana posterior a una
+            competició té com a objectiu el mínim setmanal (prioritat:
+            recuperació). Si és None, totes les setmanes són normals.
 
     Returns:
         Llista de Microcicle ordenada per setmana ascendent
@@ -417,8 +422,17 @@ def generar_microcicles_mesocicle(
             volum_carrega_anterior,
         )
 
+        dia_competicio, post_competicio = pla_setmanal.classificar_setmana(
+            plan.dilluns, competicions or []
+        )
+
         # F2: terra de volum (no taper/transició ni setmanes amb prova B).
         te_prova_b = any(c.classe == "B" for c in plan.competicions_b_c)
+
+        # H: setmana posterior a una competició -> objectiu = mínim setmanal.
+        if post_competicio and tipus_base in TIPUS_AMB_TERRA and not te_prova_b:
+            volum = _arrodonir_a_25(volum_setmanal_min)
+
         if (
             tipus_base in TIPUS_AMB_TERRA
             and not te_prova_b
@@ -450,6 +464,8 @@ def generar_microcicles_mesocicle(
                 dies_qualitat=dies_qualitat,
                 test_css=test_css,
                 sessions_des_de=sessions_des_de if i == 0 else None,
+                dia_competicio=dia_competicio,
+                post_competicio=post_competicio,
             )
         )
 
@@ -642,6 +658,7 @@ def generar_mesocicle(
         plans_fase=plans_fase,
         volum_setmanal_min=nedador.volum_setmanal_min,
         avisos=avisos,
+        competicions=competicions,
     )
     for micro in mesocicle.microcicles:
         plan = next(p for p in plans_bloc if p.setmana_iso == micro.setmana)
