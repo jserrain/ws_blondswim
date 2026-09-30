@@ -6,6 +6,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from blondswim.agents.generar_macrocicle import (
+    FACTOR_CURSA,
+    FACTOR_DESCARREGA,
+    FACTOR_PROVA_B,
+    FACTOR_TRANSICIO,
+    FACTORS_PEAK,
+    VOLUM_REFERENCIA_TAPER,
+    VOLUM_SETMANAL_CARREGA,
     generar_macrocicle,
     generar_mesocicle,
     generar_microcicles_mesocicle,
@@ -355,9 +362,11 @@ def test_generar_mesocicle_sense_historial_volums_de_taula(nedador_test):
         data_referencia=date(2026, 9, 30),
     )
 
-    # El bloc Base conté només la setmana 40 (bloc curt): volum = min de Base.
-    assert mesocicle.volum_min == 12000
-    assert mesocicle.volum_max == 12000
+    # El bloc Base conté només la setmana 40 (bloc curt, 1 setmana de càrrega):
+    # la interpolació min->max amb n_carrega=1 retorna el max de la fase.
+    volum_base = VOLUM_SETMANAL_CARREGA["Base"][1]
+    assert mesocicle.volum_min == volum_base
+    assert mesocicle.volum_max == volum_base
 
     avisos_acwr = [a for a in avisos if a.get("tipus_avis") == "acwr_omet"]
     assert len(avisos_acwr) == 1
@@ -398,11 +407,13 @@ def test_generar_mesocicle_peak_retalla_volums(
     )
 
     assert mesocicle.fase_objectiu == "Peak"
-    # Peak: VOLUM_REFERENCIA_TAPER (13000) × FACTORS_PEAK.
-    # El bloc Peak té 2 setmanes: 13000×0.60=7800 i 13000×0.45=5850.
-    assert mesocicle.volum_min == 5850
-    assert mesocicle.volum_max == 7800
-    assert mesocicle.volum_mitja_previst == 6825
+    # Peak: VOLUM_REFERENCIA_TAPER × FACTORS_PEAK.
+    # El bloc Peak té 2 setmanes: factor[0] i factor[1].
+    peak_max = round(VOLUM_REFERENCIA_TAPER * FACTORS_PEAK[0] / 25) * 25
+    peak_min = round(VOLUM_REFERENCIA_TAPER * FACTORS_PEAK[1] / 25) * 25
+    assert mesocicle.volum_min == peak_min
+    assert mesocicle.volum_max == peak_max
+    assert mesocicle.volum_mitja_previst == round((peak_min + peak_max) / 2 / 25) * 25
 
 
 def _crear_mesocicle(
@@ -479,12 +490,13 @@ def test_generar_microcicles_base_4_setmanes():
     assert microcicles[0].test_css is True
     assert all(not m.test_css for m in microcicles[1:])
 
-    # Base (12000, 14000) interpolat sobre 3 setmanes de càrrega: 12000/13000/14000
-    assert microcicles[0].volum_objectiu == 12000
-    assert microcicles[1].volum_objectiu == 13000
-    assert microcicles[2].volum_objectiu == 14000
-    # Descàrrega = 0.7 × càrrega anterior (14000) = 9800
-    assert microcicles[3].volum_objectiu == 9800
+    # Base (min, max) interpolat sobre 3 setmanes de càrrega.
+    vmin, vmax = VOLUM_SETMANAL_CARREGA["Base"]
+    assert microcicles[0].volum_objectiu == vmin
+    assert microcicles[1].volum_objectiu == round((vmin + vmax) / 2 / 25) * 25
+    assert microcicles[2].volum_objectiu == vmax
+    # Descàrrega = FACTOR_DESCARREGA × càrrega anterior (vmax)
+    assert microcicles[3].volum_objectiu == round(vmax * FACTOR_DESCARREGA / 25) * 25
 
     # dies_qualitat False per Base
     assert all(not m.dies_qualitat for m in microcicles)
@@ -531,9 +543,10 @@ def test_generar_microcicles_base_2_setmanes_bloc_parcial():
     assert len(microcicles) == 2
     assert [m.tipus_base for m in microcicles] == ["carrega", "descarrega"]
 
-    # Interpolació entre volum_min i volum_max (1 setmana de càrrega -> max)
-    assert microcicles[0].volum_objectiu == 15000
-    assert microcicles[1].volum_objectiu == round(12000 * 0.7)
+    # Interpolació entre min i max (1 setmana de càrrega -> max)
+    vmin, vmax = VOLUM_SETMANAL_CARREGA["Base"]
+    assert microcicles[0].volum_objectiu == vmax
+    assert microcicles[1].volum_objectiu == round(vmax * FACTOR_DESCARREGA / 25) * 25
 
     # test_css només a la primera
     assert microcicles[0].test_css is True
@@ -553,10 +566,12 @@ def test_generar_microcicles_peak_3_setmanes():
     assert all(not m.test_css for m in microcicles)
     assert all(m.notes == "Taper" for m in microcicles)
 
-    # Volum decreixent: max -> min
-    assert microcicles[0].volum_objectiu == 7500
-    assert microcicles[1].volum_objectiu == 6750
-    assert microcicles[2].volum_objectiu == 6000
+    # Volum decreixent segons FACTORS_PEAK (últim factor repetit si cal).
+    esperats = [
+        round(VOLUM_REFERENCIA_TAPER * FACTORS_PEAK[min(i, len(FACTORS_PEAK) - 1)] / 25) * 25
+        for i in range(3)
+    ]
+    assert [m.volum_objectiu for m in microcicles] == esperats
 
 
 def test_generar_microcicles_cursa_1_setmana():
@@ -569,7 +584,9 @@ def test_generar_microcicles_cursa_1_setmana():
     assert len(microcicles) == 1
     assert microcicles[0].tipus_base == "taper"
     assert microcicles[0].notes == "Setmana de competició"
-    assert microcicles[0].volum_objectiu == 6750
+    assert microcicles[0].volum_objectiu == round(
+        VOLUM_REFERENCIA_TAPER * FACTOR_CURSA / 25
+    ) * 25
     assert microcicles[0].dies_qualitat is True
     assert microcicles[0].test_css is False
 
@@ -584,7 +601,9 @@ def test_generar_microcicles_transicio_1_setmana():
     assert len(microcicles) == 1
     assert microcicles[0].tipus_base == "transicio"
     assert microcicles[0].notes == "Recuperació post-competició"
-    assert microcicles[0].volum_objectiu == 6750
+    assert microcicles[0].volum_objectiu == round(
+        VOLUM_REFERENCIA_TAPER * FACTOR_TRANSICIO / 25
+    ) * 25
     assert microcicles[0].dies_qualitat is False
     assert microcicles[0].test_css is False
 
@@ -604,8 +623,9 @@ def test_generar_microcicles_setmana_amb_prova_b_aplica_volum_08():
 
     microcicles = generar_microcicles_mesocicle(mesocicle, plans)
 
-    # Setmana 0: qualitat, volum interpolat 12000 -> x0.8 = 9600
-    assert microcicles[0].volum_objectiu == round(12000 * 0.8)
+    # Setmana 0: qualitat, volum interpolat (min de Build1) x FACTOR_PROVA_B
+    vmin, _ = VOLUM_SETMANAL_CARREGA["Build1"]
+    assert microcicles[0].volum_objectiu == round(vmin * FACTOR_PROVA_B / 25) * 25
 
 
 def test_generar_mesocicle_omple_microcicles_i_tipus(nedador_test, historial_test):
