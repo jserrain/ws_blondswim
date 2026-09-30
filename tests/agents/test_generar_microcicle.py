@@ -1,12 +1,14 @@
 """Tests per a la generació de contingut de microcicle amb LLM."""
 
 import json
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 from blondswim.agents.generar_microcicle import (
+    MAX_TOKENS_SESSIO,
     GeneracioMicrocicleError,
     _extreure_few_shot,
     actualitzar_classe_competicio,
@@ -75,6 +77,39 @@ def sessions_test(nedador_test: Nedador) -> list[Sessio]:
     return generar_esquelet_sessions(nedador_test, microcicle)
 
 
+def _tool_use_sessio(sessio: Sessio, n_exercicis: int = 1, stop_reason: str = "tool_use"):
+    """Construeix una resposta mock amb tool_use per a UNA sessió."""
+    block = MagicMock()
+    block.type = "tool_use"
+    block.name = "retornar_contingut_sessio"
+    block.input = {
+        "sessio_id": sessio.id,
+        "parts": [
+            {
+                "nom": p.nom,
+                "exercicis": [
+                    {
+                        "series": 4,
+                        "distancia_m": 50,
+                        "execucio": f"Exercici test {p.nom}",
+                        "descans": "c/20\"",
+                        "material": None,
+                        "intensitat": "A1",
+                        "objectiu": "Test",
+                    }
+                    for _ in range(n_exercicis)
+                ],
+            }
+            for p in sessio.estructura.parts
+        ],
+    }
+    response = MagicMock()
+    response.content = [block]
+    response.stop_reason = stop_reason
+    response.usage = MagicMock(output_tokens=100)
+    return response
+
+
 def test_omple_contingut_sense_tocar_percentatges(
     nedador_test, metodologia_test, sessions_test
 ):
@@ -94,40 +129,11 @@ def test_omple_contingut_sense_tocar_percentatges(
                 "dia": sessio.dia,
             })
 
-    # Mock resposta LLM
-    mock_response = MagicMock()
-    mock_tool_use = MagicMock()
-    mock_tool_use.type = "tool_use"
-    mock_tool_use.name = "retornar_contingut_sessions"
-    mock_tool_use.input = {
-        "sessions": [
-            {
-                "sessio_id": s.id,
-                "parts": [
-                    {
-                        "nom": p.nom,
-                        "exercicis": [
-                            {
-                                "series": 4,
-                                "distancia_m": 50,
-                                "execucio": f"Exercici test {p.nom}",
-                                "descans": "c/20\"",
-                                "material": None,
-                                "intensitat": "A1",
-                                "objectiu": "Test",
-                            }
-                        ],
-                    }
-                    for p in s.estructura.parts
-                ],
-            }
-            for s in sessions_test
-        ]
-    }
-    mock_response.content = [mock_tool_use]
-
+    # Mock: una resposta per sessió
     mock_client = MagicMock()
-    mock_client.messages.create.return_value = mock_response
+    mock_client.messages.create.side_effect = [
+        _tool_use_sessio(s) for s in sessions_test
+    ]
 
     with patch(
         "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
@@ -135,6 +141,9 @@ def test_omple_contingut_sense_tocar_percentatges(
         resultat = generar_microcicle(
             nedador_test, sessions_test, metodologia_test, historial=[]
         )
+
+    # Una crida per sessió
+    assert mock_client.messages.create.call_count == len(sessions_test)
 
     # Verificar que exercicis s'ha omplert
     for sessio in resultat:
@@ -156,40 +165,38 @@ def test_omple_contingut_sense_tocar_percentatges(
             assert sessio.dia == orig["dia"]
 
 
-def test_part_sense_resposta_es_queda_none(
+def test_part_sense_resposta_es_queda_buida(
     nedador_test, metodologia_test, sessions_test
 ):
-    """Mock retorna contingut només per algunes parts; altres es queden None."""
-    # Mock resposta LLM amb només algunes parts
-    mock_response = MagicMock()
-    mock_tool_use = MagicMock()
-    mock_tool_use.type = "tool_use"
-    mock_tool_use.name = "retornar_contingut_sessions"
-    mock_tool_use.input = {
-        "sessions": [
+    """Mock retorna contingut només per algunes parts; altres es queden buides."""
+    # Mock resposta per a la primera sessió amb només una part
+    block = MagicMock()
+    block.type = "tool_use"
+    block.name = "retornar_contingut_sessio"
+    block.input = {
+        "sessio_id": sessions_test[0].id,
+        "parts": [
             {
-                "sessio_id": sessions_test[0].id,
-                "parts": [
+                "nom": "Escalfament",
+                "exercicis": [
                     {
-                        "nom": "Escalfament",
-                        "exercicis": [
-                            {
-                                "series": 1,
-                                "distancia_m": 400,
-                                "execucio": "N suau",
-                                "descans": None,
-                                "material": None,
-                                "intensitat": "Recuperació",
-                                "objectiu": "Escalfament",
-                            }
-                        ],
+                        "series": 1,
+                        "distancia_m": 400,
+                        "execucio": "N suau",
+                        "descans": None,
+                        "material": None,
+                        "intensitat": "Recuperació",
+                        "objectiu": "Escalfament",
                     }
-                    # Només una part, les altres es queden buides
                 ],
             }
-        ]
+            # Només una part, les altres es queden buides
+        ],
     }
-    mock_response.content = [mock_tool_use]
+    mock_response = MagicMock()
+    mock_response.content = [block]
+    mock_response.stop_reason = "tool_use"
+    mock_response.usage = MagicMock(output_tokens=100)
 
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_response
@@ -235,15 +242,10 @@ def test_error_api_llança_generaciomicrocicleerror(
 
 def test_few_shot_buit_no_trenca(nedador_test, metodologia_test, sessions_test):
     """historial=None o []; verifica que no peta i crida l'API amb prompt vàlid."""
-    mock_response = MagicMock()
-    mock_tool_use = MagicMock()
-    mock_tool_use.type = "tool_use"
-    mock_tool_use.name = "retornar_contingut_sessions"
-    mock_tool_use.input = {"sessions": []}
-    mock_response.content = [mock_tool_use]
-
     mock_client = MagicMock()
-    mock_client.messages.create.return_value = mock_response
+    mock_client.messages.create.side_effect = [
+        _tool_use_sessio(s) for s in sessions_test
+    ] * 2
 
     with patch(
         "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
@@ -254,8 +256,8 @@ def test_few_shot_buit_no_trenca(nedador_test, metodologia_test, sessions_test):
         # Amb historial=[]
         generar_microcicle(nedador_test, sessions_test, metodologia_test, historial=[])
 
-    # Verificar que s'ha cridat l'API dues vegades
-    assert mock_client.messages.create.call_count == 2
+    # Una crida per sessió, dues vegades
+    assert mock_client.messages.create.call_count == 2 * len(sessions_test)
 
 
 def test_extreure_few_shot_prioritza_rellevants():
@@ -337,6 +339,36 @@ def test_extreure_few_shot_historial_buit():
     assert resultat == []
 
 
+def _sessio_esquelet(dia: str, setmana: int = 1) -> Sessio:
+    """Sessió mínima per mockejar l'esquelet en tests d'integració."""
+    parts = [
+        PartSessio(
+            nom=nom,
+            percentatge_carrega=20.0,
+            percentatge_qualitat=20.0,
+            percentatge_descarrega=20.0,
+            contingut=None,
+        )
+        for nom in [
+            "Escalfament",
+            "Tècnica+Subaquàtic",
+            "Aeròbic/Llindar",
+            "Específic/Qualitat",
+            "Tornada a la calma",
+        ]
+    ]
+    return Sessio(
+        id=f"meso1_s{setmana}_{dia}",
+        microcicle_setmana=setmana,
+        dia=dia,
+        tipus_sessio="carrega",
+        volum_total=3000,
+        estructura=EstructuraSessio(parts=parts),
+        es_dia_opcional=False,
+        notes=None,
+    )
+
+
 def test_generar_i_validar_microcicle_setmana_trobada(nedador_test, metodologia_test):
     """Cas normal: setmana trobada, genera sessions i retorna avisos."""
     # Crear macrocicle amb microcicles
@@ -378,16 +410,12 @@ def test_generar_i_validar_microcicle_setmana_trobada(nedador_test, metodologia_
         mesocicles=[mesocicle],
     )
 
-    # Mock resposta LLM
-    mock_response = MagicMock()
-    mock_tool_use = MagicMock()
-    mock_tool_use.type = "tool_use"
-    mock_tool_use.name = "retornar_contingut_sessions"
-    mock_tool_use.input = {"sessions": []}
-    mock_response.content = [mock_tool_use]
-
+    # Mock resposta LLM: una per sessió (l'esquelet en genera 4)
     mock_client = MagicMock()
-    mock_client.messages.create.return_value = mock_response
+    mock_client.messages.create.side_effect = [
+        _tool_use_sessio(_sessio_esquelet(dia))
+        for dia in ["dilluns", "dimarts", "dimecres", "dijous"]
+    ]
 
     with patch(
         "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
@@ -1266,3 +1294,108 @@ def test_generar_contingut_mesocicle_una_setmana_falla_continua(nedador_test):
     assert len(errors) == 1
     assert errors[0]["setmana"] == 2
     assert "Error API a la setmana 2" in errors[0]["error"]
+
+
+def test_una_crida_per_sessio(nedador_test, metodologia_test, sessions_test):
+    """Es fa exactament una crida a l'API per cada sessió de la setmana."""
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        _tool_use_sessio(s) for s in sessions_test
+    ]
+
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        resultat = generar_microcicle(nedador_test, sessions_test, metodologia_test)
+
+    assert mock_client.messages.create.call_count == len(sessions_test)
+    assert len(resultat) == len(sessions_test)
+    for sessio in resultat:
+        assert all(part.exercicis for part in sessio.estructura.parts)
+
+
+def test_retry_en_max_tokens(nedador_test, metodologia_test, sessions_test):
+    """Si stop_reason == 'max_tokens', es reintenta una vegada amb concisió."""
+    sessions = sessions_test[:1]
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        _tool_use_sessio(sessions[0], stop_reason="max_tokens"),
+        _tool_use_sessio(sessions[0], stop_reason="tool_use"),
+    ]
+
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
+
+    assert mock_client.messages.create.call_count == 2
+    segon_prompt = mock_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
+    assert "màxim 3 exercicis per part" in segon_prompt
+    assert all(part.exercicis for part in resultat[0].estructura.parts)
+
+
+def test_max_tokens_doble_deixa_sessio_buida(
+    nedador_test, metodologia_test, sessions_test, caplog
+):
+    """Si falla dues vegades per max_tokens, s'avisa i la sessió queda buida."""
+    sessions = sessions_test[:1]
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        _tool_use_sessio(sessions[0], stop_reason="max_tokens"),
+        _tool_use_sessio(sessions[0], stop_reason="max_tokens"),
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        with patch(
+            "blondswim.agents.generar_microcicle.get_llm_client",
+            return_value=mock_client,
+        ):
+            resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
+
+    assert mock_client.messages.create.call_count == 2
+    assert all(not part.exercicis for part in resultat[0].estructura.parts)
+    assert any("truncada de nou" in r.message for r in caplog.records)
+
+
+def test_volum_objectiu_sessio_al_prompt(nedador_test, metodologia_test, sessions_test):
+    """El prompt inclou el volum objectiu per sessió (total / n sessions, a 25)."""
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        _tool_use_sessio(s) for s in sessions_test
+    ]
+
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        generar_microcicle(nedador_test, sessions_test, metodologia_test)
+
+    primer_prompt = mock_client.messages.create.call_args_list[0].kwargs["messages"][0]["content"]
+    # 15000 / 4 = 3750 -> múltiple de 25
+    assert "volum_objectiu: 3750m" in primer_prompt
+
+
+def test_warning_volum_fora_10_percent(
+    nedador_test, metodologia_test, sessions_test, caplog
+):
+    """S'avisa si el volum generat queda fora del ±10% de l'objectiu."""
+    sessions = sessions_test[:1]
+
+    # 5 parts x 1 exercici x 200m = 1000m, lluny de 3750m
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _tool_use_sessio(sessions[0])
+
+    with caplog.at_level(logging.WARNING):
+        with patch(
+            "blondswim.agents.generar_microcicle.get_llm_client",
+            return_value=mock_client,
+        ):
+            generar_microcicle(nedador_test, sessions, metodologia_test)
+
+    assert any("fora del ±10%" in r.message for r in caplog.records)
+
+
+def test_max_tokens_sessio_constant():
+    """La constant de max_tokens per sessió és 4096."""
+    assert MAX_TOKENS_SESSIO == 4096
