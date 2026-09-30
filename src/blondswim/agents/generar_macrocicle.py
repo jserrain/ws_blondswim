@@ -428,16 +428,21 @@ def generar_mesocicle(
     historial = historial or []
 
     if data_referencia is None:
-        data_referencia = date.today()
+        data_referencia = periodificacio.avui()
 
     inici_generacio = data_referencia + timedelta(days=dies_marge)
 
     data_inici = date.fromisoformat(macrocicle.data_inici)
     data_fi = date.fromisoformat(macrocicle.data_fi)
 
-    # 1. Periodificar tota la temporada (una sola vegada, determinista)
+    # 1. Periodificar la temporada des de la setmana de generació
+    #    (les setmanes passades són història, no es replanifiquen).
+    inici_finestra = max(
+        periodificacio._dilluns_de(data_inici),
+        periodificacio._dilluns_de(inici_generacio),
+    )
     plans, avisos_periodificacio = periodificacio.periodificar_temporada(
-        competicions, data_inici, data_fi
+        competicions, inici_finestra, data_fi
     )
     avisos.extend(avisos_periodificacio)
 
@@ -493,10 +498,14 @@ def generar_mesocicle(
         microcicles=[],
     )
 
-    # 5. Generar microcicles a partir dels SetmanaPlan del bloc
-    mesocicle.microcicles = generar_microcicles_mesocicle(
-        mesocicle, plans_bloc, sessions_des_de=inici_generacio
-    )
+    # 5. Generar microcicles a partir dels SetmanaPlan del bloc.
+    #    sessions_des_de només s'aplica al microcicle que conté inici_generacio.
+    mesocicle.microcicles = generar_microcicles_mesocicle(mesocicle, plans_bloc)
+    for micro in mesocicle.microcicles:
+        plan = next(p for p in plans_bloc if p.setmana_iso == micro.setmana)
+        if plan.dilluns <= inici_generacio <= plan.diumenge:
+            micro.sessions_des_de = inici_generacio
+            break
 
     # 6. Enriquir fase_objectiu amb LLM si està habilitat
     if enriquir_amb_llm:

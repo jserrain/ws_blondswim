@@ -12,8 +12,9 @@ Regles (vegeu l'enunciat del refactor):
 """
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from blondswim.models.calendari import Competicio
 
@@ -41,6 +42,11 @@ class SetmanaPlan:
     index_dins_bloc: int
     es_descarrega: bool
     competicions_b_c: list[Competicio] = field(default_factory=list)
+
+
+def avui() -> date:
+    """Data d'avui al fus horari del coach (Europe/Madrid)."""
+    return datetime.now(ZoneInfo("Europe/Madrid")).date()
 
 
 def _dilluns_de(data: date) -> date:
@@ -206,11 +212,13 @@ def periodificar_temporada(
     i = 0
     while i < n:
         fase = fases[i]
+        # Longitud del tram continu d'aquesta fase.
+        j = i
+        while j < n and fases[j] == fase:
+            j += 1
+
         if fase in ("Base", "Build1", "Build2"):
-            # Longitud del tram continu d'aquesta fase.
-            j = i
-            while j < n and fases[j] == fase:
-                j += 1
+            # Blocs de mida <= 4, repartits equilibradament.
             mides = _repartir_blocs(j - i)
             for mida in mides:
                 bloc_counter += 1
@@ -230,13 +238,14 @@ def periodificar_temporada(
                     ))
                 i += mida
         else:
-            # Peak, Cursa i Transicio: un únic mesocicle cadascun.
+            # Peak, Cursa i Transicio: un únic mesocicle per tram continu.
             bloc_counter += 1
             bloc_id = f"bloc_{bloc_counter}"
-            plans.append(_crear_plan(
-                setmanes[i], fase, bloc_id, 0, False, competicions
-            ))
-            i += 1
+            for k in range(j - i):
+                plans.append(_crear_plan(
+                    setmanes[i + k], fase, bloc_id, k, False, competicions
+                ))
+            i = j
 
     return plans, avisos
 

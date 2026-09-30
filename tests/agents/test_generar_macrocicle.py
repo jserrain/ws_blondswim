@@ -685,9 +685,12 @@ def test_generar_mesocicle_omple_microcicles_i_tipus(nedador_test, historial_tes
     # El camp tipus ha d'estar fixat
     assert mesocicle.tipus == "Base"
 
-    # Els microcicles han d'estar poblats (bloc de 3 setmanes: 40-42)
-    assert len(mesocicle.microcicles) == 3
+    # Finestra des de la setmana 40; A del 14/12/2026 (setmana 51):
+    # Cursa 51, Peak 49-50, Build2 45-48, Build1 41-44, Base = només la setmana 40.
+    assert len(mesocicle.microcicles) == 1
+    assert mesocicle.microcicles[0].dates == "28/09-04/10/2026"
     assert all(m.mesocicle_id == mesocicle.id for m in mesocicle.microcicles)
+    assert any(a.get("tipus_avis") == "bloc_curt" for a in _avisos)
 
 
 def test_generar_mesocicle_data_referencia_30_09_2026(nedador_test, historial_test):
@@ -724,8 +727,8 @@ def test_generar_mesocicle_data_referencia_30_09_2026(nedador_test, historial_te
     assert len(mesocicle.microcicles) == 3
     assert [m.dates for m in mesocicle.microcicles] == [
         "28/09-04/10/2026",
-        "05/10-11/10/2026",
-        "12/10-18/10/2026",
+        "05-11/10/2026",
+        "12-18/10/2026",
     ]
     assert mesocicle.microcicles[0].sessions_des_de == date(2026, 10, 1)
     assert all(m.sessions_des_de is None for m in mesocicle.microcicles[1:])
@@ -754,13 +757,9 @@ def test_generar_mesocicle_data_referencia_none_usa_today(
         ),
     ]
 
-    class _FakeDate(date):
-        @classmethod
-        def today(cls):
-            return cls(2026, 9, 30)
-
     monkeypatch.setattr(
-        "blondswim.agents.generar_macrocicle.date", _FakeDate
+        "blondswim.agents.generar_macrocicle.periodificacio.avui",
+        lambda: date(2026, 9, 30),
     )
 
     mesocicle, _avisos = generar_mesocicle(

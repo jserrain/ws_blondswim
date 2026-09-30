@@ -157,3 +157,10 @@ def test_tots_els_plans_comencen_dilluns_i_acaben_diumenge(plans):
         assert p.dilluns.weekday() == 0
         assert p.diumenge.weekday() == 6
         assert (p.diumenge - p.dilluns).days == 6
+
+
+def test_peak_setmanes_53_i_1_comparteixen_bloc(plans):
+    """Peak (2 setmanes) és un únic bloc: 53/2026 i 1/2027 comparteixen bloc_id."""
+    p53 = _plan(plans, 2026, 53)
+    p1 = _plan(plans, 2027, 1)
+    assert p53.bloc_id == p1.bloc_id

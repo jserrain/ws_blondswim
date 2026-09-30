@@ -550,13 +550,14 @@ def generar_contingut_mesocicle(
         setmana = microcicle.setmana
 
         # R5: no generar sessions de dies anteriors a sessions_des_de
-        if microcicle.sessions_des_de is not None:
-            if not generar_esquelet_sessions(nedador, microcicle):
-                logger.info(
-                    f"Setmana {setmana}: cap dia a partir de "
-                    f"{microcicle.sessions_des_de.isoformat()}, s'omet"
-                )
-                continue
+        if microcicle.sessions_des_de is not None and not generar_esquelet_sessions(
+            nedador, microcicle
+        ):
+            logger.info(
+                f"Setmana {setmana}: cap dia a partir de "
+                f"{microcicle.sessions_des_de.isoformat()}, s'omet"
+            )
+            continue
 
         try:
             # a. Seleccionar metodologia per aquesta setmana

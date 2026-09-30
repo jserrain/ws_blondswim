@@ -10,15 +10,18 @@ mesura que avança la temporada real) -> exportar_mesocicle_excel().
 import argparse
 import json
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
+
+import anthropic
+from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from blondswim.agents.context_competicio import validar_espaiat_pics_a
 from blondswim.agents.generar_macrocicle import generar_macrocicle, generar_mesocicle
 from blondswim.agents.generar_microcicle import generar_contingut_mesocicle
-from blondswim.agents.periodificacio import periodificar_temporada
+from blondswim.agents.periodificacio import _dilluns_de, avui, periodificar_temporada
 from blondswim.agents.taper import generar_pla_taper_temporada
 from blondswim.export.mesocicle_excel import exportar_mesocicle_excel
 from blondswim.models.calendari import Competicio
@@ -94,9 +97,15 @@ def main() -> int:
         print(f"   ⚠ {avis}")
 
     print("\n3. Periodificant la temporada...")
+    data_ref_efectiva = data_referencia or avui()
+    inici_generacio = data_ref_efectiva + timedelta(days=1)
+    inici_finestra = max(
+        _dilluns_de(date.fromisoformat(TEMPORADA_DATA_INICI)),
+        _dilluns_de(inici_generacio),
+    )
     plans, avisos_periodificacio = periodificar_temporada(
         competicions,
-        date.fromisoformat(TEMPORADA_DATA_INICI),
+        inici_finestra,
         date.fromisoformat(TEMPORADA_DATA_FI),
     )
     _imprimir_taula_periodificacio(plans)
@@ -123,7 +132,7 @@ def main() -> int:
     output_dir = base_dir / "data" / "processed"
     macrocicle_path = output_dir / "macrocicle_temporada_26_27.json"
     with open(macrocicle_path, "w", encoding="utf-8") as f:
-        json.dump(macrocicle.model_dump(), f, ensure_ascii=False, indent=2)
+        json.dump(macrocicle.model_dump(mode="json"), f, ensure_ascii=False, indent=2)
     print(f"\n   ✓ Macrocicle desat a {macrocicle_path}")
 
     print(f"\n5. Generant contingut LLM pel mesocicle ({mesocicle.nom})...")
@@ -145,7 +154,7 @@ def main() -> int:
             avisos_pics_a=avisos_pics_a,
             historial=historial,
         )
-    except Exception as e:
+    except (anthropic.APIError, ValidationError) as e:
         print(f"   ✗ Error generant contingut: {e}")
         return 1
 
