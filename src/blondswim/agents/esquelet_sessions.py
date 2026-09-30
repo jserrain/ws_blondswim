@@ -46,13 +46,12 @@ def generar_esquelet_sessions(
     Genera l'estructura de parts ja fixada per percentatges, però amb
     `contingut=None` a cada PartSessio (el Mòdul 6 l'omplirà després).
 
-    Dies actius: nedador.dies_disponibles + nedador.dia_opcional (si no és None).
+    Dies actius: nedador.dies_disponibles (dia_opcional no s'utilitza).
 
     Regla d'assignació de tipus_sessio per dia:
     - microcicle.tipus_base == "qualitat": totes les sessions tipus_sessio="qualitat"
     - microcicle.tipus_base == "carrega" i microcicle.dies_qualitat == True:
-      "dimecres" i el dia_opcional del nedador són tipus_sessio="qualitat";
-      la resta "carrega"
+      "dimecres" és tipus_sessio="qualitat"; la resta "carrega"
     - microcicle.tipus_base == "carrega" i dies_qualitat == False: totes "carrega"
     - microcicle.tipus_base a {"descarrega", "taper", "transicio"}:
       totes les sessions hereten aquest mateix tipus_sessio
@@ -72,7 +71,7 @@ def generar_esquelet_sessions(
     endavant (p.ex. menys volum als dies de qualitat).
 
     Args:
-        nedador: Nedador amb dies_disponibles i dia_opcional
+        nedador: Nedador amb dies_disponibles
         microcicle: Microcicle amb tipus_base, dies_qualitat i volum_objectiu
 
     Returns:
@@ -80,8 +79,6 @@ def generar_esquelet_sessions(
     """
     # Determinar dies actius de la setmana
     dies_actius = nedador.dies_disponibles.copy()
-    if nedador.dia_opcional:
-        dies_actius.append(nedador.dia_opcional)
 
     # R5: no generar sessions de dies anteriors a sessions_des_de
     if microcicle.sessions_des_de is not None:
@@ -105,9 +102,7 @@ def generar_esquelet_sessions(
         if microcicle.tipus_base == "qualitat":
             tipus_sessio = "qualitat"
         elif microcicle.tipus_base == "carrega":
-            if microcicle.dies_qualitat and (
-                dia == "dimecres" or dia == nedador.dia_opcional
-            ):
+            if microcicle.dies_qualitat and dia == "dimecres":
                 tipus_sessio = "qualitat"
             else:
                 tipus_sessio = "carrega"
@@ -131,7 +126,7 @@ def generar_esquelet_sessions(
             tipus_sessio=tipus_sessio,
             volum_total=volum_sessio,
             estructura=EstructuraSessio(parts=parts),
-            es_dia_opcional=(dia == nedador.dia_opcional),
+            es_dia_opcional=False,
             notes=None,
         )
         sessions.append(sessio)
