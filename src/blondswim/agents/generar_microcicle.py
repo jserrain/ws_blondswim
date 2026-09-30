@@ -20,6 +20,9 @@ from blondswim.models.sessio import Exercici, Sessio
 
 logger = logging.getLogger(__name__)
 
+# Límit de tokens de sortida per a cada crida de generació d'UNA sessió.
+MAX_TOKENS_SESSIO = 4096
+
 
 class GeneracioMicrocicleError(Exception):
     """Error en la generació de contingut de microcicle amb LLM."""
@@ -546,6 +549,17 @@ def generar_contingut_mesocicle(
     # Ordenar microcicles per setmana
     microcicles_ordenats = sorted(mesocicle.microcicles, key=lambda m: m.setmana)
 
+    # Seleccionar metodologia UNA sola vegada per al mesocicle sencer
+    # (la prova objectiu no canvia dins d'un mesocicle; evita una crida
+    # API redundant per setmana).
+    prova_objectiu = nedador.proves_objectiu[0] if nedador.proves_objectiu else "200m lliure"
+    metodologia = seleccio_model.seleccionar_metodologia(
+        nedador=nedador,
+        prova_objectiu=prova_objectiu,
+        categoria=categoria,
+        enriquir_amb_llm=True,
+    )
+
     for microcicle in microcicles_ordenats:
         setmana = microcicle.setmana
 
@@ -560,16 +574,7 @@ def generar_contingut_mesocicle(
             continue
 
         try:
-            # a. Seleccionar metodologia per aquesta setmana
-            prova_objectiu = nedador.proves_objectiu[0] if nedador.proves_objectiu else "200m lliure"
-            metodologia = seleccio_model.seleccionar_metodologia(
-                nedador=nedador,
-                prova_objectiu=prova_objectiu,
-                categoria=categoria,
-                enriquir_amb_llm=True,
-            )
-
-            # b. Generar i validar microcicle
+            # Generar i validar microcicle
             sessions, _avisos = generar_i_validar_microcicle(
                 nedador=nedador,
                 macrocicle=macrocicle,
@@ -597,6 +602,165 @@ def generar_contingut_mesocicle(
     return resultats, errors
 
 
+def _construir_tools_sessio() -> list[dict]:
+    """Tool schema per a la generació del contingut d'UNA sola sessió."""
+    return [
+        {
+            "name": "retornar_contingut_sessio",
+            "description": (
+                "Retorna el contingut generat per a cada part d'UNA sessió, com a "
+                "llista d'exercicis estructurats. El volum (series x distancia_m) i "
+                "el ritme (intensitat) mai s'escriuen com a text lliure ni com a "
+                "números decimals."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "sessio_id": {"type": "string"},
+                    "parts": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "nom": {"type": "string"},
+                                "exercicis": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "series": {"type": "integer"},
+                                            "distancia_m": {"type": "integer"},
+                                            "execucio": {"type": "string"},
+                                            "descans": {"type": "string"},
+                                            "material": {"type": "string"},
+                                            "intensitat": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "Recuperació",
+                                                    "A1",
+                                                    "A2",
+                                                    "A3",
+                                                    "Velocitat",
+                                                    "MPLA",
+                                                    "TOLA",
+                                                    "AeM",
+                                                ],
+                                            },
+                                            "objectiu": {"type": "string"},
+                                        },
+                                        "required": ["series", "distancia_m", "execucio"],
+                                    },
+                                },
+                            },
+                            "required": ["nom", "exercicis"],
+                        },
+                    },
+                },
+                "required": ["sessio_id", "parts"],
+            },
+        }
+    ]
+
+
+def _resum_sessions_generades(sessions: list[Sessio]) -> str:
+    """
+    Resum curt (~150 tokens) de les sessions ja generades de la setmana:
+    dia, conjunt principal i intensitats, per evitar repetir el mateix.
+    """
+    linies = []
+    for sessio in sessions:
+        if not any(part.exercicis for part in sessio.estructura.parts):
+            continue
+        # Conjunt principal: la part amb més volum
+        part_principal = None
+        volum_max = -1
+        for part in sessio.estructura.parts:
+            volum = sum(ex.volum_m for ex in part.exercicis)
+            if volum > volum_max:
+                volum_max = volum
+                part_principal = part
+        if part_principal is None:
+            continue
+        intensitats = sorted(
+            {ex.intensitat for ex in part_principal.exercicis if ex.intensitat}
+        )
+        execucions = "; ".join(
+            ex.execucio for ex in part_principal.exercicis[:3] if ex.execucio
+        )
+        linies.append(
+            f"- {sessio.dia} ({sessio.tipus_sessio}): {part_principal.nom} "
+            f"[{', '.join(intensitats) or 'N/A'}] {execucions}"
+        )
+    return "\n".join(linies) if linies else "(cap sessió generada encara)"
+
+
+def _volum_objectiu_sessio(sessions: list[Sessio]) -> int:
+    """Volum objectiu per sessió: total de la setmana / n sessions, a múltiple de 25."""
+    volum_total = sum(s.volum_total for s in sessions)
+    return round(volum_total / len(sessions) / 25) * 25
+
+
+def _cridar_api_sessio(client, prompt: str, tools: list[dict]):
+    """Fa una crida a l'API per generar el contingut d'una sessió."""
+    return client.messages.create(
+        model=DEFAULT_MODEL,
+        max_tokens=MAX_TOKENS_SESSIO,
+        tools=tools,
+        tool_choice={"type": "tool", "name": "retornar_contingut_sessio"},
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+
+def _extreure_tool_use_sessio(response) -> dict | None:
+    """Retorna l'input del tool_use 'retornar_contingut_sessio', o None."""
+    for block in response.content:
+        if block.type == "tool_use" and block.name == "retornar_contingut_sessio":
+            return block.input
+    return None
+
+
+def _aplicar_contingut_sessio(sessio: Sessio, sessio_data: dict, setmana: int) -> None:
+    """Aplica els exercicis del tool_use a les parts de la sessió."""
+    sessio_id = sessio_data.get("sessio_id")
+    if sessio_id != sessio.id:
+        logger.warning(
+            f"Setmana {setmana}: sessio_id rebut '{sessio_id}' no coincideix "
+            f"amb l'esperat '{sessio.id}', ignorant"
+        )
+        return
+
+    for part_data in sessio_data.get("parts", []):
+        nom_part = part_data.get("nom")
+        exercicis_data = part_data.get("exercicis", [])
+
+        part = next((p for p in sessio.estructura.parts if p.nom == nom_part), None)
+        if not part:
+            logger.warning(
+                f"Part '{nom_part}' no trobada a sessió '{sessio_id}', ignorant. "
+                f"Noms esperats: {[p.nom for p in sessio.estructura.parts]}"
+            )
+            continue
+
+        exercicis = []
+        n_rebuts = len(exercicis_data)
+        n_descartats = 0
+        for ex_data in exercicis_data:
+            try:
+                exercicis.append(Exercici(**ex_data))
+            except ValidationError as e:
+                n_descartats += 1
+                logger.warning(
+                    f"Exercici invàlid a sessió '{sessio_id}', part '{nom_part}', ignorat: {e}"
+                )
+        part.exercicis = exercicis
+
+        logger.info(
+            f"Setmana {setmana}, sessió '{sessio_id}', part '{nom_part}': "
+            f"exercicis rebuts={n_rebuts}, vàlids={len(exercicis)}, "
+            f"descartats={n_descartats}"
+        )
+
+
 def generar_microcicle(
     nedador: Nedador,
     sessions: list[Sessio],
@@ -604,14 +768,25 @@ def generar_microcicle(
     historial: list[SessioRealitzada] | None = None,
 ) -> list[Sessio]:
     """
-    Generar contingut de microcicle amb LLM.
+    Generar contingut de microcicle amb LLM, UNA crida per sessió.
 
-    Omple el camp contingut de cada PartSessio de cada Sessio utilitzant l'API
+    Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
     de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+
+    Per cada sessió:
+    - Es fa una crida independent (evita truncar per max_tokens en setmanes
+      amb moltes sessions).
+    - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+      de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+      un WARNING i la sessió queda buida (no es llança excepció).
+    - Es passa un resum de les sessions ja generades de la setmana per evitar
+      repetir el mateix conjunt principal.
+    - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+      múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
 
     Args:
         nedador: Nedador amb zones CSS i proves objectiu
-        sessions: Llista de sessions amb estructura de parts (contingut=None)
+        sessions: Llista de sessions amb estructura de parts (exercicis buits)
         metodologia: Decisió de metodologia del Mòdul 5
         historial: Historial de sessions realitzades per few-shot (opcional)
 
@@ -629,210 +804,127 @@ def generar_microcicle(
 
         # Extreure few-shot
         exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
-        exemples_text = "\n".join(f"- {ex}" for ex in exemples_series) if exemples_series else "(Cap exemple disponible)"
+        exemples_text = (
+            "\n".join(f"- {ex}" for ex in exemples_series)
+            if exemples_series
+            else "(Cap exemple disponible)"
+        )
 
-        # Deduir dades del microcicle a partir de les sessions
         if not sessions:
             raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
 
         setmana = sessions[0].microcicle_setmana
-        tipus_base = sessions[0].tipus_sessio  # Aproximació: usar el tipus de la primera sessió
-        volum_objectiu = sum(s.volum_total for s in sessions)
+        volum_per_sessio = _volum_objectiu_sessio(sessions)
 
-        # Construir estructura de sessions per al prompt
-        estructura_sessions_text = ""
+        client = get_llm_client()
+        tools = _construir_tools_sessio()
+
         for sessio in sessions:
-            estructura_sessions_text += f"\n**Sessió: {sessio.dia.capitalize()} (tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+            # Estructura de parts d'aquesta sessió
+            estructura_sessions_text = (
+                f"\n**Sessió: {sessio.dia.capitalize()} "
+                f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+            )
             for part in sessio.estructura.parts:
-                # Determinar percentatge segons tipus_sessio
                 if sessio.tipus_sessio == "carrega":
                     perc = part.percentatge_carrega
                 elif sessio.tipus_sessio == "qualitat":
                     perc = part.percentatge_qualitat
                 else:  # descarrega, taper, transicio
                     perc = part.percentatge_descarrega
-
                 volum_part = int(sessio.volum_total * perc / 100)
                 estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
 
-        # Construir llista de sessions per al placeholder {sessions_setmana}
-        sessions_setmana_text = "\n".join(
-            f"- sessio_id: \"{s.id}\" | dia: {s.dia} | tipus: {s.tipus_sessio} | volum: {s.volum_total}m"
-            for s in sessions
-        )
-
-        # Omplir prompt
-        prompt = prompt_template.format(
-            proves_objectiu=", ".join(nedador.proves_objectiu),
-            categoria=nedador.categoria,
-            estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
-            zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
-            zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
-            zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
-            zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
-            zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
-            offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
-            offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
-            offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
-            offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
-            setmana=setmana,
-            tipus_base=tipus_base,
-            volum_objectiu=volum_objectiu,
-            metodologia_principal=metodologia.metodologia_principal,
-            metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
-            forca_evidencia=metodologia.forca_evidencia,
-            justificacio=metodologia.justificacio,
-            estructura_sessions=estructura_sessions_text,
-            exemples_series=exemples_text,
-            sessions_setmana=sessions_setmana_text,
-        )
-
-        # Definir tool per forçar resposta estructurada
-        tools = [
-            {
-                "name": "retornar_contingut_sessions",
-                "description": "Retorna el contingut generat per a cada part de cada sessió, com a llista d'exercicis estructurats. El volum (series x distancia_m) i el ritme (intensitat) mai s'escriuen com a text lliure ni com a números decimals.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "sessions": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "sessio_id": {"type": "string"},
-                                    "parts": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "nom": {"type": "string"},
-                                                "exercicis": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "object",
-                                                        "properties": {
-                                                            "series": {"type": "integer"},
-                                                            "distancia_m": {"type": "integer"},
-                                                            "execucio": {"type": "string"},
-                                                            "descans": {"type": "string"},
-                                                            "material": {"type": "string"},
-                                                            "intensitat": {
-                                                                "type": "string",
-                                                                "enum": [
-                                                                    "Recuperació",
-                                                                    "A1",
-                                                                    "A2",
-                                                                    "A3",
-                                                                    "Velocitat",
-                                                                    "MPLA",
-                                                                    "TOLA",
-                                                                    "AeM",
-                                                                ],
-                                                            },
-                                                            "objectiu": {"type": "string"},
-                                                        },
-                                                        "required": ["series", "distancia_m", "execucio"],
-                                                    },
-                                                },
-                                            },
-                                            "required": ["nom", "exercicis"],
-                                        },
-                                    },
-                                },
-                                "required": ["sessio_id", "parts"],
-                            },
-                        }
-                    },
-                    "required": ["sessions"],
-                },
-            }
-        ]
-
-        # Cridar API
-        client = get_llm_client()
-        max_tokens = 4096
-        response = client.messages.create(
-            model=DEFAULT_MODEL,
-            max_tokens=max_tokens,
-            tools=tools,
-            tool_choice={"type": "tool", "name": "retornar_contingut_sessions"},
-            messages=[{"role": "user", "content": prompt}],
-        )
-
-        # Log de diagnòstic de la resposta de l'API
-        usage = getattr(response, "usage", None)
-        output_tokens = getattr(usage, "output_tokens", None) if usage else None
-        logger.info(
-            f"Resposta API setmana {setmana}: stop_reason={response.stop_reason}, "
-            f"output_tokens={output_tokens}, max_tokens={max_tokens}"
-        )
-
-        # Parsejar resposta
-        tool_use_block = None
-        for block in response.content:
-            if block.type == "tool_use" and block.name == "retornar_contingut_sessions":
-                tool_use_block = block
-                break
-
-        if not tool_use_block:
-            raise GeneracioMicrocicleError(
-                "Resposta LLM sense tool use esperat 'retornar_contingut_sessions'"
+            sessions_setmana_text = (
+                f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                f"tipus: {sessio.tipus_sessio} | volum_objectiu: {volum_per_sessio}m"
             )
 
-        sessions_data = tool_use_block.input.get("sessions", [])
+            resum_previ = _resum_sessions_generades(sessions)
 
-        logger.info(
-            f"Setmana {setmana}: sessions rebudes={len(sessions_data)}, "
-            f"esperades={len(sessions)}"
-        )
+            prompt = prompt_template.format(
+                proves_objectiu=", ".join(nedador.proves_objectiu),
+                categoria=nedador.categoria,
+                estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                setmana=setmana,
+                tipus_base=sessio.tipus_sessio,
+                volum_objectiu=sessio.volum_total,
+                metodologia_principal=metodologia.metodologia_principal,
+                metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                forca_evidencia=metodologia.forca_evidencia,
+                justificacio=metodologia.justificacio,
+                estructura_sessions=estructura_sessions_text,
+                exemples_series=exemples_text,
+                sessions_setmana=sessions_setmana_text,
+                resum_sessions_previ=resum_previ,
+            )
 
-        # Aplicar contingut a les sessions originals
-        for sessio_data in sessions_data:
-            sessio_id = sessio_data.get("sessio_id")
-            parts_data = sessio_data.get("parts", [])
+            # Crida inicial
+            response = _cridar_api_sessio(client, prompt, tools)
+            usage = getattr(response, "usage", None)
+            output_tokens = getattr(usage, "output_tokens", None) if usage else None
+            logger.info(
+                f"Resposta API setmana {setmana}, sessió '{sessio.id}': "
+                f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                f"max_tokens={MAX_TOKENS_SESSIO}"
+            )
 
-            # Buscar sessió corresponent
-            sessio = next((s for s in sessions if s.id == sessio_id), None)
-            if not sessio:
+            # Retry si s'ha truncat per max_tokens
+            if response.stop_reason == "max_tokens":
                 logger.warning(
-                    f"Sessió amb ID '{sessio_id}' no trobada, ignorant. "
-                    f"IDs esperats: {[s.id for s in sessions]}"
+                    f"Setmana {setmana}, sessió '{sessio.id}': resposta truncada "
+                    f"(max_tokens). Reintentant amb instrucció de concisió."
                 )
-                continue
-
-            # Aplicar exercicis a cada part
-            for part_data in parts_data:
-                nom_part = part_data.get("nom")
-                exercicis_data = part_data.get("exercicis", [])
-
-                # Buscar part corresponent
-                part = next((p for p in sessio.estructura.parts if p.nom == nom_part), None)
-                if not part:
+                prompt_concis = (
+                    prompt
+                    + "\n\nIMPORTANT: sigues més concís: màxim 3 exercicis per part."
+                )
+                response = _cridar_api_sessio(client, prompt_concis, tools)
+                usage = getattr(response, "usage", None)
+                output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                logger.info(
+                    f"Resposta API (retry) setmana {setmana}, sessió '{sessio.id}': "
+                    f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                    f"max_tokens={MAX_TOKENS_SESSIO}"
+                )
+                if response.stop_reason == "max_tokens":
                     logger.warning(
-                        f"Part '{nom_part}' no trobada a sessió '{sessio_id}', ignorant. "
-                        f"Noms esperats: {[p.nom for p in sessio.estructura.parts]}"
+                        f"Setmana {setmana}, sessió '{sessio.id}': truncada de nou "
+                        f"després del retry. Es deixa la sessió buida."
                     )
                     continue
 
-                exercicis = []
-                n_rebuts = len(exercicis_data)
-                n_descartats = 0
-                for ex_data in exercicis_data:
-                    try:
-                        exercicis.append(Exercici(**ex_data))
-                    except ValidationError as e:
-                        n_descartats += 1
-                        logger.warning(
-                            f"Exercici invàlid a sessió '{sessio_id}', part '{nom_part}', ignorat: {e}"
-                        )
-                part.exercicis = exercicis
-
-                logger.info(
-                    f"Setmana {setmana}, sessió '{sessio_id}', part '{nom_part}': "
-                    f"exercicis rebuts={n_rebuts}, vàlids={len(exercicis)}, "
-                    f"descartats={n_descartats}"
+            sessio_data = _extreure_tool_use_sessio(response)
+            if not sessio_data:
+                logger.warning(
+                    f"Setmana {setmana}, sessió '{sessio.id}': resposta sense tool "
+                    f"use 'retornar_contingut_sessio'. Es deixa la sessió buida."
                 )
+                continue
+
+            _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+
+            # Verificar volum dins ±10% de l'objectiu
+            volum_sessio = sum(
+                ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
+            )
+            if volum_per_sessio > 0:
+                desviacio = abs(volum_sessio - volum_per_sessio) / volum_per_sessio
+                if desviacio > 0.10:
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': volum generat "
+                        f"{volum_sessio}m fora del ±10% de l'objectiu "
+                        f"{volum_per_sessio}m (desviació {desviacio:.1%})"
+                    )
 
         # Verificar que totes les parts tenen contingut (advertir si no)
         for sessio in sessions:

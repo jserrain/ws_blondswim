@@ -1347,12 +1347,11 @@ def test_max_tokens_doble_deixa_sessio_buida(
         _tool_use_sessio(sessions[0], stop_reason="max_tokens"),
     ]
 
-    with caplog.at_level(logging.WARNING):
-        with patch(
-            "blondswim.agents.generar_microcicle.get_llm_client",
-            return_value=mock_client,
-        ):
-            resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
+    with caplog.at_level(logging.WARNING), patch(
+        "blondswim.agents.generar_microcicle.get_llm_client",
+        return_value=mock_client,
+    ):
+        resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
 
     assert mock_client.messages.create.call_count == 2
     assert all(not part.exercicis for part in resultat[0].estructura.parts)

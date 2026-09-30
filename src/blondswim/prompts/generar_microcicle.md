@@ -58,7 +58,7 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 
 2. **CADA EXERCICI és una entrada estructurada, MAI text lliure:**
    - `series`: nombre enter de repeticions (ex: 4, 8, 1)
-   - `distancia_m`: distància en metres, SEMPRE múltiple de 25 (25, 50, 75, 100, 150, 200...). MAI un valor com 48, 194 o 598.
+   - `distancia_m`: distància en metres, SEMPRE múltiple de 25 (25, 50, 75, 100, 150, 200...). MAI un valor com 15, 48, 52, 194 o 598. Els esforços més curts de 25m (p.ex. 15m subaquàtic) van DINS del camp `execucio` d'un exercici de 25m (ex: `"execucio": "15m subaquàtic + 10 suau"`, `"distancia_m": 25`).
    - `execucio`: descripció textual de l'exercici (estil, focus tècnic) -- SENSE xifres de volum ni de ritme
    - `descans`: notació `c/X'Y''` per descans combinat (ex: "c/1'15\"") o `d/Ns` per descans simple entre repeticions (ex: "d/20\"")
    - `material`: quan calgui (ex: "Pull", "Palites", "AL")
@@ -78,7 +78,14 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 7. **SEGUIR L'ORDRE DE SESSIONS:**
    Segueix l'ordre i el tipus de cada sessió tal com es proporcionen a continuació, sense assumir cap patró fix de dies de la setmana.
 
-   **IMPORTANT:** Retorna el camp `sessio_id` EXACTAMENT igual com apareix aquí per a cada sessió, sense modificar-lo.
+   **IMPORTANT:** Retorna el camp `sessio_id` EXACTAMENT igual com apareix aquí, sense modificar-lo.
+
+   **VOLUM OBJECTIU DE LA SESSIÓ:** la suma de `series × distancia_m` de tots els exercicis de la sessió ha d'estar dins del **±10%** del `volum_objectiu` indicat. Si no hi arribes, ajusta el nombre de `series` o la `distancia_m` (sempre múltiple de 25) fins a quedar-hi dins.
+
+   **VARIETAT DINS LA SETMANA:** no repeteixis el mateix conjunt principal que les sessions ja generades aquesta setmana. Consulta el resum següent i varia el focus.
+
+   **Sessions ja generades aquesta setmana:**
+{resum_sessions_previ}
 
 {sessions_setmana}
 
