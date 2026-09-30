@@ -7,7 +7,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.styles import Font
 
-from blondswim.models.macrocicle import Mesocicle
+from blondswim.models.macrocicle import Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import Sessio
 from blondswim.utils.dates import parsejar_rang_dates
@@ -41,6 +41,104 @@ def _etiqueta_mes(data_inici: date, data_fi: date) -> str:
     return f"{_MESOS_CA[data_inici.month]}/{_MESOS_CA[data_fi.month]}"
 
 
+def _escriure_setmana(
+    ws,
+    row_idx: int,
+    mesocicle: Mesocicle,
+    microcicle: Microcicle | None,
+    setmana: int,
+    sessions: list[Sessio],
+) -> int:
+    """
+    Escriu una setmana (capçalera + dies + exercicis + totals) a partir de
+    la fila `row_idx`. Retorna la fila següent (inclosa la línia en blanc).
+    Si no hi ha sessions vàlides, no escriu res i retorna `row_idx`.
+    """
+    sessions_setmana = [s for s in sessions if s.dia in _DIES_ORDRE]
+    sessions_setmana.sort(key=lambda s: _DIES_ORDRE[s.dia])
+    if not sessions_setmana:
+        return row_idx
+
+    data_inici = None
+    data_fi = None
+    if microcicle:
+        try:
+            data_inici, data_fi = parsejar_rang_dates(microcicle.dates)
+        except ValueError:
+            data_inici = None
+
+    fase = mesocicle.tipus or mesocicle.fase_objectiu
+    if data_inici:
+        setmana_iso = data_inici.isocalendar()[1]
+        mes_label = _etiqueta_mes(data_inici, data_fi)
+        capçalera_setmana = (
+            f"{mes_label} {data_inici.year} — Setmana {setmana_iso} "
+            f"({microcicle.dates}) — {mesocicle.nom}, Fase {fase}"
+        )
+    else:
+        capçalera_setmana = f"Setmana {setmana} — {mesocicle.nom}, Fase {fase}"
+
+    cell = ws.cell(row=row_idx, column=1, value=capçalera_setmana)
+    cell.font = Font(bold=True, size=12)
+    row_idx += 1
+
+    sessions_des_de = microcicle.sessions_des_de if microcicle else None
+
+    for sessio in sessions_setmana:
+        if data_inici:
+            data_sessio = data_inici + timedelta(days=_DIES_ORDRE[sessio.dia])
+            if sessions_des_de is not None and data_sessio < sessions_des_de:
+                continue
+            capçalera_dia = f"{sessio.dia.capitalize()} {data_sessio.day}"
+        else:
+            capçalera_dia = sessio.dia.capitalize()
+
+        cell = ws.cell(row=row_idx, column=1, value=capçalera_dia)
+        cell.font = Font(bold=True)
+        row_idx += 1
+
+        for col_idx, nom_col in enumerate(_COLUMNES, start=1):
+            c = ws.cell(row=row_idx, column=col_idx, value=nom_col)
+            c.font = Font(italic=True)
+        row_idx += 1
+
+        volum_total_dia = 0
+        for part in sessio.estructura.parts:
+            for exercici in part.exercicis:
+                treball = (
+                    str(exercici.distancia_m)
+                    if exercici.series == 1
+                    else f"{exercici.series}x{exercici.distancia_m}"
+                )
+                ws.cell(row=row_idx, column=2, value=treball)
+                ws.cell(row=row_idx, column=3, value=exercici.execucio)
+                ws.cell(row=row_idx, column=4, value=exercici.descans)
+                ws.cell(row=row_idx, column=5, value=exercici.material)
+                ws.cell(row=row_idx, column=6, value=exercici.intensitat)
+                ws.cell(row=row_idx, column=7, value=exercici.objectiu)
+                ws.cell(row=row_idx, column=9, value=exercici.volum_m)
+                volum_total_dia += exercici.volum_m
+                row_idx += 1
+
+        ws.cell(row=row_idx, column=2, value="Total").font = Font(bold=True)
+        ws.cell(row=row_idx, column=9, value=volum_total_dia).font = Font(bold=True)
+        row_idx += 1
+
+    return row_idx + 1  # línia en blanc entre setmanes
+
+
+def _ajustar_amplades(ws) -> None:
+    """Ajusta l'amplada de cada columna al contingut (màxim 50)."""
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter
+        for cell in col:
+            with suppress(TypeError, AttributeError):
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+        ws.column_dimensions[column].width = min(max_length + 2, 50)
+
+
 def exportar_mesocicle_excel(
     nedador: Nedador,
     mesocicle: Mesocicle,
@@ -49,25 +147,14 @@ def exportar_mesocicle_excel(
 ) -> Path:
     """
     Exporta totes les sessions d'un mesocicle a un ÚNIC full Excel, amb
-    una fila per Exercici (no una columna per PartSessio com abans).
+    una fila per Exercici.
 
-    Estructura per setmana:
-    - Fila de capçalera de setmana en negreta: "<Mes(os)> <Any> — Setmana
-      <ISO> (<dates>) — <mesocicle.nom>, Fase <tipus>". La setmana és
-      sempre la setmana ISO de l'any (isocalendar()[1] de data_inici),
-      mai un índex relatiu al mesocicle.
-    - Per cada dia amb sessió, en l'ordre dilluns..diumenge:
-      - Fila de capçalera de dia en negreta: "<Nom dia> <número de dia>"
-        (ex: "Dilluns 28"), sense mes (ja és a la capçalera de setmana).
-      - Fila de capçaleres de columna en cursiva: Dia/Treball/Execució/
-        Descans/Material/Intensitat/Objectiu/Temps (min)/Volum (m).
-      - Una fila per cada Exercici de cada part de
-        sessio.estructura.parts, en ordre.
-      - Fila "Total" en negreta amb el volum del dia sumat (sempre
-        múltiple de 25, ja que ve de sumar Exercici.volum_m).
-        "Temps (min)" es deixa en blanc -- calcular-ho requereix el
-        ritme real per zona i encara no està implementat (Etapa 3b
-        pendent, vegeu fase3.md).
+    Estructura per setmana (vegeu _escriure_setmana):
+    - Capçalera de setmana en negreta: "<Mes(os)> <Any> — Setmana <ISO>
+      (<dates>) — <mesocicle.nom>, Fase <tipus>" (setmana ISO de l'any).
+    - Per cada dia amb sessió (dilluns..diumenge): capçalera "<Dia> <núm>",
+      capçaleres de columna en cursiva, una fila per Exercici i fila "Total"
+      amb el volum del dia. "Temps (min)" en blanc (Etapa 3b pendent).
 
     Les setmanes que no apareguin a `resultats` no generen files.
 
@@ -89,91 +176,53 @@ def exportar_mesocicle_excel(
     microcicles_per_setmana = {m.setmana: m for m in mesocicle.microcicles}
 
     row_idx = 1
-
     for setmana in sorted(resultats.keys()):
-        sessions_setmana = [s for s in resultats[setmana] if s.dia in _DIES_ORDRE]
-        sessions_setmana.sort(key=lambda s: _DIES_ORDRE[s.dia])
-        if not sessions_setmana:
-            continue
+        row_idx = _escriure_setmana(
+            ws,
+            row_idx,
+            mesocicle,
+            microcicles_per_setmana.get(setmana),
+            setmana,
+            resultats[setmana],
+        )
 
-        microcicle = microcicles_per_setmana.get(setmana)
-        data_inici = None
-        data_fi = None
-        if microcicle:
-            try:
-                data_inici, data_fi = parsejar_rang_dates(microcicle.dates)
-            except ValueError:
-                data_inici = None
+    _ajustar_amplades(ws)
+    wb.save(output_path)
 
-        fase = mesocicle.tipus or mesocicle.fase_objectiu
-        if data_inici:
-            setmana_iso = data_inici.isocalendar()[1]
-            mes_label = _etiqueta_mes(data_inici, data_fi)
-            capçalera_setmana = (
-                f"{mes_label} {data_inici.year} — Setmana {setmana_iso} "
-                f"({microcicle.dates}) — {mesocicle.nom}, Fase {fase}"
-            )
-        else:
-            capçalera_setmana = f"Setmana {setmana} — {mesocicle.nom}, Fase {fase}"
+    return output_path
 
-        cell = ws.cell(row=row_idx, column=1, value=capçalera_setmana)
-        cell.font = Font(bold=True, size=12)
-        row_idx += 1
 
-        sessions_des_de = microcicle.sessions_des_de if microcicle else None
+def exportar_setmana_excel(
+    nedador: Nedador,
+    mesocicle: Mesocicle,
+    microcicle: Microcicle,
+    sessions: list[Sessio],
+    output_path: Path,
+) -> Path:
+    """
+    Exporta UNA sola setmana (G6): el full que el nedador fa servir a la
+    piscina. Mateix format que exportar_mesocicle_excel(), una pestanya
+    anomenada "Setmana <ISO>".
 
-        for sessio in sessions_setmana:
-            if data_inici:
-                data_sessio = data_inici + timedelta(days=_DIES_ORDRE[sessio.dia])
-                if sessions_des_de is not None and data_sessio < sessions_des_de:
-                    continue
-                capçalera_dia = f"{sessio.dia.capitalize()} {data_sessio.day}"
-            else:
-                capçalera_dia = sessio.dia.capitalize()
+    Args:
+        nedador: Nedador
+        mesocicle: Mesocicle al qual pertany la setmana
+        microcicle: Microcicle de la setmana
+        sessions: Sessions generades per a la setmana
+        output_path: Path on escriure el fitxer Excel
 
-            cell = ws.cell(row=row_idx, column=1, value=capçalera_dia)
-            cell.font = Font(bold=True)
-            row_idx += 1
+    Returns:
+        Path del fitxer Excel creat
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            for col_idx, nom_col in enumerate(_COLUMNES, start=1):
-                c = ws.cell(row=row_idx, column=col_idx, value=nom_col)
-                c.font = Font(italic=True)
-            row_idx += 1
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Setmana {microcicle.setmana}"
 
-            volum_total_dia = 0
-            for part in sessio.estructura.parts:
-                for exercici in part.exercicis:
-                    treball = (
-                        str(exercici.distancia_m)
-                        if exercici.series == 1
-                        else f"{exercici.series}x{exercici.distancia_m}"
-                    )
-                    ws.cell(row=row_idx, column=2, value=treball)
-                    ws.cell(row=row_idx, column=3, value=exercici.execucio)
-                    ws.cell(row=row_idx, column=4, value=exercici.descans)
-                    ws.cell(row=row_idx, column=5, value=exercici.material)
-                    ws.cell(row=row_idx, column=6, value=exercici.intensitat)
-                    ws.cell(row=row_idx, column=7, value=exercici.objectiu)
-                    ws.cell(row=row_idx, column=9, value=exercici.volum_m)
-                    volum_total_dia += exercici.volum_m
-                    row_idx += 1
+    _escriure_setmana(ws, 1, mesocicle, microcicle, microcicle.setmana, sessions)
 
-            ws.cell(row=row_idx, column=2, value="Total").font = Font(bold=True)
-            ws.cell(row=row_idx, column=9, value=volum_total_dia).font = Font(bold=True)
-            row_idx += 1
-
-        row_idx += 1  # línia en blanc entre setmanes
-
-    for col in ws.columns:
-        max_length = 0
-        column = col[0].column_letter
-        for cell in col:
-            with suppress(TypeError, AttributeError):
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-        adjusted_width = min(max_length + 2, 50)
-        ws.column_dimensions[column].width = adjusted_width
-
+    _ajustar_amplades(ws)
     wb.save(output_path)
 
     return output_path

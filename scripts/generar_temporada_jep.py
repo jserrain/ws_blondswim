@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Script d'integració end-to-end: genera tota la temporada 2026-27 d'en Jep.
+"""Script d'integració end-to-end: temporada 2026-27 d'en Jep.
 
-Encadena: generar_macrocicle() -> generar_mesocicle() (repetit fins cobrir
-tota la temporada) -> generar_contingut_mesocicle() (només pel primer
-mesocicle, com a demo -- la resta es generarien mesocicle a mesocicle a
-mesura que avança la temporada real) -> exportar_mesocicle_excel().
+Encadena: generar_macrocicle() -> periodificació de la temporada (taula) ->
+generar_mesocicle() del bloc que conté la setmana objectiu ->
+contingut LLM i Excel.
+
+Per defecte (G1/G6) genera el contingut NOMÉS de la setmana que comença el
+proper dilluns (o el dilluns de --dilluns) i l'exporta a
+setmana_<nom>_<YYYY>-W<ww>.xlsx. Amb --mesocicle-sencer recupera el
+comportament anterior (tot el mesocicle, mesocicle_<nom>_<id>.xlsx).
 """
 
 import argparse
@@ -20,10 +24,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from blondswim.agents.context_competicio import validar_espaiat_pics_a
 from blondswim.agents.generar_macrocicle import generar_macrocicle, generar_mesocicle
-from blondswim.agents.generar_microcicle import generar_contingut_mesocicle
+from blondswim.agents.generar_microcicle import (
+    generar_contingut_mesocicle,
+    generar_contingut_setmana,
+)
 from blondswim.agents.periodificacio import _dilluns_de, avui, periodificar_temporada
 from blondswim.agents.taper import generar_pla_taper_temporada
-from blondswim.export.mesocicle_excel import exportar_mesocicle_excel
+from blondswim.export.mesocicle_excel import exportar_mesocicle_excel, exportar_setmana_excel
 from blondswim.models.calendari import Competicio
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.nedador import Nedador
@@ -58,11 +65,32 @@ def main() -> int:
         default=None,
         help="Data de referència (YYYY-MM-DD). Per defecte, avui.",
     )
+    parser.add_argument(
+        "--dilluns",
+        type=str,
+        default=None,
+        help=(
+            "Dilluns de la setmana a generar (YYYY-MM-DD). "
+            "Per defecte, el proper dilluns a partir de la data de referència."
+        ),
+    )
+    parser.add_argument(
+        "--mesocicle-sencer",
+        action="store_true",
+        help="Genera el contingut de tot el mesocicle (comportament antic).",
+    )
     args = parser.parse_args()
 
     data_referencia = (
         date.fromisoformat(args.data_referencia) if args.data_referencia else None
     )
+    if args.dilluns:
+        dilluns_objectiu = date.fromisoformat(args.dilluns)
+        if dilluns_objectiu.weekday() != 0:
+            print(f"✗ --dilluns {args.dilluns} no és un dilluns")
+            return 2
+    else:
+        dilluns_objectiu = seguent_dilluns(data_referencia or avui())
 
     base_dir = Path(__file__).parent.parent
     data_processed = base_dir / "data" / "processed"
@@ -98,11 +126,9 @@ def main() -> int:
         print(f"   ⚠ {avis}")
 
     print("\n3. Periodificant la temporada...")
-    data_ref_efectiva = data_referencia or avui()
-    inici_generacio = seguent_dilluns(data_ref_efectiva)
     inici_finestra = max(
         _dilluns_de(date.fromisoformat(TEMPORADA_DATA_INICI)),
-        _dilluns_de(inici_generacio),
+        dilluns_objectiu,
     )
     plans, avisos_periodificacio = periodificar_temporada(
         competicions,
@@ -113,14 +139,14 @@ def main() -> int:
     for avis in avisos_periodificacio:
         print(f"   ⚠ {avis}")
 
-    print("\n4. Generant el mesocicle de la data de referència...")
+    print(f"\n4. Generant el mesocicle que conté la setmana del {dilluns_objectiu:%d/%m/%Y}...")
     mesocicle, avisos = generar_mesocicle(
         nedador=nedador,
         macrocicle=macrocicle,
         competicions=competicions,
         historial=historial,
         enriquir_amb_llm=True,
-        data_referencia=data_referencia,
+        data_referencia=dilluns_objectiu,
     )
     print(
         f"   ✓ {mesocicle.nom} ({mesocicle.tipus}): "
@@ -136,37 +162,69 @@ def main() -> int:
         json.dump(macrocicle.model_dump(mode="json"), f, ensure_ascii=False, indent=2)
     print(f"\n   ✓ Macrocicle desat a {macrocicle_path}")
 
-    print(f"\n5. Generant contingut LLM pel mesocicle ({mesocicle.nom})...")
-    print("   (Aquesta crida farà una petició real a l'API de Claude per setmana)")
-
     avisos_pics_a = validar_espaiat_pics_a(competicions)
     pla_taper = generar_pla_taper_temporada(competicions, nedador.pics_prioritzats)
     categoria_contingut = (
         nedador.categoria if nedador.categoria in ("absolut", "master") else "absolut"
     )
 
-    try:
-        resultats, avisos_contingut = generar_contingut_mesocicle(
-            nedador=nedador,
-            macrocicle=macrocicle,
-            categoria=categoria_contingut,
-            mesocicle_id=mesocicle.id,
-            pla_taper=pla_taper,
-            avisos_pics_a=avisos_pics_a,
-            historial=historial,
+    if args.mesocicle_sencer:
+        print(f"\n5. Generant contingut LLM pel mesocicle sencer ({mesocicle.nom})...")
+        print("   (Una petició real a l'API de Claude per sessió de cada setmana)")
+        try:
+            resultats, avisos_contingut = generar_contingut_mesocicle(
+                nedador=nedador,
+                macrocicle=macrocicle,
+                categoria=categoria_contingut,
+                mesocicle_id=mesocicle.id,
+                pla_taper=pla_taper,
+                avisos_pics_a=avisos_pics_a,
+                historial=historial,
+            )
+        except (anthropic.APIError, ValidationError) as e:
+            print(f"   ✗ Error generant contingut: {e}")
+            return 1
+
+        print(f"   ✓ Contingut generat per {len(resultats)} setmanes")
+        for avis in avisos_contingut:
+            print(f"   ⚠ Setmana {avis.get('setmana')}: {avis.get('error')}")
+
+        print("\n6. Exportant a Excel...")
+        output_path = output_dir / f"mesocicle_{nedador.nom.lower()}_{mesocicle.id}.xlsx"
+        exportar_mesocicle_excel(nedador, mesocicle, resultats, output_path)
+        print(f"   ✓ Excel exportat a {output_path}")
+    else:
+        print(f"\n5. Generant contingut LLM de la setmana del {dilluns_objectiu:%d/%m/%Y}...")
+        print("   (Una petició real a l'API de Claude per sessió)")
+        try:
+            _meso, microcicle, sessions, _avisos_validacio = generar_contingut_setmana(
+                nedador=nedador,
+                macrocicle=macrocicle,
+                categoria=categoria_contingut,
+                dilluns=dilluns_objectiu,
+                pla_taper=pla_taper,
+                avisos_pics_a=avisos_pics_a,
+                historial=historial,
+            )
+        except (anthropic.APIError, ValidationError, ValueError) as e:
+            print(f"   ✗ Error generant contingut: {e}")
+            return 1
+
+        volum = sum(
+            ex.volum_m for s in sessions for p in s.estructura.parts for ex in p.exercicis
         )
-    except (anthropic.APIError, ValidationError) as e:
-        print(f"   ✗ Error generant contingut: {e}")
-        return 1
+        print(
+            f"   ✓ Setmana {microcicle.setmana} ({microcicle.dates}): "
+            f"{len(sessions)} sessions, {volum}m (objectiu {microcicle.volum_objectiu}m)"
+        )
 
-    print(f"   ✓ Contingut generat per {len(resultats)} setmanes")
-    for avis in avisos_contingut:
-        print(f"   ⚠ Setmana {avis.get('setmana')}: {avis.get('error')}")
-
-    print("\n6. Exportant a Excel...")
-    output_path = output_dir / f"mesocicle_{nedador.nom.lower()}_{mesocicle.id}.xlsx"
-    exportar_mesocicle_excel(nedador, mesocicle, resultats, output_path)
-    print(f"   ✓ Excel exportat a {output_path}")
+        print("\n6. Exportant a Excel...")
+        any_iso, setmana_iso, _ = dilluns_objectiu.isocalendar()
+        output_path = (
+            output_dir / f"setmana_{nedador.nom.lower()}_{any_iso}-W{setmana_iso:02d}.xlsx"
+        )
+        exportar_setmana_excel(nedador, mesocicle, microcicle, sessions, output_path)
+        print(f"   ✓ Excel exportat a {output_path}")
 
     print("\n" + "=" * 80)
     print("GENERACIÓ COMPLETADA")

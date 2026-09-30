@@ -3,7 +3,7 @@
 import openpyxl
 import pytest
 
-from blondswim.export.mesocicle_excel import exportar_mesocicle_excel
+from blondswim.export.mesocicle_excel import exportar_mesocicle_excel, exportar_setmana_excel
 from blondswim.models.macrocicle import Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador, RitmesCSS
 from blondswim.models.sessio import EstructuraSessio, Exercici, PartSessio, Sessio
@@ -284,3 +284,67 @@ def test_exportar_mesocicle_resultats_buit(nedador_test, mesocicle_test, tmp_pat
 
     assert ws.max_row == 1
     assert ws.cell(row=1, column=1).value is None
+
+
+# --- G6: exportació d'una sola setmana ---
+
+
+def _sessio(setmana: int, dia: str, estructura: EstructuraSessio) -> Sessio:
+    return Sessio(
+        id=f"test_{setmana}_{dia}",
+        microcicle_setmana=setmana,
+        dia=dia,
+        tipus_sessio="qualitat",
+        volum_total=400,
+        es_dia_opcional=False,
+        estructura=estructura,
+    )
+
+
+def _valors(path) -> list[tuple]:
+    ws = openpyxl.load_workbook(path).active
+    return [tuple(c.value for c in fila) for fila in ws.iter_rows()]
+
+
+def test_exportar_setmana_capçalera_iso_i_total(
+    nedador_test, mesocicle_test, estructura_test, tmp_path
+):
+    """Una setmana: pestanya pròpia, capçalera amb setmana ISO 41 i fila Total."""
+    microcicle = mesocicle_test.microcicles[1]  # 05-11/10/2026
+    sessions = [
+        _sessio(2, "dimarts", estructura_test),
+        _sessio(2, "dilluns", estructura_test),
+    ]
+
+    path = exportar_setmana_excel(
+        nedador_test, mesocicle_test, microcicle, sessions, tmp_path / "setmana.xlsx"
+    )
+
+    wb = openpyxl.load_workbook(path)
+    ws = wb.active
+    assert ws.title == "Setmana 2"
+    assert "Setmana 41" in ws.cell(row=1, column=1).value
+    assert "05-11/10/2026" in ws.cell(row=1, column=1).value
+
+    valors = _valors(path)
+    dies = [f[0] for f in valors if f[0] in ("Dilluns 5", "Dimarts 6")]
+    assert dies == ["Dilluns 5", "Dimarts 6"]  # ordenats dilluns..diumenge
+    totals = [f[8] for f in valors if f[1] == "Total"]
+    assert totals == [400, 400]
+
+
+def test_exportar_setmana_igual_que_dins_del_mesocicle(
+    nedador_test, mesocicle_test, estructura_test, tmp_path
+):
+    """El full d'una setmana té les mateixes files que aquella setmana sola al mesocicle."""
+    microcicle = mesocicle_test.microcicles[1]
+    sessions = [_sessio(2, "dilluns", estructura_test)]
+
+    path_setmana = exportar_setmana_excel(
+        nedador_test, mesocicle_test, microcicle, sessions, tmp_path / "s.xlsx"
+    )
+    path_meso = exportar_mesocicle_excel(
+        nedador_test, mesocicle_test, {2: sessions}, tmp_path / "m.xlsx"
+    )
+
+    assert _valors(path_setmana) == _valors(path_meso)
