@@ -1,6 +1,7 @@
 """Tests per a la generació de contingut de microcicle amb LLM."""
 
 import json
+from datetime import date
 import logging
 import re
 from unittest.mock import MagicMock, patch
@@ -15,6 +16,7 @@ from blondswim.agents.generar_microcicle import (
     actualitzar_classe_competicio,
     actualitzar_volum_microcicle,
     generar_contingut_mesocicle,
+    generar_contingut_setmana,
     generar_i_validar_microcicle,
     generar_microcicle,
     guardar_log_decisio,
@@ -1651,3 +1653,113 @@ def test_log_setmana_sessions_sense_contingut(
     assert any(
         "1 sessions sense contingut" in r.message for r in caplog.records
     )
+
+
+# --- G1: contingut setmana a setmana ---
+
+
+def _macrocicle_3_setmanes() -> Macrocicle:
+    """Macrocicle amb un mesocicle de 3 setmanes ISO (41-43, 05/10-25/10/2026)."""
+    microcicles = [
+        Microcicle(
+            setmana=41 + i,
+            dates=dates,
+            mesocicle_id="meso1",
+            tipus_base="carrega",
+            volum_objectiu=14000,
+            dies_qualitat=False,
+            test_css=False,
+        )
+        for i, dates in enumerate(["05-11/10/2026", "12-18/10/2026", "19-25/10/2026"])
+    ]
+    mesocicle = Mesocicle(
+        id="meso1",
+        nom="Base 1",
+        setmanes="41-43",
+        dates="05/10/2026-25/10/2026",
+        tipus="Base",
+        fase_objectiu="Base",
+        metodologia_dominant="Polaritzat",
+        volum_min=14000,
+        volum_max=14000,
+        volum_mitja_previst=14000,
+        microcicles=microcicles,
+    )
+    return Macrocicle(
+        nom="Temporada 2026-27",
+        temporada="2026-27",
+        data_inici="2026-10-05",
+        data_fi="2027-06-30",
+        mesocicles=[mesocicle],
+    )
+
+
+def test_generar_contingut_setmana_nomes_la_setmana_demanada(nedador_test, metodologia_test):
+    """Amb dilluns=12/10/2026 genera només la setmana ISO 42 (una sola crida)."""
+    macrocicle = _macrocicle_3_setmanes()
+    mock_gv = MagicMock(return_value=([], []))
+
+    with patch(
+        "blondswim.agents.generar_microcicle.generar_i_validar_microcicle", mock_gv
+    ), patch(
+        "blondswim.agents.generar_microcicle.seleccio_model.seleccionar_metodologia",
+        return_value=metodologia_test,
+    ) as mock_sel:
+        mesocicle, microcicle, sessions, avisos = generar_contingut_setmana(
+            nedador=nedador_test,
+            macrocicle=macrocicle,
+            categoria="absolut",
+            dilluns=date(2026, 10, 12),
+            pla_taper=[],
+            avisos_pics_a=[],
+        )
+
+    assert mesocicle.id == "meso1"
+    assert microcicle.setmana == 42
+    assert microcicle.dates == "12-18/10/2026"
+    assert mock_gv.call_count == 1
+    assert mock_gv.call_args.kwargs["setmana"] == 42
+    assert mock_sel.call_count == 1
+    assert sessions == []
+    assert avisos == []
+
+
+def test_generar_contingut_setmana_metodologia_donada_no_la_recalcula(
+    nedador_test, metodologia_test
+):
+    """Si es passa la metodologia, no es crida seleccionar_metodologia."""
+    macrocicle = _macrocicle_3_setmanes()
+
+    with patch(
+        "blondswim.agents.generar_microcicle.generar_i_validar_microcicle",
+        return_value=([], []),
+    ), patch(
+        "blondswim.agents.generar_microcicle.seleccio_model.seleccionar_metodologia"
+    ) as mock_sel:
+        generar_contingut_setmana(
+            nedador=nedador_test,
+            macrocicle=macrocicle,
+            categoria="absolut",
+            dilluns=date(2026, 10, 5),
+            pla_taper=[],
+            avisos_pics_a=[],
+            metodologia=metodologia_test,
+        )
+
+    mock_sel.assert_not_called()
+
+
+def test_generar_contingut_setmana_dilluns_fora_del_macrocicle(nedador_test, metodologia_test):
+    """Un dilluns sense microcicle generat llança ValueError."""
+    macrocicle = _macrocicle_3_setmanes()
+
+    with pytest.raises(ValueError, match="2026-11-02"):
+        generar_contingut_setmana(
+            nedador=nedador_test,
+            macrocicle=macrocicle,
+            categoria="absolut",
+            dilluns=date(2026, 11, 2),
+            pla_taper=[],
+            avisos_pics_a=[],
+            metodologia=metodologia_test,
+        )

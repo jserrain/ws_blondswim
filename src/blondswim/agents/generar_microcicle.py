@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -14,9 +14,10 @@ from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
 from blondswim.models.calendari import Competicio
 from blondswim.models.decisio import DecisioMetodologia
 from blondswim.models.historial import SessioRealitzada
-from blondswim.models.macrocicle import Macrocicle, Microcicle
+from blondswim.models.macrocicle import Macrocicle, Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import Exercici, Sessio
+from blondswim.utils.dates import parsejar_rang_dates
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +229,45 @@ def _trobar_microcicle(macrocicle: Macrocicle, setmana: int) -> Microcicle:
     
     raise ValueError(
         f"No s'ha trobat cap microcicle amb setmana={setmana} al macrocicle"
+    )
+
+
+def _trobar_microcicle_per_dilluns(
+    macrocicle: Macrocicle, dilluns: date
+) -> tuple[Mesocicle, Microcicle]:
+    """
+    Retorna (mesocicle, microcicle) de la setmana que comença en `dilluns`.
+
+    Compara amb la data d'inici de Microcicle.dates (sempre un dilluns).
+
+    Raises:
+        ValueError: Si cap microcicle del macrocicle comença en aquest dilluns
+    """
+    for mesocicle in macrocicle.mesocicles:
+        for microcicle in mesocicle.microcicles:
+            try:
+                inici, _ = parsejar_rang_dates(microcicle.dates)
+            except ValueError:
+                continue
+            if inici == dilluns:
+                return mesocicle, microcicle
+
+    raise ValueError(
+        f"No s'ha trobat cap microcicle que comenci el {dilluns.isoformat()} "
+        f"al macrocicle (cal generar-ne abans el mesocicle)"
+    )
+
+
+def _seleccionar_metodologia_nedador(
+    nedador: Nedador, categoria: Literal["absolut", "master"]
+) -> DecisioMetodologia:
+    """Metodologia per a la primera prova objectiu del nedador."""
+    prova_objectiu = nedador.proves_objectiu[0] if nedador.proves_objectiu else "200m lliure"
+    return seleccio_model.seleccionar_metodologia(
+        nedador=nedador,
+        prova_objectiu=prova_objectiu,
+        categoria=categoria,
+        enriquir_amb_llm=True,
     )
 
 
@@ -482,6 +522,58 @@ def generar_i_validar_microcicle(
     return sessions, avisos
 
 
+def generar_contingut_setmana(
+    nedador: Nedador,
+    macrocicle: Macrocicle,
+    categoria: Literal["absolut", "master"],
+    dilluns: date,
+    pla_taper: list[dict],
+    avisos_pics_a: list[dict],
+    historial: list[SessioRealitzada] | None = None,
+    metodologia: DecisioMetodologia | None = None,
+) -> tuple[Mesocicle, Microcicle, list[Sessio], list[dict]]:
+    """
+    Genera el contingut LLM d'UNA sola setmana (G1): la que comença en `dilluns`.
+
+    L'estructura (macrocicle, mesocicles, microcicles) ja ha d'existir; aquí
+    només s'omplen les sessions d'aquesta setmana. És l'ús normal: cada
+    setmana es genera la següent, i no es malgasten crides en setmanes que
+    potser caldrà refer.
+
+    Args:
+        nedador: Nedador amb zones CSS i proves objectiu
+        macrocicle: Macrocicle amb els mesocicles i microcicles ja generats
+        categoria: Categoria del nedador (absolut o master)
+        dilluns: Dilluns de la setmana a generar
+        pla_taper: Pla de taper generat per generar_pla_taper_temporada()
+        avisos_pics_a: Avisos generats per validar_espaiat_pics_a()
+        historial: Historial de sessions realitzades per few-shot (opcional)
+        metodologia: Si és None, es selecciona per a la primera prova objectiu
+
+    Returns:
+        Tupla (mesocicle, microcicle, sessions, avisos de validació)
+
+    Raises:
+        ValueError: Si cap microcicle comença en `dilluns`
+        GeneracioMicrocicleError: Si la crida a l'API falla
+    """
+    mesocicle, microcicle = _trobar_microcicle_per_dilluns(macrocicle, dilluns)
+
+    if metodologia is None:
+        metodologia = _seleccionar_metodologia_nedador(nedador, categoria)
+
+    sessions, avisos = generar_i_validar_microcicle(
+        nedador=nedador,
+        macrocicle=macrocicle,
+        setmana=microcicle.setmana,
+        metodologia=metodologia,
+        pla_taper=pla_taper,
+        avisos_pics_a=avisos_pics_a,
+        historial=historial,
+    )
+    return mesocicle, microcicle, sessions, avisos
+
+
 def generar_contingut_mesocicle(
     nedador: Nedador,
     macrocicle: Macrocicle,
@@ -552,13 +644,7 @@ def generar_contingut_mesocicle(
     # Seleccionar metodologia UNA sola vegada per al mesocicle sencer
     # (la prova objectiu no canvia dins d'un mesocicle; evita una crida
     # API redundant per setmana).
-    prova_objectiu = nedador.proves_objectiu[0] if nedador.proves_objectiu else "200m lliure"
-    metodologia = seleccio_model.seleccionar_metodologia(
-        nedador=nedador,
-        prova_objectiu=prova_objectiu,
-        categoria=categoria,
-        enriquir_amb_llm=True,
-    )
+    metodologia = _seleccionar_metodologia_nedador(nedador, categoria)
 
     for microcicle in microcicles_ordenats:
         setmana = microcicle.setmana
