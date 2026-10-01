@@ -79,3 +79,5 @@ class Nedador(BaseModel):
     minuts_max_sessio: int = 105
     # Dia de descans amb rutina d'espatlla fora de l'aigua (opcional, 15 min).
     rutina_espatlla_dia: str | None = None
+    # Famílies de la biblioteca de tècnica a prioritzar (punts febles del nedador).
+    prioritats_tecniques: list[str] = []

@@ -1,0 +1,1437 @@
+[
+  {
+    "id": "cam_crol_allargat",
+    "familia": "Cames de crol",
+    "element": "Cames",
+    "estil": "Crol",
+    "nom": "Cames de crol sense taula, braços estirats",
+    "format": "4-8x25/50 A1/A2 d/15\"",
+    "consigna": "Cap alineat, mira el fons",
+    "indicador": "Temps per 50 estable",
+    "material": "Tub frontal (opcional)",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "NMU (sense taula: +9,5-14% de força; gir de maluc igual)",
+    "versio": "v0"
+  },
+  {
+    "id": "cam_crol_taula",
+    "familia": "Cames de crol",
+    "element": "Cames",
+    "estil": "Crol",
+    "nom": "Cames de crol amb taula",
+    "format": "4-8x50 A1/A2 d/15\"",
+    "consigna": "Batuda des del maluc, turmells relaxats",
+    "indicador": "Temps per 50 estable",
+    "material": "Taula",
+    "proves": [
+      "100 crol",
+      "200 crol",
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "NMU (sense taula: +9,5-14% de força; gir de maluc igual)",
+    "versio": "v0"
+  },
+  {
+    "id": "cam_crol_aletes",
+    "familia": "Cames de crol",
+    "element": "Cames",
+    "estil": "Crol",
+    "nom": "Cames de crol ràpides amb aletes",
+    "format": "6-8x25 Velocitat d/30\"",
+    "consigna": "Batuda curta i ràpida",
+    "indicador": "Temps per 25",
+    "material": "Aletes curtes",
+    "proves": [
+      "100 crol"
+    ],
+    "fases": [
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "Sèries curtes: no substitueix la patada sense material",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "cam_crol_lateral",
+    "familia": "Patada lateral i rotació",
+    "element": "Cames / Rotació",
+    "estil": "Crol",
+    "nom": "Patada lateral: 6 batudes de costat + canvi",
+    "format": "4-6x50 A1 d/20\"",
+    "consigna": "Maluc i espatlla giren junts",
+    "indicador": "Sense aturar-se en el canvi",
+    "material": "Aletes (opcional)",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "cam_esq_lateral",
+    "familia": "Patada lateral i rotació",
+    "element": "Cames / Rotació",
+    "estil": "Esquena",
+    "nom": "Patada lateral d'esquena, 6 batudes + canvi",
+    "format": "4x50 A1 d/20\"",
+    "consigna": "Espatlla fora de l'aigua en cada costat",
+    "indicador": "Sense aturar-se en el canvi",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "rot_6_3_6",
+    "familia": "Patada lateral i rotació",
+    "element": "Rotació",
+    "estil": "Crol",
+    "nom": "6 batudes de costat + 3 braçades + 6 de l'altre costat",
+    "format": "4x50 A1 d/20\"",
+    "consigna": "El cap no gira amb el cos",
+    "indicador": "Sense aturar-se",
+    "material": "Aletes (opcional)",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "cam_esq",
+    "familia": "Cames d'esquena",
+    "element": "Cames",
+    "estil": "Esquena",
+    "nom": "Cames d'esquena sense taula, braços estirats",
+    "format": "4-6x50 A1 d/15\"",
+    "consigna": "Genolls sota l'aigua, peus que esquitxen poc",
+    "indicador": "Temps per 50 estable",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "JSSM 2022 (100/200 estils: viratges 45-50%; braça, més marge)",
+    "versio": "v0"
+  },
+  {
+    "id": "bra_vertical",
+    "familia": "Cames de braça",
+    "element": "Cames",
+    "estil": "Braça",
+    "nom": "Cames de braça verticals",
+    "format": "4x20\" d/20\"",
+    "consigna": "Genolls alineats; mans al costat → fora de l'aigua",
+    "indicador": "Cap per sobre de l'aigua",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Swim Wales (braça)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "cam_bra_allargat",
+    "familia": "Cames de braça",
+    "element": "Cames",
+    "estil": "Braça",
+    "nom": "Cames de braça sense taula, lliscament de 2\"",
+    "format": "4-6x50 A1 d/20\"",
+    "consigna": "Lliscament complet abans de la cama següent",
+    "indicador": "Cames per llargada (menys = millor)",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "JSSM 2022 (100/200 estils: viratges 45-50%; braça, més marge)",
+    "versio": "v0"
+  },
+  {
+    "id": "cam_bra_esq",
+    "familia": "Cames de braça",
+    "element": "Cames",
+    "estil": "Braça",
+    "nom": "Cames de braça d'esquena",
+    "format": "4x25 A1 d/15\"",
+    "consigna": "Els genolls no surten de l'aigua",
+    "indicador": "Genolls visibles = 0",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "cam_bra_taula",
+    "familia": "Cames de braça",
+    "element": "Cames",
+    "estil": "Braça",
+    "nom": "Cames de braça amb taula",
+    "format": "4-6x50 A1 d/20\"",
+    "consigna": "Talons cap als glutis, peus girats enfora, tanca fins a juntar",
+    "indicador": "Cames per llargada",
+    "material": "Taula",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "JSSM 2022 (100/200 estils: viratges 45-50%; braça, més marge)",
+    "versio": "v0"
+  },
+  {
+    "id": "cam_dofi",
+    "familia": "Dofí (cames)",
+    "element": "Cames / Subaquàtic",
+    "estil": "Papallona",
+    "nom": "Dofí ventral sense taula, braços estirats",
+    "format": "4-6x25 A1/A2 d/20\"",
+    "consigna": "Onada des del pit, no només des dels genolls",
+    "indicador": "Temps per 25",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "100 estils",
+      "50 papallona"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "No compta per al límit de papallona (no carrega l'espatlla)",
+    "font": "Ruiz-Navarro et al. 2021 (7 setm., 3x30'/setm.: 10 m subaquàtic -8%)",
+    "versio": "v0"
+  },
+  {
+    "id": "cam_dofi_aletes",
+    "familia": "Dofí (cames)",
+    "element": "Cames / Subaquàtic",
+    "estil": "Papallona",
+    "nom": "Dofí amb aletes, ràpid",
+    "format": "6x25 Velocitat d/30\"",
+    "consigna": "Amplitud petita i ràpida",
+    "indicador": "Temps per 25",
+    "material": "Aletes",
+    "proves": [
+      "100 crol",
+      "100 estils",
+      "50 papallona"
+    ],
+    "fases": [
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "No compta per al límit de papallona",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "sub_dofi_costat",
+    "familia": "Ondulació subaquàtica",
+    "element": "Subaquàtic",
+    "estil": "General",
+    "nom": "Dofí subaquàtic de costat i d'esquena",
+    "format": "4x25 A1 d/20\"",
+    "consigna": "Mateixa força cap amunt que cap avall",
+    "indicador": "Distància subaquàtica",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "100 estils",
+      "50 papallona"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Ruiz-Navarro et al. 2021 (7 setm., 3x30'/setm.: 10 m subaquàtic -8%)",
+    "versio": "v0"
+  },
+  {
+    "id": "sub_lliscament",
+    "familia": "Ondulació subaquàtica",
+    "element": "Subaquàtic",
+    "estil": "General",
+    "nom": "Lliscament des de la paret en posició allargada",
+    "format": "6x(lliscament + 15 suau)",
+    "consigna": "Mans una sobre l'altra, cap entre els braços",
+    "indicador": "Distància lliscada",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol",
+      "100 estils",
+      "50 papallona"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Ruiz-Navarro et al. 2021 (7 setm., 3x30'/setm.: 10 m subaquàtic -8%)",
+    "versio": "v0"
+  },
+  {
+    "id": "sub_lliscament_dofi",
+    "familia": "Ondulació subaquàtica",
+    "element": "Subaquàtic",
+    "estil": "General",
+    "nom": "Lliscament + 3-5 dofins + sortida",
+    "format": "6x25 A1 d/20\"",
+    "consigna": "Primer llisca, després ondula",
+    "indicador": "Distància a la sortida",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol",
+      "100 estils",
+      "50 papallona"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Ruiz-Navarro et al. 2021 (7 setm., 3x30'/setm.: 10 m subaquàtic -8%)",
+    "versio": "v0"
+  },
+  {
+    "id": "sub_15m",
+    "familia": "Ondulació subaquàtica",
+    "element": "Subaquàtic",
+    "estil": "General",
+    "nom": "15 m subaquàtic a velocitat + 10 m suau",
+    "format": "4-8x25 Velocitat d/45\"",
+    "consigna": "Batudes curtes i ràpides",
+    "indicador": "Temps a 15 m i nombre de dofins",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol",
+      "100 estils",
+      "50 papallona"
+    ],
+    "fases": [
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "",
+    "font": "Ruiz-Navarro et al. 2021 (7 setm., 3x30'/setm.: 10 m subaquàtic -8%)",
+    "versio": "v0"
+  },
+  {
+    "id": "cap_baston",
+    "familia": "Captura de crol",
+    "element": "Captura colze alt",
+    "estil": "Crol",
+    "nom": "Catch-up amb bastó a l'amplada d'espatlles",
+    "format": "4x(25 exercici + 25 nedar) A1",
+    "consigna": "El bastó a una fondària on espatlla i colze queden per sobre de la mà",
+    "indicador": "Sense creuar la línia mitjana",
+    "material": "Bastó o tub",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "USMS — Heggy (crol)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "cap_dos_temps",
+    "familia": "Captura de crol",
+    "element": "Captura colze alt",
+    "estil": "Crol",
+    "nom": "Captura en dos temps (pausa a la captura)",
+    "format": "4-6x(25 exercici + 25 nedar) A1",
+    "consigna": "Avantbraç vertical abans d'empènyer",
+    "indicador": "Braçades per llargada al nedar",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "Sempre exercici + nedar",
+    "font": "VU 2021 (transferència dels exercicis: depèn del nedador; waterpolo puja la freqüència)",
+    "versio": "v0"
+  },
+  {
+    "id": "cap_paletes_puny",
+    "familia": "Captura de crol",
+    "element": "Captura colze alt",
+    "estil": "Crol",
+    "nom": "Nedar amb paletes de puny",
+    "format": "4-6x50 A1/A2 d/15\"",
+    "consigna": "Artells cap al fons durant tota la braçada",
+    "indicador": "Braçades per llargada iguals que sense paletes",
+    "material": "Paletes de puny",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "USMS (colze alt en crol)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "cap_puny",
+    "familia": "Captura de crol",
+    "element": "Captura colze alt",
+    "estil": "Crol",
+    "nom": "Puny tancat 25 + mà oberta 25",
+    "format": "4x50 A1 d/15\"",
+    "consigna": "Nota l'avantbraç empenyent",
+    "indicador": "Braçades per 25 a la part oberta",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "cap_remada",
+    "familia": "Captura de crol",
+    "element": "Captura colze alt",
+    "estil": "Crol",
+    "nom": "Remades davant amb pull buoy",
+    "format": "4x25 A1 d/15\"",
+    "consigna": "El colze per sobre de la mà",
+    "indicador": "Avança sense patada",
+    "material": "Pull buoy",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "cap_recuperacio",
+    "familia": "Recuperació i rotació de crol",
+    "element": "Captura colze alt",
+    "estil": "Crol",
+    "nom": "Recuperació conscient: un braç per llargada",
+    "format": "4x50 A1 d/15\"",
+    "consigna": "Braç relaxat a la recuperació, colze una mica per sobre del canell",
+    "indicador": "Recuperació sense tensió",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "Sense arrossegar polze ni dits (espatlla)",
+    "font": "USMS — Heggy (crol)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "rot_un_braç",
+    "familia": "Recuperació i rotació de crol",
+    "element": "Rotació",
+    "estil": "Crol",
+    "nom": "Crol a un braç (l'altre al costat)",
+    "format": "4x(25 exercici + 25 nedar) A1",
+    "consigna": "Respira cap al costat del braç que neda",
+    "indicador": "Braçades per llargada al nedar",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "dps_golf",
+    "familia": "Freqüència i longitud de braçada",
+    "element": "Metres per braçada",
+    "estil": "Crol",
+    "nom": "\"Golf\": temps + braçades",
+    "format": "4x50 A2 d/30\"",
+    "consigna": "Baixa el total sense forçar",
+    "indicador": "Temps (s) + braçades",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "dps_recompte",
+    "familia": "Freqüència i longitud de braçada",
+    "element": "Metres per braçada",
+    "estil": "Crol",
+    "nom": "Mateix nombre de braçades a cada llargada",
+    "format": "6-8x50 A1/A2 d/15\"",
+    "consigna": "Llarg i relaxat",
+    "indicador": "Braçades/25 (±1)",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Sci Rep 2025 (100 crol: nedar 63%, viratge ~20%, sortida ~12%)",
+    "versio": "v0"
+  },
+  {
+    "id": "cap_waterpolo",
+    "familia": "Freqüència i longitud de braçada",
+    "element": "Captura colze alt",
+    "estil": "Crol",
+    "nom": "Crol de waterpolo (cap fora) 15 m + 10 m ràpid",
+    "format": "4-6x25 Velocitat d/30\"",
+    "consigna": "Braçada curta i ràpida",
+    "indicador": "Temps per 25",
+    "material": "",
+    "proves": [
+      "100 crol"
+    ],
+    "fases": [
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "",
+    "font": "VU 2021 (transferència dels exercicis: depèn del nedador; waterpolo puja la freqüència)",
+    "versio": "v0"
+  },
+  {
+    "id": "dps_marxes",
+    "familia": "Freqüència i longitud de braçada",
+    "element": "Metres per braçada",
+    "estil": "Crol",
+    "nom": "Marxes de braçada: freqüència vs. longitud",
+    "format": "4x50: 25 llarg + 25 ràpid A2",
+    "consigna": "Troba la combinació més ràpida per a tu",
+    "indicador": "Temps i braçades de cada 25",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Build"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "",
+    "font": "Brett Hawke (velocitat en crol)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "pap_pressio_pit",
+    "familia": "Ondulació de papallona",
+    "element": "Tècnica d'estil",
+    "estil": "Papallona",
+    "nom": "Pressió de pit: subaquàtica i a la superfície",
+    "format": "4x25 A1 d/20\"",
+    "consigna": "Pressiona el pit cap avall per pujar els malucs",
+    "indicador": "Ondulació contínua",
+    "material": "",
+    "proves": [
+      "50 papallona",
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Swim Wales (papallona)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "pap_pressio_remada",
+    "familia": "Ondulació de papallona",
+    "element": "Tècnica d'estil",
+    "estil": "Papallona",
+    "nom": "Pressió de pit amb remada (estesa i amb colze alt)",
+    "format": "4x25 A1 d/20\"",
+    "consigna": "Mans a prop de la superfície, colzes alts",
+    "indicador": "Avança sense batuda forta",
+    "material": "",
+    "proves": [
+      "50 papallona",
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Swim Wales (papallona)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "pap_aletes",
+    "familia": "Coordinació de papallona",
+    "element": "Tècnica d'estil",
+    "estil": "Papallona",
+    "nom": "Papallona amb aletes, ritme de 2 batudes",
+    "format": "4x25 A2 d/30\"",
+    "consigna": "Entrada de mans a l'amplada de les espatlles",
+    "indicador": "Braçades per 25",
+    "material": "Aletes",
+    "proves": [
+      "100 estils",
+      "50 papallona"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "Compta per al límit de papallona",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "pap_batudes",
+    "familia": "Coordinació de papallona",
+    "element": "Tècnica d'estil",
+    "estil": "Papallona",
+    "nom": "4 o 6 batudes + 1 braçada",
+    "format": "4x25 A1 d/20\"",
+    "consigna": "Batuda des del pit a l'entrada i a la sortida de mans",
+    "indicador": "Coordinació sense pausa",
+    "material": "",
+    "proves": [
+      "50 papallona",
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "Compta per al límit de papallona",
+    "font": "USMS (coordinació de papallona)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "pap_entrada",
+    "familia": "Coordinació de papallona",
+    "element": "Tècnica d'estil",
+    "estil": "Papallona",
+    "nom": "Entrada suau: polze i índex primer",
+    "format": "4x25 A1 d/30\"",
+    "consigna": "Mans a l'amplada de les espatlles",
+    "indicador": "Entrada sense esquitxar",
+    "material": "",
+    "proves": [
+      "50 papallona",
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "Compta per al límit de papallona",
+    "font": "Swim Wales (papallona)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "pap_skate",
+    "familia": "Coordinació de papallona",
+    "element": "Tècnica d'estil",
+    "estil": "Papallona",
+    "nom": "Skate: batuda, braçada, batuda",
+    "format": "4x25 A1 d/30\"",
+    "consigna": "Una batuda abans i una al final de la braçada",
+    "indicador": "2 batudes per braçada",
+    "material": "",
+    "proves": [
+      "50 papallona",
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "Compta per al límit de papallona",
+    "font": "USMS (coordinació de papallona)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "pap_tub",
+    "familia": "Coordinació de papallona",
+    "element": "Tècnica d'estil",
+    "estil": "Papallona",
+    "nom": "Papallona amb tub frontal o 3-5 braçades sense respirar",
+    "format": "4x25 A2 d/30\"",
+    "consigna": "Ritme continu, cap quiet",
+    "indicador": "Braçades per 25",
+    "material": "Tub frontal",
+    "proves": [
+      "50 papallona",
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "Compta per al límit de papallona",
+    "font": "USMS (coordinació de papallona)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "pap_un_braç",
+    "familia": "Coordinació de papallona",
+    "element": "Tècnica d'estil",
+    "estil": "Papallona",
+    "nom": "Papallona: 3 dreta + 3 esquerra + 3 completes",
+    "format": "4x25 A1 d/30\"",
+    "consigna": "Dues ondulacions per braçada",
+    "indicador": "Braçades per 25",
+    "material": "",
+    "proves": [
+      "100 estils",
+      "50 papallona"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "Compta per al límit de papallona",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "pap_cap_fora",
+    "familia": "Coordinació de papallona",
+    "element": "Tècnica d'estil",
+    "estil": "Papallona",
+    "nom": "Papallona amb el cap fora",
+    "format": "4x15 m A2 d/30\"",
+    "consigna": "Segona batuda forta quan les mans surten",
+    "indicador": "Malucs a la superfície",
+    "material": "",
+    "proves": [
+      "50 papallona",
+      "100 estils"
+    ],
+    "fases": [
+      "Build"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "Compta per al límit de papallona",
+    "font": "USMS (coordinació de papallona)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "pap_marxes",
+    "familia": "Coordinació de papallona",
+    "element": "Tècnica d'estil",
+    "estil": "Papallona",
+    "nom": "Marxes de velocitat dins d'un 25",
+    "format": "4x25 lent → ràpid d/40\"",
+    "consigna": "Mantenir la coordinació quan acceleres",
+    "indicador": "Coordinació estable a velocitat",
+    "material": "",
+    "proves": [
+      "50 papallona",
+      "100 estils"
+    ],
+    "fases": [
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "Compta per al límit de papallona",
+    "font": "USMS (coordinació de papallona)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "esq_3pausa",
+    "familia": "Tècnica d'esquena",
+    "element": "Tècnica d'estil",
+    "estil": "Esquena",
+    "nom": "Esquena: 3 braçades + pausa de rotació",
+    "format": "4x50 A1 d/15\"",
+    "consigna": "Espatlla fora de l'aigua a cada costat",
+    "indicador": "Braçades per llargada",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "esq_combo",
+    "familia": "Tècnica d'esquena",
+    "element": "Tècnica d'estil",
+    "estil": "Esquena",
+    "nom": "2 braçades a un braç + 2 doble braç",
+    "format": "4x50 A1 d/20\"",
+    "consigna": "Rotació i entrada alhora",
+    "indicador": "Sense pauses",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "USMS — Commings (esquena)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "esq_core",
+    "familia": "Tècnica d'esquena",
+    "element": "Tècnica d'estil",
+    "estil": "Esquena",
+    "nom": "Un braç agafant el dorsal amb l'altra mà",
+    "format": "4x25 A1 d/20\"",
+    "consigna": "Connecta el maluc amb la braçada",
+    "indicador": "Rotació des del maluc",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "USMS — Commings (esquena)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "esq_doble",
+    "familia": "Tècnica d'esquena",
+    "element": "Tècnica d'estil",
+    "estil": "Esquena",
+    "nom": "Esquena doble braç (entrada a les 11 i a la 1)",
+    "format": "4x25 A1 d/20\"",
+    "consigna": "Mans a l'amplada d'espatlles, colzes a ~90° a la tracció",
+    "indicador": "Entrada sense creuar",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "USMS — Commings (esquena)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "esq_un_braç",
+    "familia": "Tècnica d'esquena",
+    "element": "Tècnica d'estil",
+    "estil": "Esquena",
+    "nom": "Esquena a un braç, entrada pel dit petit",
+    "format": "4x(25 exercici + 25 nedar) A1",
+    "consigna": "Gira el cos cap als dos costats, també sense bracejar",
+    "indicador": "Rotació simètrica",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "USMS — Commings (esquena)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "bra_cames_crol",
+    "familia": "Propulsió de braça",
+    "element": "Tècnica d'estil",
+    "estil": "Braça",
+    "nom": "Braços de braça amb cames de crol o dofí",
+    "format": "4x25 A2 d/20\"",
+    "consigna": "Mans ràpides a la recuperació",
+    "indicador": "Velocitat de mans",
+    "material": "Aletes (opcional)",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "Menys càrrega al genoll",
+    "font": "USMS — Donovan (braça)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "bra_cos_mans",
+    "familia": "Propulsió de braça",
+    "element": "Tècnica d'estil",
+    "estil": "Braça",
+    "nom": "Braçada: porta el cos a les mans",
+    "format": "4x25 A1 d/20\"",
+    "consigna": "No portis les mans cap al cos",
+    "indicador": "Cicles per llargada",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Swim Wales (braça)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "bra_remades",
+    "familia": "Propulsió de braça",
+    "element": "Tècnica d'estil",
+    "estil": "Braça",
+    "nom": "Remades estirat i «eixugaparabrises»",
+    "format": "4x25 A1 d/20\"",
+    "consigna": "Core tens, cames altes",
+    "indicador": "Avança sense cames",
+    "material": "Pull buoy (opcional)",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Swim Wales (braça)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "bra_1b3c",
+    "familia": "Coordinació de braça",
+    "element": "Tècnica d'estil",
+    "estil": "Braça",
+    "nom": "1 braçada + 3 cames amb remada davant",
+    "format": "4x50 A1 d/20\"",
+    "consigna": "Busca el punt de captura",
+    "indicador": "Cicles per llargada",
+    "material": "Tub frontal (opcional)",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "USMS — Donovan (braça)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "bra_2c1b",
+    "familia": "Coordinació de braça",
+    "element": "Tècnica d'estil",
+    "estil": "Braça",
+    "nom": "Braça: 2 cames, 1 braçada",
+    "format": "4x50 A1 d/20\"",
+    "consigna": "Lliscament complet després de cada cama",
+    "indicador": "Cicles per llargada",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "JSSM 2022 (100/200 estils: viratges 45-50%; braça, més marge)",
+    "versio": "v0"
+  },
+  {
+    "id": "bra_estira",
+    "familia": "Coordinació de braça",
+    "element": "Tècnica d'estil",
+    "estil": "Braça",
+    "nom": "Braça: estira i compta (2\" de lliscament)",
+    "format": "4x50 A1 d/20\"",
+    "consigna": "Braços estirats fins que comenci a frenar",
+    "indicador": "Cicles per llargada",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "JSSM 2022 (100/200 estils: viratges 45-50%; braça, més marge)",
+    "versio": "v0"
+  },
+  {
+    "id": "bra_potencia",
+    "familia": "Coordinació de braça",
+    "element": "Ritme",
+    "estil": "Braça",
+    "nom": "Potència sí / potència no",
+    "format": "4x25 A3/Velocitat d/40\"",
+    "consigna": "Màxima força a la tracció i la cama, després lliscar",
+    "indicador": "Temps per 25 amb pocs cicles",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "",
+    "font": "Swim Wales (braça)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "bra_rapid_llarg",
+    "familia": "Coordinació de braça",
+    "element": "Ritme",
+    "estil": "Braça",
+    "nom": "3 ràpides – 3 llargues, 2–2, 1–1",
+    "format": "4x50 A2 d/30\"",
+    "consigna": "Troba el teu ritme entre els dos extrems",
+    "indicador": "Temps per 50",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Build"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "",
+    "font": "USMS — Donovan (braça)",
+    "versio": "Nou v1"
+  },
+  {
+    "id": "sort_bloc",
+    "familia": "Sortides",
+    "element": "Sortida",
+    "estil": "General",
+    "nom": "Sortida de bloc + 15 m",
+    "format": "4-6x25 Velocitat d/1'",
+    "consigna": "Entrada neta per un sol forat",
+    "indicador": "Temps a 15 m",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol",
+      "100 estils",
+      "50 papallona"
+    ],
+    "fases": [
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "",
+    "font": "Sci Rep 2025 (100 crol: nedar 63%, viratge ~20%, sortida ~12%)",
+    "versio": "v0"
+  },
+  {
+    "id": "sort_esq",
+    "familia": "Sortides",
+    "element": "Sortida",
+    "estil": "Esquena",
+    "nom": "Sortida d'esquena + 15 m",
+    "format": "4x25 Velocitat d/1'",
+    "consigna": "Malucs amunt a la sortida",
+    "indicador": "Temps a 15 m",
+    "material": "",
+    "proves": [
+      "100 estils",
+      "50 papallona"
+    ],
+    "fases": [
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "",
+    "font": "JSSM 2022 (100/200 estils: viratges 45-50%; braça, més marge)",
+    "versio": "v0"
+  },
+  {
+    "id": "vir_crol_5m",
+    "familia": "Viratges",
+    "element": "Viratge",
+    "estil": "Crol",
+    "nom": "Viratge amb tombarella: 5 m entrada + 5 m sortida ràpids",
+    "format": "6-8x25 Velocitat d/40\"",
+    "consigna": "No respiris els últims 5 m",
+    "indicador": "Temps 5 m + 5 m",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base",
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Sci Rep 2025 (100 crol: nedar 63%, viratge ~20%, sortida ~12%)",
+    "versio": "v0"
+  },
+  {
+    "id": "vir_crol_fatiga",
+    "familia": "Viratges",
+    "element": "Viratge",
+    "estil": "Crol",
+    "nom": "Viratge amb tombarella a totes les parets de les sèries aeròbiques",
+    "format": "Dins de les sèries A1/A2",
+    "consigna": "El viratge també quan estàs cansat",
+    "indicador": "Viratges fallats per sèrie = 0",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "Pràctica d'entrenador: validar amb l'indicador",
+    "versio": "v0"
+  },
+  {
+    "id": "vir_esq",
+    "familia": "Viratges",
+    "element": "Viratge",
+    "estil": "Esquena",
+    "nom": "Viratge d'esquena (gir a ventral + tombarella)",
+    "format": "6x25 A2 d/30\"",
+    "consigna": "Compta les braçades des de la bandera",
+    "indicador": "Viratges sense ajustar l'última braçada",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "JSSM 2022 (100/200 estils: viratges 45-50%; braça, més marge)",
+    "versio": "v0"
+  },
+  {
+    "id": "im_bra_crol",
+    "familia": "Canvis d'estil a estils",
+    "element": "Canvi d'estil a estils",
+    "estil": "Estils",
+    "nom": "Braça → crol (toc a dues mans)",
+    "format": "4x(12,5 bra + 12,5 crol) A2 d/30\"",
+    "consigna": "Dofins a la sortida de crol",
+    "indicador": "Temps 5 m + 5 m",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "JSSM 2022 (100/200 estils: viratges 45-50%; braça, més marge)",
+    "versio": "v0"
+  },
+  {
+    "id": "im_esq_bra",
+    "familia": "Canvis d'estil a estils",
+    "element": "Canvi d'estil a estils",
+    "estil": "Estils",
+    "nom": "Esquena → braça",
+    "format": "4x(12,5 esq + 12,5 bra) A2 d/30\"",
+    "consigna": "Toc d'esquena i gir obert ràpid",
+    "indicador": "Temps 5 m + 5 m",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "JSSM 2022 (100/200 estils: viratges 45-50%; braça, més marge)",
+    "versio": "v0"
+  },
+  {
+    "id": "im_pap_esq",
+    "familia": "Canvis d'estil a estils",
+    "element": "Canvi d'estil a estils",
+    "estil": "Estils",
+    "nom": "Papallona → esquena (toc a dues mans)",
+    "format": "4x(12,5 pap + 12,5 esq) A2 d/30\"",
+    "consigna": "Toc i sortida d'esquena sense pausa",
+    "indicador": "Temps 5 m + 5 m",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Base",
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Base",
+    "restriccio": "Compta per al límit de papallona",
+    "font": "JSSM 2022 (100/200 estils: viratges 45-50%; braça, més marge)",
+    "versio": "v0"
+  },
+  {
+    "id": "im_parelles",
+    "familia": "Canvis d'estil a estils",
+    "element": "Canvi d'estil a estils",
+    "estil": "Estils",
+    "nom": "Parelles d'estils amb viratge real",
+    "format": "4x50 (pap-esq, esq-bra, bra-crol, crol-pap) A2 d/20\"",
+    "consigna": "Viratge net, mai pausa",
+    "indicador": "Temps per 50",
+    "material": "",
+    "proves": [
+      "100 estils"
+    ],
+    "fases": [
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "Compta per al límit de papallona",
+    "font": "JSSM 2022 (100/200 estils: viratges 45-50%; braça, més marge)",
+    "versio": "v0"
+  },
+  {
+    "id": "rit_descendent",
+    "familia": "Ritme de cursa",
+    "element": "Ritme",
+    "estil": "Crol",
+    "nom": "Descendent 1-4",
+    "format": "4x50 o 4x100 A1→A3",
+    "consigna": "Cada repetició 1-2\" més ràpida",
+    "indicador": "Descens regular",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "JFMK 2026 (màsters: la variabilitat del ritme es dispara als 52 anys)",
+    "versio": "v0"
+  },
+  {
+    "id": "rit_mateix_temps",
+    "familia": "Ritme de cursa",
+    "element": "Ritme",
+    "estil": "Crol",
+    "nom": "Repeticions al mateix temps (rellotge de la piscina)",
+    "format": "8x100 A2",
+    "consigna": "La primera NO pot ser la més ràpida",
+    "indicador": "Diferència entre repeticions ≤ 1\"",
+    "material": "",
+    "proves": [
+      "100 crol",
+      "200 crol"
+    ],
+    "fases": [
+      "Base",
+      "Build"
+    ],
+    "nivell": "Base",
+    "restriccio": "",
+    "font": "JFMK 2026 (màsters: la variabilitat del ritme es dispara als 52 anys)",
+    "versio": "v0"
+  },
+  {
+    "id": "rit_100_fraccionat",
+    "familia": "Ritme de cursa",
+    "element": "Ritme",
+    "estil": "Crol",
+    "nom": "100 fraccionat: 2x50 d/10\" a ritme de cursa",
+    "format": "3-4 sèries, 3' entre sèries",
+    "consigna": "Segon 50 ≤ 1\" més lent que el primer",
+    "indicador": "Diferència entre 50s",
+    "material": "",
+    "proves": [
+      "100 crol"
+    ],
+    "fases": [
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "",
+    "font": "Sci Rep 2025 (100 crol: nedar 63%, viratge ~20%, sortida ~12%)",
+    "versio": "v0"
+  },
+  {
+    "id": "rit_200_fraccionat",
+    "familia": "Ritme de cursa",
+    "element": "Ritme",
+    "estil": "Crol",
+    "nom": "200 fraccionat: 4x50 d/10\" a ritme objectiu",
+    "format": "2-3 sèries, 2' entre sèries",
+    "consigna": "El primer 50 al ritme objectiu, no més ràpid",
+    "indicador": "Diferència entre 50s ≤ 1\"",
+    "material": "",
+    "proves": [
+      "200 crol"
+    ],
+    "fases": [
+      "Build",
+      "Peak"
+    ],
+    "nivell": "Intermedi",
+    "restriccio": "",
+    "font": "JFMK 2026 (màsters: la variabilitat del ritme es dispara als 52 anys)",
+    "versio": "v0"
+  }
+]

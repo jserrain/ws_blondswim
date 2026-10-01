@@ -18,6 +18,8 @@ class Exercici(BaseModel):
         "Recuperació", "A1", "A2", "A3", "Velocitat", "MPLA", "TOLA", "AeM"
     ] | None = None
     objectiu: str | None = None
+    # Id de l'exercici de la biblioteca de tècnica, si n'és un.
+    id_biblioteca: str | None = None
 
     @field_validator("distancia_m")
     @classmethod
@@ -78,3 +80,5 @@ class Sessio(BaseModel):
     ] | None = None
     volum_min: int | None = None
     volum_max: int | None = None
+    # Ids de la biblioteca de tècnica que la sessió ha d'incloure.
+    exercicis_tecnica: list[str] = []

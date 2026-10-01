@@ -23,6 +23,10 @@ Fase = Literal["Base", "Build1", "Build2", "Peak", "Cursa", "Transicio"]
 
 # Durades (en setmanes) de cada fase enrere des de la Cursa.
 _SETMANES_PEAK = 2
+# Dues proves A separades <= aquestes setmanes = un sol període competitiu
+# (doble pic): sense Transició entre elles i Peak curt abans de la segona.
+SETMANES_DOBLE_PIC = 4
+_SETMANES_PEAK_DOBLE = 1
 _SETMANES_BUILD2 = 4
 _SETMANES_BUILD1 = 4
 
@@ -140,7 +144,15 @@ def periodificar_temporada(
     # de la prova A anterior (o a la setmana de data_inici si és la primera).
     limit_inferior = 0
 
-    for comp in competicions_a:
+    def _doble_pic(anterior: Competicio, seguent: Competicio) -> bool:
+        dies = (
+            date.fromisoformat(seguent.data_inici) - date.fromisoformat(anterior.data_inici)
+        ).days
+        return 0 < dies <= SETMANES_DOBLE_PIC * 7
+
+    for n_comp, comp in enumerate(competicions_a):
+        # Peak curt si la A anterior (encara que ja hagi passat) és a <= 4 setmanes.
+        peak_curt = n_comp > 0 and _doble_pic(competicions_a[n_comp - 1], comp)
         data_comp = date.fromisoformat(comp.data_inici)
         idx_cursa = _index_setmana(setmanes, data_comp)
         if idx_cursa is None:
@@ -152,8 +164,9 @@ def periodificar_temporada(
             continue
 
         # Assignar fases enrere dins [inici_finestra, idx_cursa].
+        setmanes_peak = _SETMANES_PEAK_DOBLE if peak_curt else _SETMANES_PEAK
         idx_peak_fi = idx_cursa - 1
-        idx_peak_ini = idx_peak_fi - _SETMANES_PEAK + 1
+        idx_peak_ini = idx_peak_fi - setmanes_peak + 1
         idx_build2_fi = idx_peak_ini - 1
         idx_build2_ini = idx_build2_fi - _SETMANES_BUILD2 + 1
         idx_build1_fi = idx_build2_ini - 1
@@ -180,6 +193,13 @@ def periodificar_temporada(
         # Base: la resta cap enrere fins a l'inici de la finestra.
         for i in range(inici_finestra, build1_ini):
             fases[i] = "Base"
+
+        # Doble pic: la propera A és a <= SETMANES_DOBLE_PIC setmanes -> sense
+        # Transició; les setmanes entremig són Build2 i el Peak següent és curt.
+        seguent = competicions_a[n_comp + 1] if n_comp + 1 < len(competicions_a) else None
+        if seguent is not None and _doble_pic(comp, seguent):
+            limit_inferior = idx_cursa + 1
+            continue
 
         # Transicio: 1 setmana just després de la Cursa.
         idx_transicio = idx_cursa + 1

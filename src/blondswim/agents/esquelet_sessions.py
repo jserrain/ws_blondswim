@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 
-from blondswim.agents import pla_setmanal
+from blondswim.agents import pla_setmanal, tecnica
 from blondswim.models.macrocicle import Microcicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import EstructuraSessio, PartSessio, Sessio
@@ -268,7 +268,7 @@ def _esquelet_plantilla(nedador: Nedador, microcicle: Microcicle) -> list[Sessio
     Esquelet amb la plantilla setmanal (pla_setmanal): rols segons el tipus de
     setmana (normal, competició dissabte/diumenge, post-competició), volum
     repartit per pesos de rol, parts pròpies de cada rol i sèrie de control
-    fixa cada dilluns.
+    fixa el dia de la sèrie de control (pla_setmanal.DIA_SERIE_CONTROL).
     """
     rols = pla_setmanal.rols_setmana(microcicle.dia_competicio, microcicle.post_competicio)
     dies = sorted(rols, key=lambda d: _DIES_ORDRE[d])
@@ -298,7 +298,7 @@ def _esquelet_plantilla(nedador: Nedador, microcicle: Microcicle) -> list[Sessio
 
         parts: list[PartSessio] = []
         volum_fix = 0
-        if dia == "dilluns":
+        if dia == pla_setmanal.DIA_SERIE_CONTROL:
             control = pla_setmanal.part_serie_control(nedador)
             volum_fix = sum(ex.volum_m for ex in control.exercicis)
         volum_variable = max(volum_sessio - volum_fix, 0)
@@ -330,6 +330,12 @@ def _esquelet_plantilla(nedador: Nedador, microcicle: Microcicle) -> list[Sessio
                 rol=rol,
                 volum_min=volum_min,
                 volum_max=volum_max,
+                exercicis_tecnica=[
+                    e["id"]
+                    for e in tecnica.seleccionar_exercicis(
+                        nedador, rol, microcicle.tipus_base, microcicle
+                    )
+                ],
             )
         )
 

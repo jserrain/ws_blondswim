@@ -89,6 +89,9 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 {pressupost_sessio}
    La resta del volum ha de ser Recuperació, A1 o A2. El sistema ho comprova i rebutja la sessió si se supera.
 
+   **EXERCICIS DE TÈCNICA OBLIGATORIS (biblioteca):** inclou-los TOTS, a la part de Tècnica o de Cames, amb el camp `id_biblioteca` exactament igual. Ajusta la dosi al volum de la part. Cada exercici va seguit de nedar l'estil complet amb el mateix focus (p.ex. 4x(25 exercici + 25 nedar)); posa també l'`id_biblioteca` a la repetició de nedar.
+{exercicis_tecnica}
+
    **REGLES DE NATACIÓ (OBLIGATÒRIES):**
    - Uns estils complets (IM) són de 100 o 200 m, mai 125 o 150 m. Els estils "per estils" en repeticions de 25 m són vàlids.
    - A3 només en repeticions de 50 m o més: en 25 m no s'arriba al llindar.
@@ -96,6 +99,8 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
    - Els descansos han de ser coherents amb el ritme de la zona: el cicle ha de deixar com a mínim 10" de descans a A3 i 15" a A2.
    - No afegeixis metres de farciment (p.ex. un 25 m solt) per quadrar el volum: ajusta les sèries principals.
    - Fes servir només termes de natació reals. Si una expressió no és estàndard, descriu l'acció.
+   - Mai exercicis d'arrossegar el polze o els dits per l'aigua a la recuperació de crol (carreguen l'espatlla).
+   - Els exercicis només de cames (dofí, cames de papallona) no compten per al límit de papallona.
 
    **VARIETAT DINS LA SETMANA:** no repeteixis el mateix conjunt principal que les sessions ja generades aquesta setmana. Consulta el resum següent i varia el focus.
 

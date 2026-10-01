@@ -33,7 +33,7 @@ def nedador_plantilla() -> Nedador:
         categoria="master",
         proves_objectiu=["100m lliure", "100m estils"],
         mode_ritme="temps",
-        dies_disponibles=["dilluns", "dimarts", "dijous", "divendres"],
+        dies_disponibles=["dilluns", "dimarts", "dimecres", "dijous", "divendres"],
         ritmes_css=RitmesCSS(font="css_test", a1=87.1, a2=82.09, a3=78.24, velocitat=67.55),
     )
 
@@ -92,8 +92,8 @@ def test_classificar_ignora_competicions_c():
 def test_rols_setmana_normal_un_sol_dia_de_qualitat():
     rols = pla_setmanal.rols_setmana(None, False)
     assert rols == {
-        "dilluns": "aerobica", "dimarts": "qualitat",
-        "dijous": "tecnica", "divendres": "llarga",
+        "dilluns": "aerobica", "dimarts": "qualitat", "dimecres": "tecnica",
+        "dijous": "aerobica", "divendres": "llarga",
     }
     assert list(rols.values()).count("qualitat") == 1
 
@@ -108,7 +108,7 @@ def test_rols_competicio_diumenge_activacio_dissabte():
     rols = pla_setmanal.rols_setmana("diumenge", False)
     assert rols["dissabte"] == "activacio"
     assert "divendres" not in rols
-    assert len(rols) == 4
+    assert len(rols) == 5
 
 
 def test_rols_post_competicio_recuperacio_i_qualitat_dijous():
@@ -130,8 +130,10 @@ def test_rols_post_i_competicio_sense_qualitat():
 def test_esquelet_plantilla_setmana_normal(nedador_plantilla):
     sessions = generar_esquelet_sessions(nedador_plantilla, _microcicle())
 
-    assert [s.dia for s in sessions] == ["dilluns", "dimarts", "dijous", "divendres"]
-    assert [s.rol for s in sessions] == ["aerobica", "qualitat", "tecnica", "llarga"]
+    assert [s.dia for s in sessions] == ["dilluns", "dimarts", "dimecres", "dijous", "divendres"]
+    assert [s.rol for s in sessions] == ["aerobica", "qualitat", "tecnica", "aerobica", "llarga"]
+    tecnica = sessions[2]
+    assert tecnica.volum_total < 0.75 * sessions[0].volum_total  # dia de tècnica, volum baix
     assert all(s.tipus_sessio == "carrega" for s in sessions)
     assert abs(sum(s.volum_total for s in sessions) - 13600) <= 50
     for s in sessions:
@@ -139,25 +141,26 @@ def test_esquelet_plantilla_setmana_normal(nedador_plantilla):
         assert s.volum_total % 25 == 0
 
 
-def test_esquelet_serie_de_control_fixa_dilluns(nedador_plantilla):
+def test_esquelet_serie_de_control_fixa_dimecres(nedador_plantilla):
     sessions = generar_esquelet_sessions(nedador_plantilla, _microcicle())
-    dilluns = sessions[0]
+    dimecres = next(s for s in sessions if s.dia == "dimecres")
 
-    fixes = [p for p in dilluns.estructura.parts if p.fixa]
+    fixes = [p for p in dimecres.estructura.parts if p.fixa]
     assert len(fixes) == 1
     control = fixes[0]
     assert control.nom == pla_setmanal.NOM_SERIE_CONTROL
     ex = control.exercicis[0]
     assert (ex.series, ex.distancia_m, ex.intensitat) == (4, 100, "A2")
     assert ex.descans == "c/1'40\""  # A2 82" + 15" -> 1'40" (múltiple de 5")
-    assert dilluns.estructura.parts[1].fixa  # just després de l'escalfament
-    assert all(not p.fixa for s in sessions[1:] for p in s.estructura.parts)
+    assert dimecres.estructura.parts[1].fixa  # just després de l'escalfament
+    altres = [s for s in sessions if s.dia != "dimecres"]
+    assert all(not p.fixa for s in altres for p in s.estructura.parts)
 
 
 def test_esquelet_competicio_diumenge_activacio_dissabte(nedador_plantilla):
     sessions = generar_esquelet_sessions(nedador_plantilla, _microcicle(dia_competicio="diumenge"))
 
-    assert [s.dia for s in sessions] == ["dilluns", "dimarts", "dijous", "dissabte"]
+    assert [s.dia for s in sessions] == ["dilluns", "dimarts", "dimecres", "dijous", "dissabte"]
     activacio = sessions[-1]
     assert activacio.rol == "activacio"
     assert activacio.volum_total < min(s.volum_total for s in sessions[:-1])
@@ -171,6 +174,7 @@ def test_esquelet_post_competicio_dilluns_de_recuperacio(nedador_plantilla):
 
     assert sessions[0].rol == "recuperacio"
     assert sessions[0].volum_total < 0.7 * sessions[1].volum_total
+    assert next(s for s in sessions if s.dia == "dijous").rol == "qualitat"
     assert abs(sum(s.volum_total for s in sessions) - 12000) <= 50
 
 
@@ -269,3 +273,12 @@ def test_parts_fixes_no_compten_al_pressupost():
 def test_recuperacio_no_admet_a2_variable():
     s = _sessio("recuperacio", "carrega", [_ex(16, 100, "A1"), _ex(4, 100, "A2")])
     assert any(p.startswith("A2") for p in pla_setmanal.problemes_contingut(s))
+
+
+def test_dofi_de_cames_no_compta_com_a_papallona():
+    s = _sessio(
+        "tecnica", "carrega",
+        [_ex(20, 100, "A1"), _ex(8, 25, "A1", "Ps Pap dofí ventral"),
+         _ex(4, 25, "A1", "Papallona un braç")],
+    )
+    assert pla_setmanal.metres_papallona(s) == 100  # només els 4x25 de braços

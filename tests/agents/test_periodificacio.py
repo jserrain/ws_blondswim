@@ -164,3 +164,42 @@ def test_peak_setmanes_53_i_1_comparteixen_bloc(plans):
     p53 = _plan(plans, 2026, 53)
     p1 = _plan(plans, 2027, 1)
     assert p53.bloc_id == p1.bloc_id
+
+
+# --- Doble pic: dues proves A a <= 4 setmanes ---
+
+
+def _a(id_, data_inici, data_fi):
+    from blondswim.models.calendari import Competicio
+    return Competicio(id=id_, nom=id_, data_inici=data_inici, data_fi=data_fi,
+                      classe="A", piscina="25m")
+
+
+DOBLE = [_a("cat", "2027-01-16", "2027-01-17"), _a("esp", "2027-02-06", "2027-02-07")]
+
+
+def test_doble_pic_sense_transicio_i_peak_curt():
+    from datetime import date
+
+    from blondswim.agents.periodificacio import periodificar_temporada
+
+    plans, _ = periodificar_temporada(DOBLE, date(2026, 11, 23), date(2027, 3, 7))
+    fase = {(p.any_iso, p.setmana_iso): p.fase for p in plans}
+    assert fase[(2027, 2)] == "Cursa"
+    assert fase[(2027, 3)] == "Build2"   # entre les dues A: entrenament, no Transició
+    assert fase[(2027, 4)] == "Peak"     # taper curt (1 setmana)
+    assert fase[(2027, 5)] == "Cursa"
+    assert fase[(2027, 6)] == "Transicio"
+    assert fase[(2026, 53)] == "Peak" and fase[(2027, 1)] == "Peak"  # taper principal
+
+
+def test_doble_pic_tambe_si_la_primera_ja_ha_passat():
+    """Planificant des de la setmana 3, la setmana 3 continua sent Build2."""
+    from datetime import date
+
+    from blondswim.agents.periodificacio import periodificar_temporada
+
+    plans, _ = periodificar_temporada(DOBLE, date(2027, 1, 18), date(2027, 3, 7))
+    fase = {(p.any_iso, p.setmana_iso): p.fase for p in plans}
+    assert fase[(2027, 3)] == "Build2"
+    assert fase[(2027, 4)] == "Peak"

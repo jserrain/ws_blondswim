@@ -1,12 +1,13 @@
 """
 Organització setmanal (acordada 2026-09-30, vegeu fase3.md — Fase H).
 
-- 4 sessions: dilluns, dimarts, dijous, divendres (mai 3 dies seguits sense nedar).
+- 5 sessions: dilluns a divendres (acordat 2026-10-01). Dimecres = tècnica en
+  estat fresc, volum baix i sense qualitat. Cap de setmana sense nedar.
 - 1 sol dia de qualitat per setmana (dimarts; dijous la setmana post-competició).
 - Dia abans de competir: activació (24 h abans). Dies de descans: sense nedar.
 - Setmana post-competició: dilluns de recuperació activa i objectiu = mínim setmanal.
 - Pressupost d'intensitat i de papallona per rol, validat després de cada sessió.
-- Sèrie de control fixa (4x100 A2) cada dilluns.
+- Sèrie de control fixa (4x100 A2) cada dimecres.
 
 Tot és determinista; l'LLM només omple els exercicis dins d'aquests límits.
 """
@@ -21,15 +22,18 @@ from blondswim.models.sessio import Exercici, PartSessio, Sessio
 
 # Dies de la plantilla setmanal. Si el nedador té uns altres dies disponibles,
 # l'esquelet fa servir la lògica antiga (rols per dia fixos).
-DIES_PLANTILLA: list[str] = ["dilluns", "dimarts", "dijous", "divendres"]
+DIES_PLANTILLA: list[str] = ["dilluns", "dimarts", "dimecres", "dijous", "divendres"]
+
+# Dia de la sèrie de control (part fixa).
+DIA_SERIE_CONTROL: str = "dimecres"
 
 # Pes relatiu del volum de cada rol dins la setmana.
 PES_ROL: dict[str, float] = {
     "aerobica": 1.0,
     "mitjana": 1.0,
-    "llarga": 1.1,
+    "llarga": 1.05,
     "qualitat": 0.95,
-    "tecnica": 0.95,
+    "tecnica": 0.65,
     "activacio": 0.5,
     "recuperacio": 0.6,
 }
@@ -43,10 +47,11 @@ METRES_PER_MINUT: int = 40
 # Parts de cada rol: (nom, % del volum no fixat).
 PARTS_ROL: dict[str, list[tuple[str, float]]] = {
     "aerobica": [
-        ("Escalfament", 15), ("Tècnica", 15), ("Aeròbic", 60), ("Tornada a la calma", 10),
+        ("Escalfament", 15), ("Tècnica", 15), ("Cames", 12), ("Aeròbic", 48),
+        ("Tornada a la calma", 10),
     ],
     "llarga": [
-        ("Escalfament", 10), ("Tècnica", 10), ("Aeròbic llarg", 65),
+        ("Escalfament", 10), ("Tècnica", 10), ("Cames", 10), ("Aeròbic llarg", 55),
         ("Velocitat alàctica", 5), ("Tornada a la calma", 10),
     ],
     "qualitat": [
@@ -54,15 +59,15 @@ PARTS_ROL: dict[str, list[tuple[str, float]]] = {
         ("Qualitat", 25), ("Tornada a la calma", 15),
     ],
     "tecnica": [
-        ("Escalfament", 15), ("Tècnica i papallona", 45), ("Aeròbic suau", 30),
-        ("Tornada a la calma", 10),
+        ("Escalfament", 15), ("Tècnica i papallona", 45), ("Cames", 15),
+        ("Nedar suau", 15), ("Tornada a la calma", 10),
     ],
     "activacio": [
         ("Escalfament", 30), ("Tècnica i sortides", 25), ("Ritme de cursa", 10),
         ("Nedar suau", 20), ("Tornada a la calma", 15),
     ],
     "recuperacio": [
-        ("Escalfament", 20), ("Tècnica suau", 30),
+        ("Escalfament", 20), ("Tècnica suau", 20), ("Cames", 10),
         ("Aeròbic suau amb canvis de ritme", 40), ("Tornada a la calma", 10),
     ],
 }
@@ -105,7 +110,7 @@ _PRESSUPOST_ROL: dict[str, dict[str, float]] = {
     "aerobica": {"a3": 0.05, "velocitat": 0, "lactic": 0},
     "mitjana": {"a3": 0.05, "velocitat": 0, "lactic": 0},
     "llarga": {"a3": 0.05, "velocitat": 200, "lactic": 0},
-    "tecnica": {"a3": 0.0, "velocitat": 0, "lactic": 0},
+    "tecnica": {"a2": 0, "a3": 0.0, "velocitat": 0, "lactic": 0},
     "activacio": {"a3": 0.0, "velocitat": 150, "lactic": 0},
     "recuperacio": {"a2": 0, "a3": 0.0, "velocitat": 0, "lactic": 0},
 }
@@ -124,17 +129,22 @@ PAPALLONA_SETMANA: tuple[int, int] = (300, 600)
 
 _DESCRIPCIO_ROL: dict[str, str] = {
     "aerobica": (
-        "Aeròbic i tècnica: base aeròbica A1/A2 amb treball tècnic. "
+        "Aeròbic i tècnica: base aeròbica A1/A2 amb treball tècnic i de cames. "
+        "Les sèries aeròbiques són de control del ritme: cada repetició al mateix "
+        "temps (±1\"), la primera mai la més ràpida, i viratge a totes les parets. "
         "Sense velocitat ni làctic."
     ),
     "llarga": (
-        "Aeròbica llarga: sèries llargues A1/A2. Al final, una dosi curta de "
-        "velocitat alàctica (4-6 x 15-25 m, recuperació completa, d/45\" o més)."
+        "Aeròbica llarga: sèries llargues A1/A2 amb el mateix nombre de braçades per "
+        "llargada i viratge a totes les parets, també al final de les sèries. Al "
+        "final, una dosi curta de velocitat alàctica (4-6 x 15-25 m, recuperació "
+        "completa, d/45\" o més)."
     ),
     "tecnica": (
-        "Només tècnica: exercicis tècnics i nedar en Recuperació/A1/A2. Inclou la "
-        "papallona tècnica de la setmana (200-350 m, combinant exercicis i nedar "
-        "papallona). Sense A3, velocitat ni làctic."
+        "Tècnica en estat fresc (volum baix): exercicis de tècnica i cames en "
+        "Recuperació/A1, sempre en parella exercici -> nedar l'estil complet. Inclou "
+        "la papallona tècnica de la setmana. Sense A2 (excepte la sèrie de control), "
+        "A3, velocitat ni làctic."
     ),
     "activacio": (
         "Activació 24 h abans de competir: sessió curta. Escalfament, tècnica i "
@@ -198,27 +208,32 @@ def classificar_setmana(
 
 
 def rols_setmana(dia_competicio: str | None, post_competicio: bool) -> dict[str, str]:
-    """Rol de cada dia (4 sessions) segons el tipus de setmana."""
+    """
+    Rol de cada dia (5 sessions) segons el tipus de setmana.
+
+    L'activació és el dia abans de competir: divendres (competició dissabte) o
+    dissabte (competició diumenge; aleshores divendres és descans).
+    """
     dia_activacio = "dissabte" if dia_competicio == "diumenge" else "divendres"
     if post_competicio and dia_competicio:
         # Dues competicions seguides: les curses fan d'estímul intens.
         return {
-            "dilluns": "recuperacio", "dimarts": "aerobica",
-            "dijous": "tecnica", dia_activacio: "activacio",
+            "dilluns": "recuperacio", "dimarts": "aerobica", "dimecres": "tecnica",
+            "dijous": "aerobica", dia_activacio: "activacio",
         }
     if post_competicio:
         return {
-            "dilluns": "recuperacio", "dimarts": "aerobica",
-            "dijous": "qualitat", "divendres": "tecnica",
+            "dilluns": "recuperacio", "dimarts": "aerobica", "dimecres": "tecnica",
+            "dijous": "qualitat", "divendres": "llarga",
         }
     if dia_competicio:
         return {
-            "dilluns": "aerobica", "dimarts": "qualitat",
-            "dijous": "tecnica", dia_activacio: "activacio",
+            "dilluns": "aerobica", "dimarts": "qualitat", "dimecres": "tecnica",
+            "dijous": "aerobica", dia_activacio: "activacio",
         }
     return {
-        "dilluns": "aerobica", "dimarts": "qualitat",
-        "dijous": "tecnica", "divendres": "llarga",
+        "dilluns": "aerobica", "dimarts": "qualitat", "dimecres": "tecnica",
+        "dijous": "aerobica", "divendres": "llarga",
     }
 
 
@@ -331,13 +346,22 @@ def metres_per_grup(sessio: Sessio) -> dict[str, int]:
 
 
 _RE_PAPALLONA = re.compile(r"\bpap(allona)?\b", re.IGNORECASE)
+# La patada de dofí (cames) no carrega l'espatlla: no compta com a papallona.
+_RE_CAMES = re.compile(r"\b(ps|peus|cames|dof[ií]|batud\w*|ondulaci[oó])\b", re.IGNORECASE)
+_RE_BRACOS = re.compile(r"\b(bra[cç]\w*|completa?|nedar)\b", re.IGNORECASE)
 _RE_ESTILS = re.compile(r"\bIM\b|\bestils\b", re.IGNORECASE)
 
 
 def metres_papallona(sessio: Sessio) -> int:
-    """Papallona: l'exercici sencer si l'esmenta; el 25% si és d'estils."""
+    """
+    Papallona: l'exercici sencer si l'esmenta; el 25% si és d'estils.
+    Els exercicis només de cames (dofí, "Ps Pap") no compten.
+    """
     total = 0
     for ex in _exercicis_variables(sessio):
+        es_cames = _RE_CAMES.search(ex.execucio) and not _RE_BRACOS.search(ex.execucio)
+        if es_cames:
+            continue
         if _RE_PAPALLONA.search(ex.execucio):
             total += ex.volum_m
         elif _RE_ESTILS.search(ex.execucio):

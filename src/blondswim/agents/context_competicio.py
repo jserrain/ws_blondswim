@@ -59,7 +59,7 @@ def validar_espaiat_pics_a(
         - comp_a_id: ID de la primera competició
         - comp_b_id: ID de la segona competició
         - setmanes_separacio: Setmanes reals entre les dues
-        - tipus_avis: "separacio_insuficient" o "massa_pics_a"
+        - tipus_avis: "doble_pic" (<= 4 setmanes), "separacio_insuficient" o "massa_pics_a"
         - missatge: Descripció de l'avís i recomanació
         
         Llista buida = tot correcte, cap avís.
@@ -95,7 +95,17 @@ def validar_espaiat_pics_a(
         
         setmanes = setmanes_entre(comp_a, comp_b)
         
-        if setmanes < min_setmanes:
+        if setmanes <= 4:
+            avisos.append({
+                "comp_a_id": comp_a.id,
+                "comp_b_id": comp_b.id,
+                "setmanes_separacio": round(setmanes, 1),
+                "tipus_avis": "doble_pic",
+                "missatge": f"'{comp_a.nom}' i '{comp_b.nom}' estan a {round(setmanes, 1)} "
+                           "setmanes: es planifiquen com un sol període competitiu "
+                           "(sense Transició entre elles i taper curt abans de la segona).",
+            })
+        elif setmanes < min_setmanes:
             avisos.append({
                 "comp_a_id": comp_a.id,
                 "comp_b_id": comp_b.id,

@@ -100,8 +100,8 @@ def test_validar_espaiat_pics_a_calendari_real():
     assert len(avisos) == 0
 
 
-def test_validar_espaiat_pics_a_separacio_insuficient():
-    """Cas sintètic: Espanya reclassificada com a A → avís separacio_insuficient."""
+def test_validar_espaiat_pics_a_doble_pic():
+    """Catalunya i Espanya d'hivern (A, < 4 setmanes) → avís informatiu doble_pic."""
     competicions = [
         Competicio(
             id="cat_hivern_2027",
@@ -131,19 +131,30 @@ def test_validar_espaiat_pics_a_separacio_insuficient():
 
     avisos = validar_espaiat_pics_a(competicions, min_setmanes=8)
 
-    # Hauria de tenir avís entre Catalunya Hivern i Espanya (~2.4 setmanes)
-    avisos_separacio = [a for a in avisos if a["tipus_avis"] == "separacio_insuficient"]
-    assert len(avisos_separacio) >= 1
-    
-    # Trobar l'avís específic Catalunya Hivern - Espanya
+    # Catalunya Hivern - Espanya (~2.7 setmanes): doble pic, no "tractar com B"
     avis_cat_esp = next(
-        (a for a in avisos_separacio 
-         if a["comp_a_id"] == "cat_hivern_2027" and a["comp_b_id"] == "espanya_2027"),
-        None
+        a for a in avisos
+        if a["comp_a_id"] == "cat_hivern_2027" and a["comp_b_id"] == "espanya_2027"
     )
-    assert avis_cat_esp is not None
-    assert avis_cat_esp["setmanes_separacio"] < 8
-    assert "tractar la segona com a classe B" in avis_cat_esp["missatge"]
+    assert avis_cat_esp["tipus_avis"] == "doble_pic"
+    assert avis_cat_esp["setmanes_separacio"] <= 4
+    assert "un sol període competitiu" in avis_cat_esp["missatge"]
+
+    # Espanya - Catalunya Estiu (~16 setmanes): cap avís
+    assert not any(a["comp_a_id"] == "espanya_2027" for a in avisos)
+
+
+def test_validar_espaiat_pics_a_separacio_insuficient():
+    """Entre 4 i 8 setmanes → separacio_insuficient (recomana tractar-la com a B)."""
+    competicions = [
+        Competicio(id="a1", nom="A1", data_inici="2027-01-16", data_fi="2027-01-17",
+                   classe="A", piscina="25m"),
+        Competicio(id="a2", nom="A2", data_inici="2027-02-27", data_fi="2027-02-28",
+                   classe="A", piscina="25m"),
+    ]
+    avisos = validar_espaiat_pics_a(competicions, min_setmanes=8)
+    assert [a["tipus_avis"] for a in avisos] == ["separacio_insuficient"]
+    assert "tractar la segona com a classe B" in avisos[0]["missatge"]
 
 
 def test_validar_espaiat_pics_a_massa_pics_a():

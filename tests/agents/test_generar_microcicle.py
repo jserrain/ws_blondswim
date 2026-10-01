@@ -1775,7 +1775,7 @@ def _nedador_plantilla() -> Nedador:
         categoria="master",
         proves_objectiu=["100m lliure", "100m estils"],
         mode_ritme="temps",
-        dies_disponibles=["dilluns", "dimarts", "dijous", "divendres"],
+        dies_disponibles=["dilluns", "dimarts", "dimecres", "dijous", "divendres"],
         ritmes_css=RitmesCSS(font="css_test", a1=87.1, a2=82.09, a3=78.24, velocitat=67.55),
     )
 
@@ -1823,6 +1823,7 @@ def test_pressupost_superat_reintenta_amb_els_problemes(metodologia_test):
     sessio = next(
         s for s in generar_esquelet_sessions(nedador, microcicle) if s.rol == "qualitat"
     )
+    sessio.exercicis_tecnica = []  # aquest test només mira el pressupost
     lactic = {"series": 4, "distancia_m": 50, "execucio": "Crol", "intensitat": "MPLA"}
 
     mock_client = MagicMock()
@@ -1854,7 +1855,10 @@ def test_part_fixa_no_es_demana_ni_es_sobreescriu(metodologia_test):
         setmana=41, dates="05-11/10/2026", mesocicle_id="meso_1", tipus_base="carrega",
         volum_objectiu=13600, dies_qualitat=False, test_css=False,
     )
-    dilluns = generar_esquelet_sessions(nedador, microcicle)[0]
+    dilluns = next(
+        s for s in generar_esquelet_sessions(nedador, microcicle) if s.dia == "dimecres"
+    )
+    dilluns.exercicis_tecnica = []  # aquest test només mira la part fixa
     parts = _parts_valides(dilluns)
     parts.append({
         "nom": "Sèrie de control",
@@ -1875,3 +1879,46 @@ def test_part_fixa_no_es_demana_ni_es_sobreescriu(metodologia_test):
         (4, 100, "A2")
     ]
     assert mock_client.messages.create.call_count == 1
+
+
+def test_exercicis_de_biblioteca_obligatoris(metodologia_test):
+    """Si falta un exercici de la biblioteca, es reintenta amb l'id que falta."""
+    nedador = _nedador_plantilla()
+    microcicle = Microcicle(
+        setmana=41, dates="05-11/10/2026", mesocicle_id="meso_1", tipus_base="carrega",
+        volum_objectiu=13600, dies_qualitat=False, test_css=False,
+    )
+    sessio = next(
+        s for s in generar_esquelet_sessions(nedador, microcicle) if s.rol == "aerobica"
+    )
+    assert sessio.exercicis_tecnica
+    ids = sessio.exercicis_tecnica
+
+    def _amb_ids():
+        """Respostes vàlides amb els exercicis de la biblioteca a la part Tècnica."""
+        parts = _parts_valides(sessio)
+        parts[1]["exercicis"] = [
+            {"series": 1, "distancia_m": 50, "execucio": "Crol", "intensitat": "A1",
+             "id_biblioteca": id_ex}
+            for id_ex in ids
+        ]
+        return parts
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        _resposta_parts(_parts_valides(sessio)),
+        _resposta_parts(_amb_ids()),
+    ]
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        generar_microcicle(nedador, [sessio], metodologia_test)
+
+    primer = mock_client.messages.create.call_args_list[0].kwargs["messages"][0]["content"]
+    segon = mock_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
+    assert all(f'id_biblioteca: "{i}"' in primer for i in ids)
+    assert "Falten exercicis obligatoris de la biblioteca" in segon
+    presents = {
+        ex.id_biblioteca for p in sessio.estructura.parts for ex in p.exercicis
+    }
+    assert set(ids) <= presents

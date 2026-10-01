@@ -12,6 +12,7 @@ from blondswim.agents import (
     context_competicio,
     pla_setmanal,
     seleccio_model,
+    tecnica,
     taper,
     validacio,
 )
@@ -745,6 +746,12 @@ def _construir_tools_sessio() -> list[dict]:
                                                 ],
                                             },
                                             "objectiu": {"type": "string"},
+                                            "id_biblioteca": {
+                                                "type": "string",
+                                                "description": (
+                                                    "Id de la biblioteca quan l'exercici n'és un dels obligatoris"
+                                                ),
+                                            },
                                         },
                                         "required": ["series", "distancia_m", "execucio"],
                                     },
@@ -907,6 +914,16 @@ def _problemes_sessio(sessio: Sessio) -> list[str]:
             f"entre {sessio.volum_min} i {sessio.volum_max} m."
         )
     problemes.extend(pla_setmanal.problemes_contingut(sessio))
+
+    ids_presents = {
+        ex.id_biblioteca for part in sessio.estructura.parts for ex in part.exercicis
+    }
+    falten = [i for i in sessio.exercicis_tecnica if i not in ids_presents]
+    if falten:
+        problemes.append(
+            "Falten exercicis obligatoris de la biblioteca (posa'ls amb el seu "
+            f"id_biblioteca): {', '.join(falten)}"
+        )
     return problemes
 
 
@@ -1028,6 +1045,9 @@ def generar_microcicle(
                 descripcio_rol=pla_setmanal.descripcio_rol(sessio),
                 pressupost_sessio=pla_setmanal.text_pressupost(sessio),
                 context_setmana=sessio.notes or "Setmana sense competició",
+                exercicis_tecnica=tecnica.text_exercicis(
+                    [e for e in map(tecnica.per_id, sessio.exercicis_tecnica) if e]
+                ),
             )
 
             # Crida inicial

@@ -102,6 +102,7 @@ def _escriure_setmana(
         data_inici is not None
         and dia_rutina in _DIES_ORDRE
         and not any(s.dia == dia_rutina for s in sessions_setmana)
+        and not (microcicle and microcicle.dia_competicio == dia_rutina)
     )
     if rutina_pendent and sessions_des_de is not None:
         rutina_pendent = data_inici + timedelta(days=_DIES_ORDRE[dia_rutina]) >= sessions_des_de

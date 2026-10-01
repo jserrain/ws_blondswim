@@ -377,3 +377,23 @@ def test_exportar_setmana_rol_i_rutina_espatlla(mesocicle_test, estructura_test,
     assert "Dimarts 6 — Qualitat" in primeres
     rutina = next(i for i, v in enumerate(primeres) if v.startswith("Dimecres 7 — Descans"))
     assert primeres.index("Dimarts 6 — Qualitat") < rutina < primeres.index("Dijous 8 — Tècnica")
+
+
+def test_rutina_espatlla_no_el_dia_de_competicio(mesocicle_test, estructura_test, tmp_path):
+    """Rutina el dissabte, però aquest dissabte hi ha competició: no surt."""
+    nedador = Nedador(
+        id="jep", nom="Jep", categoria="master", proves_objectiu=["100m lliure"],
+        mode_ritme="temps", rutina_espatlla_dia="dissabte",
+    )
+    microcicle = mesocicle_test.microcicles[1].model_copy(update={"dia_competicio": "dissabte"})
+    s = _sessio(2, "dilluns", estructura_test)
+    s.rol, s.notes = "aerobica", "Competició el dissabte"
+
+    path = exportar_setmana_excel(nedador, mesocicle_test, microcicle, [s], tmp_path / "c.xlsx")
+    assert not any("Rutina d'espatlla" in str(f[0]) for f in _valors(path))
+
+    microcicle_lliure = mesocicle_test.microcicles[1]
+    path2 = exportar_setmana_excel(
+        nedador, mesocicle_test, microcicle_lliure, [s], tmp_path / "d.xlsx"
+    )
+    assert any(str(f[0]).startswith("Dissabte 10 — Descans") for f in _valors(path2))
