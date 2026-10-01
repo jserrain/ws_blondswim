@@ -9,12 +9,18 @@ Per defecte (G1/G6) genera el contingut NOMÉS de la setmana que comença el
 proper dilluns (o el dilluns de --dilluns) i l'exporta a
 setmana_<nom>_<YYYY>-W<ww>.xlsx. Amb --mesocicle-sencer recupera el
 comportament anterior (tot el mesocicle, mesocicle_<nom>_<id>.xlsx).
+
+Fase E+I: llegeix els fulls de registre omplerts de
+data/processed/registres/ (registre_*.xlsx), avalua la recuperació de la
+setmana anterior (càrrega sRPE, SRSS, sèrie de control) i, en mode setmana,
+crea el full de registre en blanc de la setmana generada (no sobreescriu un
+full que ja existeix).
 """
 
 import argparse
 import json
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import anthropic
@@ -22,6 +28,7 @@ from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from blondswim.agents import carrega, recuperacio
 from blondswim.agents.context_competicio import validar_espaiat_pics_a
 from blondswim.agents.generar_macrocicle import generar_macrocicle, generar_mesocicle
 from blondswim.agents.generar_microcicle import (
@@ -32,6 +39,8 @@ from blondswim.agents.periodificacio import _dilluns_de, avui, periodificar_temp
 from blondswim.agents.pla_setmanal import DIES_PLANTILLA, usa_plantilla
 from blondswim.agents.taper import generar_pla_taper_temporada
 from blondswim.export.mesocicle_excel import exportar_mesocicle_excel, exportar_setmana_excel
+from blondswim.export.registre_excel import exportar_registre_setmana
+from blondswim.ingestion.registre_setmana import carregar_registres
 from blondswim.models.calendari import Competicio
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.nedador import Nedador
@@ -53,6 +62,40 @@ def _imprimir_taula_periodificacio(plans) -> None:
             f"   {p.setmana_iso:>2}/{p.any_iso}     | {dates} | "
             f"{p.fase:<9} | {p.bloc_id:<8} | {desc}    | {bc}"
         )
+
+
+TIPUS_AVIS_FRANGES = {"separacio_insuficient", "gimnas_dia_no_recomanat"}
+
+
+def _avaluar_recuperacio(registres_dir: Path, dilluns_objectiu: date) -> None:
+    """Imprimeix les alertes de recuperació de la setmana anterior."""
+    if not registres_dir.exists():
+        print("   · Encara no hi ha fulls de registre (data/processed/registres/)")
+        return
+    try:
+        registre = carregar_registres(registres_dir)
+    except ValueError as e:
+        print(f"   ✗ Error llegint els fulls de registre: {e}")
+        return
+    print(
+        f"   ✓ Registre: {len(registre.sessions)} sessions, {len(registre.srss)} SRSS, "
+        f"{len(registre.controls)} sèries de control"
+    )
+    estats = carrega.evolucio_carrega(registre.sessions)
+    if estats:
+        ultim = estats[-1]
+        print(
+            f"   · Càrrega a {ultim.dia:%d/%m}: aguda {ultim.aguda:.0f}, "
+            f"crònica {ultim.cronica:.0f}, balanç {ultim.balanc:+.0f} UA/dia"
+        )
+    setmana_anterior = dilluns_objectiu - timedelta(weeks=1)
+    avisos = recuperacio.avaluar_setmana(
+        setmana_anterior, registre.sessions, registre.srss, registre.controls
+    )
+    if not avisos:
+        print(f"   ✓ Setmana del {setmana_anterior:%d/%m}: cap alerta de recuperació")
+    for avis in avisos:
+        print(f"   ⚠ {avis['missatge']}")
 
 
 def main() -> int:
@@ -116,11 +159,23 @@ def main() -> int:
     print(f"   ✓ Historial: {len(historial)} sessions")
     if usa_plantilla(nedador):
         print(f"   ✓ Plantilla setmanal: {', '.join(nedador.dies_disponibles)}")
+        if nedador.setmana_tipus:
+            altres = [
+                f"{dia} {slot.franja} ({slot.modalitat}, {slot.durada_min} min)"
+                for dia in nedador.setmana_tipus
+                for slot in nedador.slots_dia(dia)
+                if slot.modalitat != "natacio"
+            ]
+            print(f"   ✓ Altres sessions: {', '.join(altres) or 'cap'}")
     else:
         print(
             f"   ⚠ dies_disponibles={nedador.dies_disponibles}: no és la plantilla "
             f"{DIES_PLANTILLA}; es fa servir l'esquelet antic"
         )
+
+    print("\n   Recuperació (fulls de registre)...")
+    registres_dir = data_processed / "registres"
+    _avaluar_recuperacio(registres_dir, dilluns_objectiu)
 
     print("\n2. Generant macrocicle...")
     macrocicle, avisos_macro = generar_macrocicle(
@@ -205,7 +260,7 @@ def main() -> int:
         print(f"\n5. Generant contingut LLM de la setmana del {dilluns_objectiu:%d/%m/%Y}...")
         print("   (Una petició real a l'API de Claude per sessió)")
         try:
-            _meso, microcicle, sessions, _avisos_validacio = generar_contingut_setmana(
+            _meso, microcicle, sessions, avisos_validacio = generar_contingut_setmana(
                 nedador=nedador,
                 macrocicle=macrocicle,
                 categoria=categoria_contingut,
@@ -221,11 +276,21 @@ def main() -> int:
         volum = sum(
             ex.volum_m for s in sessions for p in s.estructura.parts for ex in p.exercicis
         )
-        print(f"   · {sessions[0].notes if sessions and sessions[0].notes else ''}")
+        natacio = [s for s in sessions if s.modalitat == "natacio"]
+        print(f"   · {natacio[0].notes if natacio and natacio[0].notes else ''}")
         print(
             f"   ✓ Setmana {microcicle.setmana} ({microcicle.dates}): "
-            f"{len(sessions)} sessions, {volum}m (objectiu {microcicle.volum_objectiu}m)"
+            f"{len(natacio)} sessions de natació, {volum}m "
+            f"(objectiu {microcicle.volum_objectiu}m)"
+            + (
+                f", {len(sessions) - len(natacio)} de gimnàs/altres"
+                if len(sessions) > len(natacio)
+                else ""
+            )
         )
+        for avis in avisos_validacio:
+            if avis.get("tipus") in TIPUS_AVIS_FRANGES:
+                print(f"   ⚠ {avis['missatge']}")
 
         print("\n6. Exportant a Excel...")
         any_iso, setmana_iso, _ = dilluns_objectiu.isocalendar()
@@ -234,6 +299,15 @@ def main() -> int:
         )
         exportar_setmana_excel(nedador, mesocicle, microcicle, sessions, output_path)
         print(f"   ✓ Excel exportat a {output_path}")
+
+        registre_path = (
+            registres_dir / f"registre_{nedador.nom.lower()}_{any_iso}-W{setmana_iso:02d}.xlsx"
+        )
+        if registre_path.exists():
+            print(f"   · El full de registre ja existeix, no es toca: {registre_path}")
+        else:
+            exportar_registre_setmana(nedador, microcicle, sessions, registre_path)
+            print(f"   ✓ Full de registre (en blanc) a {registre_path}")
 
     print("\n" + "=" * 80)
     print("GENERACIÓ COMPLETADA")
