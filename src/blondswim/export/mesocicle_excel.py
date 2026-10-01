@@ -8,6 +8,7 @@ import openpyxl
 from openpyxl.styles import Font
 
 from blondswim.agents.pla_setmanal import ETIQUETA_ROL
+from blondswim.models.franja import ETIQUETA_FRANJA, ETIQUETA_MODALITAT, ORDRE_FRANJA
 from blondswim.models.macrocicle import Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import Sessio
@@ -67,7 +68,10 @@ def _escriure_setmana(
     Si no hi ha sessions vàlides, no escriu res i retorna `row_idx`.
     """
     sessions_setmana = [s for s in sessions if s.dia in _DIES_ORDRE]
-    sessions_setmana.sort(key=lambda s: _DIES_ORDRE[s.dia])
+    sessions_setmana.sort(key=lambda s: (_DIES_ORDRE[s.dia], ORDRE_FRANJA[s.franja]))
+    # Franja a la capçalera del dia només si el nedador té setmana tipus
+    # (Fase E+I); el format antic no canvia.
+    mostrar_franja = nedador is not None and nedador.setmana_tipus is not None
     if not sessions_setmana:
         return row_idx
 
@@ -119,6 +123,19 @@ def _escriure_setmana(
             capçalera_dia = f"{sessio.dia.capitalize()} {data_sessio.day}"
         else:
             capçalera_dia = sessio.dia.capitalize()
+        if mostrar_franja:
+            capçalera_dia += f" — {ETIQUETA_FRANJA[sessio.franja]}"
+
+        if sessio.modalitat != "natacio":
+            # Sessió informativa (gimnàs o altres): només capçalera.
+            durada = f"{sessio.durada_min} min, " if sessio.durada_min else ""
+            capçalera_dia += (
+                f" — {ETIQUETA_MODALITAT[sessio.modalitat]} ({durada}informatiu)"
+            )
+            ws.cell(row=row_idx, column=1, value=capçalera_dia).font = Font(bold=True)
+            row_idx += 1
+            continue
+
         # Etiqueta del rol només per a les sessions de la plantilla setmanal
         # (porten context a `notes`); la lògica antiga no canvia de format.
         if sessio.rol in ETIQUETA_ROL and sessio.notes:

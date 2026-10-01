@@ -20,6 +20,7 @@ from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
 from blondswim.llm.client import DEFAULT_MODEL, get_llm_client
 from blondswim.models.calendari import Competicio
 from blondswim.models.decisio import DecisioMetodologia
+from blondswim.models.franja import ETIQUETA_FRANJA, ETIQUETA_MODALITAT
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador
@@ -518,6 +519,7 @@ def generar_i_validar_microcicle(
     avisos = validacio.validar_pla_complet(
         macrocicle, nedador.categoria, pla_taper, avisos_pics_a
     )
+    avisos.extend(validacio.validar_franges_setmana(sessions))
 
     # 4. Guardar log de decisió (no bloqueja si falla)
     try:
@@ -657,8 +659,9 @@ def generar_contingut_mesocicle(
         setmana = microcicle.setmana
 
         # R5: no generar sessions de dies anteriors a sessions_des_de
-        if microcicle.sessions_des_de is not None and not generar_esquelet_sessions(
-            nedador, microcicle
+        if microcicle.sessions_des_de is not None and not any(
+            s.modalitat == "natacio"
+            for s in generar_esquelet_sessions(nedador, microcicle)
         ):
             logger.info(
                 f"Setmana {setmana}: cap dia a partir de "
@@ -765,6 +768,27 @@ def _construir_tools_sessio() -> list[dict]:
             },
         }
     ]
+
+
+def _context_sessio(sessio: Sessio, sessions: list[Sessio]) -> str:
+    """
+    Context de la setmana per al prompt, amb les altres sessions del mateix dia
+    (p.ex. gimnàs a la tarda) perquè l'LLM ho tingui en compte.
+    """
+    context = sessio.notes or "Setmana sense competició"
+    altres = [
+        f"{ETIQUETA_MODALITAT[s.modalitat].lower()} ({ETIQUETA_FRANJA[s.franja]}"
+        + (f", {s.durada_min} min" if s.durada_min else "")
+        + ")"
+        for s in sessions
+        if s.dia == sessio.dia and s is not sessio and s.modalitat != "natacio"
+    ]
+    if altres:
+        context += (
+            f". Aquesta sessió és al {ETIQUETA_FRANJA[sessio.franja]}; el mateix dia "
+            f"també hi ha {', '.join(altres)}"
+        )
+    return context
 
 
 def _resum_sessions_generades(sessions: list[Sessio]) -> str:
@@ -976,15 +1000,18 @@ def generar_microcicle(
             else "(Cap exemple disponible)"
         )
 
-        if not sessions:
+        # Només les sessions de natació tenen contingut LLM (Fase E+I: el
+        # gimnàs és informatiu).
+        sessions_natacio = [s for s in sessions if s.modalitat == "natacio"]
+        if not sessions_natacio:
             raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
 
-        setmana = sessions[0].microcicle_setmana
+        setmana = sessions_natacio[0].microcicle_setmana
 
         client = get_llm_client()
         tools = _construir_tools_sessio()
 
-        for sessio in sessions:
+        for sessio in sessions_natacio:
             # Estructura de parts d'aquesta sessió
             estructura_sessions_text = (
                 f"\n**Sessió: {sessio.dia.capitalize()} "
@@ -1044,7 +1071,7 @@ def generar_microcicle(
                 volum_max=sessio.volum_max,
                 descripcio_rol=pla_setmanal.descripcio_rol(sessio),
                 pressupost_sessio=pla_setmanal.text_pressupost(sessio),
-                context_setmana=sessio.notes or "Setmana sense competició",
+                context_setmana=_context_sessio(sessio, sessions),
                 exercicis_tecnica=tecnica.text_exercicis(
                     [e for e in map(tecnica.per_id, sessio.exercicis_tecnica) if e]
                 ),
@@ -1136,7 +1163,7 @@ def generar_microcicle(
                     )
 
         # Verificar que totes les parts tenen contingut (advertir si no)
-        for sessio in sessions:
+        for sessio in sessions_natacio:
             for part in sessio.estructura.parts:
                 if not part.exercicis:
                     logger.warning(
@@ -1145,7 +1172,7 @@ def generar_microcicle(
 
         # Log de resum de la setmana
         sessions_sense_contingut = [
-            s for s in sessions
+            s for s in sessions_natacio
             if not any(part.exercicis for part in s.estructura.parts)
         ]
         if sessions_sense_contingut:

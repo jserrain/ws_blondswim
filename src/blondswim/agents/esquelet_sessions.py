@@ -3,6 +3,7 @@
 from datetime import date, timedelta
 
 from blondswim.agents import pla_setmanal, tecnica
+from blondswim.models.franja import ETIQUETA_MODALITAT, ORDRE_FRANJA
 from blondswim.models.macrocicle import Microcicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import EstructuraSessio, PartSessio, Sessio
@@ -144,8 +145,14 @@ def generar_esquelet_sessions(
         Llista de Sessio amb estructura de parts fixada però contingut=None
     """
     if pla_setmanal.usa_plantilla(nedador):
-        return _esquelet_plantilla(nedador, microcicle)
+        sessions = _esquelet_plantilla(nedador, microcicle)
+    else:
+        sessions = _esquelet_dies(nedador, microcicle)
+    return _afegir_franges_i_altres_sessions(nedador, microcicle, sessions)
 
+
+def _esquelet_dies(nedador: Nedador, microcicle: Microcicle) -> list[Sessio]:
+    """Esquelet antic: rols per dia fixos (nedadors sense la plantilla setmanal)."""
     # Determinar dies actius de la setmana
     dies_actius = nedador.dies_disponibles.copy()
 
@@ -339,4 +346,55 @@ def _esquelet_plantilla(nedador: Nedador, microcicle: Microcicle) -> list[Sessio
             )
         )
 
+    return sessions
+
+
+def _afegir_franges_i_altres_sessions(
+    nedador: Nedador, microcicle: Microcicle, sessions: list[Sessio]
+) -> list[Sessio]:
+    """
+    Fase E+I: assigna la franja a cada sessió de natació i afegeix les sessions
+    de gimnàs (o altres) de la setmana tipus del nedador.
+
+    Les sessions que no són de natació són informatives: volum 0, sense parts
+    ni contingut LLM, només franja i durada. No es fan el dia de competició ni
+    abans de `sessions_des_de`. El resultat s'ordena per dia i franja.
+    """
+    for sessio in sessions:
+        sessio.franja = nedador.franja_natacio(sessio.dia)
+
+    if nedador.setmana_tipus is None:
+        return sessions
+
+    for dia in _DIES_ORDRE:
+        if dia == microcicle.dia_competicio:
+            continue
+        if (
+            microcicle.sessions_des_de is not None
+            and _data_del_dia(microcicle, dia) < microcicle.sessions_des_de
+        ):
+            continue
+        for slot in nedador.slots_dia(dia):
+            if slot.modalitat == "natacio":
+                continue
+            sessions.append(
+                Sessio(
+                    id=(
+                        f"{microcicle.mesocicle_id}_s{microcicle.setmana}_{dia}"
+                        f"_{slot.modalitat}_{slot.franja}"
+                    ),
+                    microcicle_setmana=microcicle.setmana,
+                    dia=dia,
+                    tipus_sessio=microcicle.tipus_base,
+                    volum_total=0,
+                    estructura=EstructuraSessio(parts=[]),
+                    es_dia_opcional=slot.opcional,
+                    notes=f"{ETIQUETA_MODALITAT[slot.modalitat]} (informatiu)",
+                    franja=slot.franja,
+                    modalitat=slot.modalitat,
+                    durada_min=slot.durada_min,
+                )
+            )
+
+    sessions.sort(key=lambda x: (_DIES_ORDRE[x.dia], ORDRE_FRANJA[x.franja]))
     return sessions

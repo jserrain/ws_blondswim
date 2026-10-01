@@ -13,8 +13,10 @@ Totes les funcions retornen avisos informatius (dict), mai llancen excepcions.
 from datetime import datetime
 from typing import Literal
 
+from blondswim.models.franja import franges_consecutives
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Microcicle
+from blondswim.models.sessio import Sessio
 
 
 def calcular_volums_setmanals_historial(
@@ -352,3 +354,59 @@ def validar_pla_complet(
         avisos_consolidats.append(avis)
     
     return avisos_consolidats
+
+
+# --- Fase E+I: sessions múltiples al dia ---
+
+# Rols de natació el dia dels quals no es recomana gimnàs: la tècnica es fa en
+# estat fresc, l'activació és 24 h abans de competir i la recuperació activa
+# segueix una competició (criteri del coach, configurable).
+ROLS_SENSE_GIMNAS: frozenset[str] = frozenset({"tecnica", "activacio", "recuperacio"})
+
+
+def validar_franges_setmana(
+    sessions: list[Sessio],
+    rols_sense_gimnas: frozenset[str] = ROLS_SENSE_GIMNAS,
+) -> list[dict]:
+    """
+    Valida la col·locació de les sessions que no són de natació d'una setmana.
+
+    - `separacio_insuficient`: gimnàs (o altres) en una franja contigua a la
+      sessió de natació de qualitat del mateix dia (matí-migdia o migdia-tarda,
+      menys de ~6 h). Evidència: separar força i resistència >= 6 h (>= 3 h si
+      la resistència va primer) redueix la interferència.
+    - `gimnas_dia_no_recomanat`: gimnàs el dia de tècnica, d'activació o de
+      recuperació activa.
+
+    Són avisos: la decisió és del coach.
+    """
+    avisos: list[dict] = []
+    for sessio in sessions:
+        if sessio.modalitat == "natacio":
+            continue
+        natacio_dia = [
+            s for s in sessions if s.dia == sessio.dia and s.modalitat == "natacio"
+        ]
+        for nat in natacio_dia:
+            if nat.rol == "qualitat" and franges_consecutives(nat.franja, sessio.franja):
+                avisos.append({
+                    "tipus": "separacio_insuficient",
+                    "setmana": sessio.microcicle_setmana,
+                    "dia": sessio.dia,
+                    "missatge": (
+                        f"{sessio.dia}: {sessio.modalitat} ({sessio.franja}) massa a "
+                        f"prop de la natació de qualitat ({nat.franja}); es recomanen "
+                        "6 h de separació (matí i tarda)"
+                    ),
+                })
+            if nat.rol in rols_sense_gimnas:
+                avisos.append({
+                    "tipus": "gimnas_dia_no_recomanat",
+                    "setmana": sessio.microcicle_setmana,
+                    "dia": sessio.dia,
+                    "missatge": (
+                        f"{sessio.dia}: {sessio.modalitat} el dia de {nat.rol}; "
+                        "millor un dia d'aeròbic o de qualitat"
+                    ),
+                })
+    return avisos
