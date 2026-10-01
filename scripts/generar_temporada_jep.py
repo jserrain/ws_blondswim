@@ -28,8 +28,8 @@ from blondswim.agents.generar_microcicle import (
     generar_contingut_mesocicle,
     generar_contingut_setmana,
 )
-from blondswim.agents.pla_setmanal import DIES_PLANTILLA, usa_plantilla
 from blondswim.agents.periodificacio import _dilluns_de, avui, periodificar_temporada
+from blondswim.agents.pla_setmanal import DIES_PLANTILLA, usa_plantilla
 from blondswim.agents.taper import generar_pla_taper_temporada
 from blondswim.export.mesocicle_excel import exportar_mesocicle_excel, exportar_setmana_excel
 from blondswim.models.calendari import Competicio

@@ -12,8 +12,8 @@ from blondswim.agents import (
     context_competicio,
     pla_setmanal,
     seleccio_model,
-    tecnica,
     taper,
+    tecnica,
     validacio,
 )
 from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
