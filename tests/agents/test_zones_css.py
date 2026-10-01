@@ -270,3 +270,17 @@ class TestDeterminarZonesNedador:
 
         with pytest.raises(ValueError, match="no té ni test CSS ni marques"):
             determinar_zones_nedador(nedador)
+
+
+def test_ritmes_des_de_test_css():
+    from blondswim.agents.zones_css import ritmes_des_de_test_css
+    from blondswim.models.nedador import ParametresRitme
+
+    ritmes = ritmes_des_de_test_css(412.0, 212.0, "2026-10-03", ParametresRitme())
+    assert ritmes.a2 == 100.0  # (412 - 212) / 2
+    assert ritmes.a3 == 96.0
+    assert ritmes.a1 == 106.0
+    assert ritmes.recuperacio == 112.0
+    assert ritmes.velocitat == 85.0
+    assert ritmes.font == "css_test"
+    assert ritmes.data_test == "2026-10-03"

@@ -155,3 +155,22 @@ def determinar_zones_nedador(nedador: Nedador) -> RitmesCSS:
     raise ValueError(
         f"Nedador {nedador.nom} no té ni test CSS ni marques de referència disponibles"
     )
+
+
+def ritmes_des_de_test_css(
+    temps_400_seg: float,
+    temps_200_seg: float,
+    data_test: str,
+    params: ParametresRitme,
+) -> RitmesCSS:
+    """
+    Zones a partir d'un test CSS (400 m + 200 m): CSS = (T400 - T200) / 2 per
+    100 m; zones = CSS + offsets de `params` (A2 = CSS).
+    """
+    css = calcular_css_pace(temps_400_seg, temps_200_seg)
+    zones = calcular_zones_des_de_css(css, params)
+    return RitmesCSS(
+        **{k: round(v, 2) for k, v in zones.items()},
+        data_test=data_test,
+        font="css_test",
+    )
