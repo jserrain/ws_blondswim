@@ -35,6 +35,11 @@ class Exercici(BaseModel):
         return self.series * self.distancia_m
 
 
+BlocSessio = Literal[
+    "Escalfament", "Tècnica", "Bloc principal", "Tornada a la calma", "Sèrie de control"
+]
+
+
 class PartSessio(BaseModel):
     """
     Representa una part de la sessió d'entrenament amb els seus percentatges
@@ -49,6 +54,9 @@ class PartSessio(BaseModel):
     # Part fixada pel codi (p.ex. la sèrie de control): l'LLM no la genera
     # ni la modifica, i no compta per al pressupost d'intensitat.
     fixa: bool = False
+    # Bloc de l'estructura de la sessió (escalfament, tècnica, bloc principal,
+    # tornada a la calma o sèrie de control). None en sessions antigues.
+    bloc: BlocSessio | None = None
 
 class EstructuraSessio(BaseModel):
     """

@@ -260,6 +260,7 @@ def _crear_parts_estandard(tipus_sessio: str, volum_total: int) -> list[PartSess
     for nom, perc_carrega, perc_qualitat, perc_descarrega in parts_definicio:
         part = PartSessio(
             nom=nom,
+            bloc=pla_setmanal.bloc_part(nom),
             percentatge_carrega=perc_carrega,
             percentatge_qualitat=perc_qualitat,
             percentatge_descarrega=perc_descarrega,
@@ -315,6 +316,7 @@ def _esquelet_plantilla(nedador: Nedador, microcicle: Microcicle) -> list[Sessio
             parts.append(
                 PartSessio(
                     nom=nom,
+                    bloc=pla_setmanal.bloc_part(nom),
                     percentatge_carrega=pct_sessio,
                     percentatge_qualitat=pct_sessio,
                     percentatge_descarrega=pct_sessio,

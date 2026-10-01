@@ -7,7 +7,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.styles import Font
 
-from blondswim.agents.pla_setmanal import ETIQUETA_ROL
+from blondswim.agents.pla_setmanal import ETIQUETA_ROL, etiquetes_parts
 from blondswim.models.franja import ETIQUETA_FRANJA, ETIQUETA_MODALITAT, ORDRE_FRANJA
 from blondswim.models.macrocicle import Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador
@@ -41,7 +41,7 @@ RUTINA_ESPATLLA: list[tuple[str, str]] = [
 ]
 
 _COLUMNES = [
-    "Dia", "Treball", "Execució", "Descans", "Material",
+    "Part", "Treball", "Execució", "Descans", "Material",
     "Intensitat", "Objectiu", "Temps (min)", "Volum (m)",
 ]
 
@@ -151,8 +151,12 @@ def _escriure_setmana(
         row_idx += 1
 
         volum_total_dia = 0
-        for part in sessio.estructura.parts:
-            for exercici in part.exercicis:
+        etiquetes = etiquetes_parts([(p.nom, p.bloc or p.nom) for p in sessio.estructura.parts])
+        for part, etiqueta in zip(sessio.estructura.parts, etiquetes, strict=True):
+            for i_ex, exercici in enumerate(part.exercicis):
+                if i_ex == 0:
+                    # Part de la sessió a la primera fila de cada part.
+                    ws.cell(row=row_idx, column=1, value=etiqueta).font = Font(bold=True)
                 treball = (
                     str(exercici.distancia_m)
                     if exercici.series == 1

@@ -282,3 +282,65 @@ def test_dofi_de_cames_no_compta_com_a_papallona():
          _ex(4, 25, "A1", "Papallona un braç")],
     )
     assert pla_setmanal.metres_papallona(s) == 100  # només els 4x25 de braços
+
+
+# --- Estructura de la sessió (bloc de cada part) ---
+
+
+def test_etiquetes_parts_numera_blocs_principals():
+    etiquetes = pla_setmanal.etiquetes_parts(
+        [
+            ("Escalfament", "Escalfament"),
+            ("Tècnica+Subaquàtic", "Tècnica"),
+            ("Qualitat", "Bloc principal"),
+            ("Aeròbic", "Bloc principal"),
+            ("Tornada a la calma", "Tornada a la calma"),
+        ]
+    )
+    assert etiquetes == [
+        "Escalfament",
+        "Tècnica+Subaquàtic",
+        "Bloc principal 1 — Qualitat",
+        "Bloc principal 2 — Aeròbic",
+        "Tornada a la calma",
+    ]
+
+
+def test_etiquetes_un_sol_bloc_principal_sense_numero():
+    etiquetes = pla_setmanal.etiquetes_parts(
+        [("Escalfament", "Escalfament"), ("Aeròbic", "Bloc principal")]
+    )
+    assert etiquetes[1] == "Bloc principal — Aeròbic"
+
+
+@pytest.mark.parametrize("rol", list(pla_setmanal.PARTS_ROL))
+def test_estructura_recomanada_per_rol(rol):
+    """Escalfament primer, tornada a la calma última, tècnica abans dels blocs principals."""
+    blocs = [pla_setmanal.bloc_part(nom) for nom, _ in pla_setmanal.PARTS_ROL[rol]]
+    assert None not in blocs
+    assert blocs[0] == "Escalfament"
+    assert blocs[-1] == "Tornada a la calma"
+    assert "Bloc principal" in blocs
+    if "Tècnica" in blocs:
+        assert blocs.index("Tècnica") < blocs.index("Bloc principal")
+
+
+def test_qualitat_i_velocitat_en_fresc():
+    """El treball exigent va just després de la tècnica (primer bloc principal)."""
+    def primer_principal(rol):
+        return next(
+            nom for nom, _ in pla_setmanal.PARTS_ROL[rol]
+            if pla_setmanal.bloc_part(nom) == "Bloc principal"
+        )
+
+    assert primer_principal("qualitat") == "Qualitat"
+    assert primer_principal("llarga") == "Velocitat alàctica"
+
+
+def test_esquelet_assigna_bloc_a_cada_part(nedador_plantilla):
+    nedador_plantilla.rutina_espatlla_dia = "dissabte"
+    sessions = generar_esquelet_sessions(nedador_plantilla, _microcicle())
+    for sessio in sessions:
+        assert all(p.bloc is not None for p in sessio.estructura.parts)
+    dimecres = next(s for s in sessions if s.dia == "dimecres")
+    assert [p.bloc for p in dimecres.estructura.parts][:2] == ["Escalfament", "Sèrie de control"]

@@ -397,3 +397,53 @@ def test_rutina_espatlla_no_el_dia_de_competicio(mesocicle_test, estructura_test
         nedador, mesocicle_test, microcicle_lliure, [s], tmp_path / "d.xlsx"
     )
     assert any(str(f[0]).startswith("Dissabte 10 — Descans") for f in _valors(path2))
+
+
+def test_columna_part_amb_el_bloc_de_cada_exercici(tmp_path):
+    """La primera fila de cada part porta l'etiqueta del bloc a la columna Part."""
+    from blondswim.agents.esquelet_sessions import generar_esquelet_sessions
+    from blondswim.models.nedador import RitmesCSS
+
+    nedador = Nedador(
+        id="jep",
+        nom="Jep",
+        categoria="master",
+        proves_objectiu=["100m lliure"],
+        mode_ritme="temps",
+        dies_disponibles=["dilluns", "dimarts", "dimecres", "dijous", "divendres"],
+        ritmes_css=RitmesCSS(font="css_test", a2=82.0),
+    )
+    microcicle = Microcicle(
+        setmana=41,
+        dates="05-11/10/2026",
+        mesocicle_id="meso_1",
+        tipus_base="carrega",
+        volum_objectiu=13600,
+        dies_qualitat=False,
+        test_css=False,
+    )
+    sessions = generar_esquelet_sessions(nedador, microcicle)
+    dimarts = next(s for s in sessions if s.dia == "dimarts")
+    for part in dimarts.estructura.parts:
+        part.exercicis = [
+            Exercici(series=2, distancia_m=100, execucio=f"{part.nom} a", intensitat="A1"),
+            Exercici(series=1, distancia_m=100, execucio=f"{part.nom} b", intensitat="A1"),
+        ]
+    mesocicle = Mesocicle(
+        id="meso_1", nom="M1 - Base", setmanes="41", dates="05-11/10/2026",
+        tipus="Base", fase_objectiu="Base", metodologia_dominant="Polaritzat",
+        volum_min=12000, volum_max=15000, volum_mitja_previst=13600,
+        microcicles=[microcicle],
+    )
+    path = exportar_setmana_excel(nedador, mesocicle, microcicle, [dimarts], tmp_path / "s.xlsx")
+    ws = openpyxl.load_workbook(path).active
+
+    assert ws.cell(row=3, column=1).value == "Part"
+    files = {ws.cell(row=r, column=3).value: ws.cell(row=r, column=1).value
+             for r in range(4, ws.max_row + 1)}
+    assert files["Escalfament a"] == "Escalfament"
+    assert files["Escalfament b"] is None
+    assert files["Tècnica+Subaquàtic a"] == "Tècnica+Subaquàtic"
+    assert files["Qualitat a"] == "Bloc principal 1 — Qualitat"
+    assert files["Aeròbic a"] == "Bloc principal 2 — Aeròbic"
+    assert files["Tornada a la calma a"] == "Tornada a la calma"

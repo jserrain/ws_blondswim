@@ -1017,7 +1017,10 @@ def generar_microcicle(
                 f"\n**Sessió: {sessio.dia.capitalize()} "
                 f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
             )
-            for part in sessio.estructura.parts:
+            etiquetes = pla_setmanal.etiquetes_parts(
+                [(p.nom, p.bloc) for p in sessio.estructura.parts]
+            )
+            for part, etiqueta in zip(sessio.estructura.parts, etiquetes, strict=True):
                 if part.fixa:
                     volum_fix = sum(ex.volum_m for ex in part.exercicis)
                     estructura_sessions_text += (
@@ -1032,7 +1035,10 @@ def generar_microcicle(
                 else:  # descarrega, taper, transicio
                     perc = part.percentatge_descarrega
                 volum_part = int(sessio.volum_total * perc / 100)
-                estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+                bloc = f" [{etiqueta}]" if part.bloc else ""
+                estructura_sessions_text += (
+                    f"  - {part.nom}{bloc}: {perc}% ({volum_part}m)\n"
+                )
 
             sessions_setmana_text = (
                 f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "

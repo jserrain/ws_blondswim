@@ -57,6 +57,8 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 
 1. **NO MODIFICAR** els percentatges de cap part de les sessions. Són fixos segons el tipus de setmana.
 
+   **ESTRUCTURA DE LA SESSIÓ:** les parts ja van en l'ordre recomanat (escalfament -> tècnica -> bloc o blocs principals -> tornada a la calma). Cada exercici ha d'anar a la part on toca segons el seu objectiu: l'escalfament només prepara (Recuperació/A1, progressius curts), la tècnica només porta exercicis tècnics i el seu nedar complet, cada bloc principal treballa NOMÉS el seu objectiu (el nom de la part), i la tornada a la calma és suau. No posis sèries principals a l'escalfament ni a la tornada a la calma.
+
 2. **CADA EXERCICI és una entrada estructurada, MAI text lliure:**
    - `series`: nombre enter de repeticions (ex: 4, 8, 1)
    - `distancia_m`: distància en metres, SEMPRE múltiple de 25 (25, 50, 75, 100, 150, 200...). MAI un valor com 15, 48, 52, 194 o 598. Els esforços més curts de 25m (p.ex. 15m subaquàtic) van DINS del camp `execucio` d'un exercici de 25m (ex: `"execucio": "15m subaquàtic + 10 suau"`, `"distancia_m": 25`).

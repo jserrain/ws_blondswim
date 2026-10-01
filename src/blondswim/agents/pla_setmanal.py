@@ -44,19 +44,23 @@ MARGE_RANG_SESSIO: float = 0.05
 # Metres per minut (amb descansos) per limitar el volum per temps de sessió.
 METRES_PER_MINUT: int = 40
 
-# Parts de cada rol: (nom, % del volum no fixat).
+# Parts de cada rol: (nom, % del volum no fixat), en l'ordre de l'estructura
+# recomanada: escalfament -> tècnica -> bloc(s) principal(s) -> tornada a la
+# calma. El treball més exigent (qualitat, velocitat) va just després de
+# l'escalfament i la tècnica, en estat fresc; el bloc secundari (aeròbic,
+# cames) després.
 PARTS_ROL: dict[str, list[tuple[str, float]]] = {
     "aerobica": [
-        ("Escalfament", 15), ("Tècnica", 15), ("Cames", 12), ("Aeròbic", 48),
+        ("Escalfament", 15), ("Tècnica", 15), ("Aeròbic", 48), ("Cames", 12),
         ("Tornada a la calma", 10),
     ],
     "llarga": [
-        ("Escalfament", 10), ("Tècnica", 10), ("Cames", 10), ("Aeròbic llarg", 55),
-        ("Velocitat alàctica", 5), ("Tornada a la calma", 10),
+        ("Escalfament", 10), ("Tècnica", 10), ("Velocitat alàctica", 5),
+        ("Aeròbic llarg", 55), ("Cames", 10), ("Tornada a la calma", 10),
     ],
     "qualitat": [
-        ("Escalfament", 15), ("Tècnica+Subaquàtic", 15), ("Aeròbic", 30),
-        ("Qualitat", 25), ("Tornada a la calma", 15),
+        ("Escalfament", 15), ("Tècnica+Subaquàtic", 15), ("Qualitat", 25),
+        ("Aeròbic", 30), ("Tornada a la calma", 15),
     ],
     "tecnica": [
         ("Escalfament", 15), ("Tècnica i papallona", 45), ("Cames", 15),
@@ -67,10 +71,60 @@ PARTS_ROL: dict[str, list[tuple[str, float]]] = {
         ("Nedar suau", 20), ("Tornada a la calma", 15),
     ],
     "recuperacio": [
-        ("Escalfament", 20), ("Tècnica suau", 20), ("Cames", 10),
-        ("Aeròbic suau amb canvis de ritme", 40), ("Tornada a la calma", 10),
+        ("Escalfament", 20), ("Tècnica suau", 20),
+        ("Aeròbic suau amb canvis de ritme", 40), ("Cames", 10),
+        ("Tornada a la calma", 10),
     ],
 }
+
+# Bloc de l'estructura de la sessió de cada part (pel seu nom). Al dia de
+# tècnica, la tècnica és el bloc principal.
+BLOC_PART: dict[str, str] = {
+    "Escalfament": "Escalfament",
+    "Tècnica": "Tècnica",
+    "Tècnica+Subaquàtic": "Tècnica",
+    "Tècnica i sortides": "Tècnica",
+    "Tècnica suau": "Tècnica",
+    "Tècnica i papallona": "Bloc principal",
+    "Cames": "Bloc principal",
+    "Aeròbic": "Bloc principal",
+    "Aeròbic llarg": "Bloc principal",
+    "Aeròbic suau amb canvis de ritme": "Bloc principal",
+    "Qualitat": "Bloc principal",
+    "Velocitat alàctica": "Bloc principal",
+    "Ritme de cursa": "Bloc principal",
+    "Nedar suau": "Bloc principal",
+    "Tornada a la calma": "Tornada a la calma",
+    # Esquelet antic (5 parts estàndard).
+    "Aeròbic/Llindar": "Bloc principal",
+    "Específic/Qualitat": "Bloc principal",
+}
+
+
+def bloc_part(nom: str) -> str | None:
+    """Bloc de l'estructura de la sessió d'una part (None si no es coneix)."""
+    return BLOC_PART.get(nom)
+
+
+def etiquetes_parts(noms_blocs: list[tuple[str, str | None]]) -> list[str]:
+    """
+    Etiqueta de cada part per a l'Excel i el prompt: el bloc i, per als blocs
+    principals, el número (si n'hi ha més d'un) i el nom de la part.
+    Exemple: "Bloc principal 1 — Qualitat".
+    """
+    n_principals = sum(1 for _, bloc in noms_blocs if bloc == "Bloc principal")
+    etiquetes = []
+    i = 0
+    for nom, bloc in noms_blocs:
+        if bloc == "Bloc principal":
+            i += 1
+            numero = f" {i}" if n_principals > 1 else ""
+            etiquetes.append(f"Bloc principal{numero} — {nom}")
+        elif bloc == "Tècnica":
+            etiquetes.append(nom)  # "Tècnica", "Tècnica+Subaquàtic", "Tècnica suau"...
+        else:
+            etiquetes.append(bloc or nom)
+    return etiquetes
 
 ETIQUETA_ROL: dict[str, str] = {
     "aerobica": "Aeròbic i tècnica",
@@ -135,10 +189,10 @@ _DESCRIPCIO_ROL: dict[str, str] = {
         "Sense velocitat ni làctic."
     ),
     "llarga": (
-        "Aeròbica llarga: sèries llargues A1/A2 amb el mateix nombre de braçades per "
-        "llargada i viratge a totes les parets, també al final de les sèries. Al "
-        "final, una dosi curta de velocitat alàctica (4-6 x 15-25 m, recuperació "
-        "completa, d/45\" o més)."
+        "Aeròbica llarga: primer, en fresc després de la tècnica, una dosi curta de "
+        "velocitat alàctica (4-6 x 15-25 m, recuperació completa, d/45\" o més); "
+        "després sèries llargues A1/A2 amb el mateix nombre de braçades per llargada "
+        "i viratge a totes les parets, també al final de les sèries."
     ),
     "tecnica": (
         "Tècnica en estat fresc (volum baix): exercicis de tècnica i cames en "
@@ -267,6 +321,7 @@ def part_serie_control(nedador: Nedador) -> PartSessio:
     """Part fixa amb la sèrie de control setmanal (4x100 crol A2)."""
     return PartSessio(
         nom=NOM_SERIE_CONTROL,
+        bloc="Sèrie de control",
         percentatge_carrega=0,
         percentatge_qualitat=0,
         percentatge_descarrega=0,
