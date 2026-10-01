@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
+from blondswim.models.franja import Franja, Modalitat
+
 
 class Exercici(BaseModel):
     """
@@ -82,3 +84,8 @@ class Sessio(BaseModel):
     volum_max: int | None = None
     # Ids de la biblioteca de tècnica que la sessió ha d'incloure.
     exercicis_tecnica: list[str] = []
+    # Franja i modalitat (Fase E+I). Les sessions de gimnàs són informatives:
+    # sense parts ni contingut LLM, amb durada_min i volum_total = 0.
+    franja: Franja = "tarda"
+    modalitat: Modalitat = "natacio"
+    durada_min: int | None = None

@@ -1,6 +1,14 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+
+from blondswim.models.franja import (
+    DIES_SETMANA,
+    FRANJA_PER_DEFECTE,
+    MAX_SESSIONS_DIA,
+    ORDRE_FRANJA,
+    SlotSessio,
+)
 
 
 class RitmesCSS(BaseModel):
@@ -81,3 +89,49 @@ class Nedador(BaseModel):
     rutina_espatlla_dia: str | None = None
     # Famílies de la biblioteca de tècnica a prioritzar (punts febles del nedador).
     prioritats_tecniques: list[str] = []
+    # Setmana tipus (Fase E+I): per a cada dia, les sessions previstes per franja
+    # (màxim 3 al dia, una per franja; com a molt una de natació). Si hi és,
+    # dies_disponibles es deriva d'aquí (dies amb sessió de natació).
+    setmana_tipus: dict[str, list[SlotSessio]] | None = None
+
+    @model_validator(mode="after")
+    def _validar_setmana_tipus(self) -> "Nedador":
+        if self.setmana_tipus is None:
+            return self
+        for dia, slots in self.setmana_tipus.items():
+            if dia not in DIES_SETMANA:
+                raise ValueError(f"setmana_tipus: dia desconegut '{dia}'")
+            if len(slots) > MAX_SESSIONS_DIA:
+                raise ValueError(
+                    f"setmana_tipus: {dia} té {len(slots)} sessions "
+                    f"(màxim {MAX_SESSIONS_DIA})"
+                )
+            franges = [s.franja for s in slots]
+            if len(set(franges)) != len(franges):
+                raise ValueError(f"setmana_tipus: {dia} té dues sessions a la mateixa franja")
+            if sum(1 for s in slots if s.modalitat == "natacio") > 1:
+                raise ValueError(
+                    f"setmana_tipus: {dia} té més d'una sessió de natació "
+                    "(encara no suportat)"
+                )
+        self.dies_disponibles = [
+            dia
+            for dia in DIES_SETMANA
+            if any(s.modalitat == "natacio" for s in self.setmana_tipus.get(dia, []))
+        ]
+        return self
+
+    def slots_dia(self, dia: str) -> list[SlotSessio]:
+        """Sessions previstes un dia, ordenades per franja."""
+        if self.setmana_tipus is None:
+            if dia in self.dies_disponibles:
+                return [SlotSessio(franja=FRANJA_PER_DEFECTE, modalitat="natacio")]
+            return []
+        return sorted(self.setmana_tipus.get(dia, []), key=lambda s: ORDRE_FRANJA[s.franja])
+
+    def franja_natacio(self, dia: str) -> str:
+        """Franja de la sessió de natació d'un dia (per defecte, tarda)."""
+        for slot in self.slots_dia(dia):
+            if slot.modalitat == "natacio":
+                return slot.franja
+        return FRANJA_PER_DEFECTE
