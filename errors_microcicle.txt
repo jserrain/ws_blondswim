@@ -1,0 +1,2677 @@
+F..F...................FF.FF..F....                                      [100%]
+=================================== FAILURES ===================================
+________________ test_omple_contingut_sense_tocar_percentatges _________________
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = []
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+>               response = _cridar_api_sessio(client, prompt, tools)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/blondswim/agents/generar_microcicle.py:901: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/blondswim/agents/generar_microcicle.py:706: in _cridar_api_sessio
+    return client.messages.create(
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='mock.messages.create' id='4444648720'>, args = ()
+kwargs = {'model': 'claude-sonnet-5', 'max_tokens': 4096, 'tools': [{'name': 'retornar_contingut_sessio', 'description': "Retor... 'items': {...}}}, 'required': ['parts']}}], 'tool_choice': {'type': 'tool', 'name': 'retornar_contingut_sessio'}, ...}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1185: StopIteration
+
+The above exception was the direct cause of the following exception:
+
+nedador_test = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+metodologia_test = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+sessions_test = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+
+    def test_omple_contingut_sense_tocar_percentatges(
+        nedador_test, metodologia_test, sessions_test
+    ):
+        """Mock retorna contingut vàlid; verifica que només contingut canvia."""
+        # Guardar valors originals
+        originals = []
+        for sessio in sessions_test:
+            for part in sessio.estructura.parts:
+                originals.append({
+                    "sessio_id": sessio.id,
+                    "nom": part.nom,
+                    "perc_carrega": part.percentatge_carrega,
+                    "perc_qualitat": part.percentatge_qualitat,
+                    "perc_descarrega": part.percentatge_descarrega,
+                    "volum_total": sessio.volum_total,
+                    "tipus_sessio": sessio.tipus_sessio,
+                    "dia": sessio.dia,
+                })
+    
+        # Mock: una resposta per sessió
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            _tool_use_sessio(s) for s in sessions_test
+        ]
+    
+        with patch(
+            "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+        ):
+>           resultat = generar_microcicle(
+                nedador_test, sessions_test, metodologia_test, historial=[]
+            )
+
+tests/agents/test_generar_microcicle.py:142: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = []
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+                response = _cridar_api_sessio(client, prompt, tools)
+                usage = getattr(response, "usage", None)
+                output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                logger.info(
+                    f"Resposta API setmana {setmana}, sessió '{sessio.id}': "
+                    f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                    f"max_tokens={MAX_TOKENS_SESSIO}"
+                )
+    
+                # Retry si s'ha truncat per max_tokens
+                if response.stop_reason == "max_tokens":
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta truncada "
+                        f"(max_tokens). Reintentant amb instrucció de concisió."
+                    )
+                    prompt_concis = (
+                        prompt
+                        + "\n\nIMPORTANT: sigues més concís: màxim 3 exercicis per part."
+                    )
+                    response = _cridar_api_sessio(client, prompt_concis, tools)
+                    usage = getattr(response, "usage", None)
+                    output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                    logger.info(
+                        f"Resposta API (retry) setmana {setmana}, sessió '{sessio.id}': "
+                        f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                        f"max_tokens={MAX_TOKENS_SESSIO}"
+                    )
+                    if response.stop_reason == "max_tokens":
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': truncada de nou "
+                            f"després del retry. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                sessio_data = _extreure_tool_use_sessio(response)
+                if not sessio_data:
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta sense tool "
+                        f"use 'retornar_contingut_sessio'. Es deixa la sessió buida."
+                    )
+                    continue
+    
+                if not _extreure_parts(sessio_data):
+                    logger.info(
+                        f"Setmana {setmana}, sessió '{sessio.id}': 'parts' buit o absent. "
+                        f"Claus rebudes: {list(sessio_data.keys())}. Reintentant."
+                    )
+                    response = _cridar_api_sessio(client, prompt, tools)
+                    sessio_data = _extreure_tool_use_sessio(response)
+                    if not sessio_data or not _extreure_parts(sessio_data):
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': 'parts' encara "
+                            f"buit després del reintent. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+                # Verificar volum dins el rang flexible (amb marge del 10%)
+                volum_sessio = sum(
+                    ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
+                )
+                if sessio.volum_min is not None and sessio.volum_max is not None:
+                    fora_rang = (
+                        volum_sessio < sessio.volum_min * 0.9
+                        or volum_sessio > sessio.volum_max * 1.1
+                    )
+                    if fora_rang:
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': volum generat "
+                            f"{volum_sessio}m fora del rang "
+                            f"[{sessio.volum_min}, {sessio.volum_max}]m. Reintentant."
+                        )
+                        prompt_volum = (
+                            prompt
+                            + f"\n\nEl volum ha estat {volum_sessio} m; ha d'estar "
+                            f"entre {sessio.volum_min} i {sessio.volum_max} m."
+                        )
+                        response = _cridar_api_sessio(client, prompt_volum, tools)
+                        sessio_data = _extreure_tool_use_sessio(response)
+                        if sessio_data and _extreure_parts(sessio_data):
+                            _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+            # Verificar que totes les parts tenen contingut (advertir si no)
+            for sessio in sessions:
+                for part in sessio.estructura.parts:
+                    if not part.exercicis:
+                        logger.warning(
+                            f"Part '{part.nom}' de sessió '{sessio.id}' sense contingut assignat"
+                        )
+    
+            # Log de resum de la setmana
+            sessions_sense_contingut = [
+                s for s in sessions
+                if not any(part.exercicis for part in s.estructura.parts)
+            ]
+            if sessions_sense_contingut:
+                logger.warning(
+                    f"Setmana {setmana}: {len(sessions_sense_contingut)} sessions sense contingut"
+                )
+            else:
+                logger.info(f"Setmana {setmana} generada correctament")
+    
+            return sessions
+    
+        except GeneracioMicrocicleError:
+            # Re-llançar errors propis
+            raise
+        except Exception as e:
+            # Embolicar qualsevol altre error
+>           raise GeneracioMicrocicleError(
+                f"Error en generar contingut de microcicle: {e}"
+            ) from e
+E           blondswim.agents.generar_microcicle.GeneracioMicrocicleError: Error en generar contingut de microcicle:
+
+src/blondswim/agents/generar_microcicle.py:1011: GeneracioMicrocicleError
+------------------------------ Captured log call -------------------------------
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dilluns': volum generat 1000m fora del rang [3300, 3850]m. Reintentant.
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dimarts': volum generat 1000m fora del rang [3075, 3525]m. Reintentant.
+_________________________ test_few_shot_buit_no_trenca _________________________
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...ntensitat='A1', objectiu='Test')])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = []
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+>               response = _cridar_api_sessio(client, prompt, tools)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/blondswim/agents/generar_microcicle.py:901: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/blondswim/agents/generar_microcicle.py:706: in _cridar_api_sessio
+    return client.messages.create(
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='mock.messages.create' id='4445775120'>, args = ()
+kwargs = {'model': 'claude-sonnet-5', 'max_tokens': 4096, 'tools': [{'name': 'retornar_contingut_sessio', 'description': "Retor... 'items': {...}}}, 'required': ['parts']}}], 'tool_choice': {'type': 'tool', 'name': 'retornar_contingut_sessio'}, ...}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1185: StopIteration
+
+The above exception was the direct cause of the following exception:
+
+nedador_test = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+metodologia_test = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+sessions_test = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...ntensitat='A1', objectiu='Test')])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+
+    def test_few_shot_buit_no_trenca(nedador_test, metodologia_test, sessions_test):
+        """historial=None o []; verifica que no peta i crida l'API amb prompt vàlid."""
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            _tool_use_sessio(s) for s in sessions_test
+        ] * 2
+    
+        with patch(
+            "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+        ):
+            # Amb historial=None
+            generar_microcicle(nedador_test, sessions_test, metodologia_test, historial=None)
+    
+            # Amb historial=[]
+>           generar_microcicle(nedador_test, sessions_test, metodologia_test, historial=[])
+
+tests/agents/test_generar_microcicle.py:260: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...ntensitat='A1', objectiu='Test')])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = []
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+                response = _cridar_api_sessio(client, prompt, tools)
+                usage = getattr(response, "usage", None)
+                output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                logger.info(
+                    f"Resposta API setmana {setmana}, sessió '{sessio.id}': "
+                    f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                    f"max_tokens={MAX_TOKENS_SESSIO}"
+                )
+    
+                # Retry si s'ha truncat per max_tokens
+                if response.stop_reason == "max_tokens":
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta truncada "
+                        f"(max_tokens). Reintentant amb instrucció de concisió."
+                    )
+                    prompt_concis = (
+                        prompt
+                        + "\n\nIMPORTANT: sigues més concís: màxim 3 exercicis per part."
+                    )
+                    response = _cridar_api_sessio(client, prompt_concis, tools)
+                    usage = getattr(response, "usage", None)
+                    output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                    logger.info(
+                        f"Resposta API (retry) setmana {setmana}, sessió '{sessio.id}': "
+                        f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                        f"max_tokens={MAX_TOKENS_SESSIO}"
+                    )
+                    if response.stop_reason == "max_tokens":
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': truncada de nou "
+                            f"després del retry. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                sessio_data = _extreure_tool_use_sessio(response)
+                if not sessio_data:
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta sense tool "
+                        f"use 'retornar_contingut_sessio'. Es deixa la sessió buida."
+                    )
+                    continue
+    
+                if not _extreure_parts(sessio_data):
+                    logger.info(
+                        f"Setmana {setmana}, sessió '{sessio.id}': 'parts' buit o absent. "
+                        f"Claus rebudes: {list(sessio_data.keys())}. Reintentant."
+                    )
+                    response = _cridar_api_sessio(client, prompt, tools)
+                    sessio_data = _extreure_tool_use_sessio(response)
+                    if not sessio_data or not _extreure_parts(sessio_data):
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': 'parts' encara "
+                            f"buit després del reintent. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+                # Verificar volum dins el rang flexible (amb marge del 10%)
+                volum_sessio = sum(
+                    ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
+                )
+                if sessio.volum_min is not None and sessio.volum_max is not None:
+                    fora_rang = (
+                        volum_sessio < sessio.volum_min * 0.9
+                        or volum_sessio > sessio.volum_max * 1.1
+                    )
+                    if fora_rang:
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': volum generat "
+                            f"{volum_sessio}m fora del rang "
+                            f"[{sessio.volum_min}, {sessio.volum_max}]m. Reintentant."
+                        )
+                        prompt_volum = (
+                            prompt
+                            + f"\n\nEl volum ha estat {volum_sessio} m; ha d'estar "
+                            f"entre {sessio.volum_min} i {sessio.volum_max} m."
+                        )
+                        response = _cridar_api_sessio(client, prompt_volum, tools)
+                        sessio_data = _extreure_tool_use_sessio(response)
+                        if sessio_data and _extreure_parts(sessio_data):
+                            _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+            # Verificar que totes les parts tenen contingut (advertir si no)
+            for sessio in sessions:
+                for part in sessio.estructura.parts:
+                    if not part.exercicis:
+                        logger.warning(
+                            f"Part '{part.nom}' de sessió '{sessio.id}' sense contingut assignat"
+                        )
+    
+            # Log de resum de la setmana
+            sessions_sense_contingut = [
+                s for s in sessions
+                if not any(part.exercicis for part in s.estructura.parts)
+            ]
+            if sessions_sense_contingut:
+                logger.warning(
+                    f"Setmana {setmana}: {len(sessions_sense_contingut)} sessions sense contingut"
+                )
+            else:
+                logger.info(f"Setmana {setmana} generada correctament")
+    
+            return sessions
+    
+        except GeneracioMicrocicleError:
+            # Re-llançar errors propis
+            raise
+        except Exception as e:
+            # Embolicar qualsevol altre error
+>           raise GeneracioMicrocicleError(
+                f"Error en generar contingut de microcicle: {e}"
+            ) from e
+E           blondswim.agents.generar_microcicle.GeneracioMicrocicleError: Error en generar contingut de microcicle:
+
+src/blondswim/agents/generar_microcicle.py:1011: GeneracioMicrocicleError
+------------------------------ Captured log call -------------------------------
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dilluns': volum generat 1000m fora del rang [3300, 3850]m. Reintentant.
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dimarts': volum generat 1000m fora del rang [3075, 3525]m. Reintentant.
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dimecres': volum generat 1000m fora del rang [3300, 3850]m. Reintentant.
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dijous': volum generat 1000m fora del rang [4175, 4500]m. Reintentant.
+__________________________ test_una_crida_per_sessio ___________________________
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = None
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+>               response = _cridar_api_sessio(client, prompt, tools)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/blondswim/agents/generar_microcicle.py:901: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/blondswim/agents/generar_microcicle.py:706: in _cridar_api_sessio
+    return client.messages.create(
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='mock.messages.create' id='4446538704'>, args = ()
+kwargs = {'model': 'claude-sonnet-5', 'max_tokens': 4096, 'tools': [{'name': 'retornar_contingut_sessio', 'description': "Retor... 'items': {...}}}, 'required': ['parts']}}], 'tool_choice': {'type': 'tool', 'name': 'retornar_contingut_sessio'}, ...}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1185: StopIteration
+
+The above exception was the direct cause of the following exception:
+
+nedador_test = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+metodologia_test = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+sessions_test = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+
+    def test_una_crida_per_sessio(nedador_test, metodologia_test, sessions_test):
+        """Es fa exactament una crida a l'API per cada sessió de la setmana."""
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            _tool_use_sessio(s) for s in sessions_test
+        ]
+    
+        with patch(
+            "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+        ):
+>           resultat = generar_microcicle(nedador_test, sessions_test, metodologia_test)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/agents/test_generar_microcicle.py:1320: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = None
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+                response = _cridar_api_sessio(client, prompt, tools)
+                usage = getattr(response, "usage", None)
+                output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                logger.info(
+                    f"Resposta API setmana {setmana}, sessió '{sessio.id}': "
+                    f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                    f"max_tokens={MAX_TOKENS_SESSIO}"
+                )
+    
+                # Retry si s'ha truncat per max_tokens
+                if response.stop_reason == "max_tokens":
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta truncada "
+                        f"(max_tokens). Reintentant amb instrucció de concisió."
+                    )
+                    prompt_concis = (
+                        prompt
+                        + "\n\nIMPORTANT: sigues més concís: màxim 3 exercicis per part."
+                    )
+                    response = _cridar_api_sessio(client, prompt_concis, tools)
+                    usage = getattr(response, "usage", None)
+                    output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                    logger.info(
+                        f"Resposta API (retry) setmana {setmana}, sessió '{sessio.id}': "
+                        f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                        f"max_tokens={MAX_TOKENS_SESSIO}"
+                    )
+                    if response.stop_reason == "max_tokens":
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': truncada de nou "
+                            f"després del retry. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                sessio_data = _extreure_tool_use_sessio(response)
+                if not sessio_data:
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta sense tool "
+                        f"use 'retornar_contingut_sessio'. Es deixa la sessió buida."
+                    )
+                    continue
+    
+                if not _extreure_parts(sessio_data):
+                    logger.info(
+                        f"Setmana {setmana}, sessió '{sessio.id}': 'parts' buit o absent. "
+                        f"Claus rebudes: {list(sessio_data.keys())}. Reintentant."
+                    )
+                    response = _cridar_api_sessio(client, prompt, tools)
+                    sessio_data = _extreure_tool_use_sessio(response)
+                    if not sessio_data or not _extreure_parts(sessio_data):
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': 'parts' encara "
+                            f"buit després del reintent. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+                # Verificar volum dins el rang flexible (amb marge del 10%)
+                volum_sessio = sum(
+                    ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
+                )
+                if sessio.volum_min is not None and sessio.volum_max is not None:
+                    fora_rang = (
+                        volum_sessio < sessio.volum_min * 0.9
+                        or volum_sessio > sessio.volum_max * 1.1
+                    )
+                    if fora_rang:
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': volum generat "
+                            f"{volum_sessio}m fora del rang "
+                            f"[{sessio.volum_min}, {sessio.volum_max}]m. Reintentant."
+                        )
+                        prompt_volum = (
+                            prompt
+                            + f"\n\nEl volum ha estat {volum_sessio} m; ha d'estar "
+                            f"entre {sessio.volum_min} i {sessio.volum_max} m."
+                        )
+                        response = _cridar_api_sessio(client, prompt_volum, tools)
+                        sessio_data = _extreure_tool_use_sessio(response)
+                        if sessio_data and _extreure_parts(sessio_data):
+                            _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+            # Verificar que totes les parts tenen contingut (advertir si no)
+            for sessio in sessions:
+                for part in sessio.estructura.parts:
+                    if not part.exercicis:
+                        logger.warning(
+                            f"Part '{part.nom}' de sessió '{sessio.id}' sense contingut assignat"
+                        )
+    
+            # Log de resum de la setmana
+            sessions_sense_contingut = [
+                s for s in sessions
+                if not any(part.exercicis for part in s.estructura.parts)
+            ]
+            if sessions_sense_contingut:
+                logger.warning(
+                    f"Setmana {setmana}: {len(sessions_sense_contingut)} sessions sense contingut"
+                )
+            else:
+                logger.info(f"Setmana {setmana} generada correctament")
+    
+            return sessions
+    
+        except GeneracioMicrocicleError:
+            # Re-llançar errors propis
+            raise
+        except Exception as e:
+            # Embolicar qualsevol altre error
+>           raise GeneracioMicrocicleError(
+                f"Error en generar contingut de microcicle: {e}"
+            ) from e
+E           blondswim.agents.generar_microcicle.GeneracioMicrocicleError: Error en generar contingut de microcicle:
+
+src/blondswim/agents/generar_microcicle.py:1011: GeneracioMicrocicleError
+------------------------------ Captured log call -------------------------------
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dilluns': volum generat 1000m fora del rang [3300, 3850]m. Reintentant.
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dimarts': volum generat 1000m fora del rang [3075, 3525]m. Reintentant.
+___________________________ test_retry_en_max_tokens ___________________________
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...tensitat='A1', objectiu='Test')])]), es_dia_opcional=False, notes=None, rol='mitjana', volum_min=3300, volum_max=3850)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = None
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+                response = _cridar_api_sessio(client, prompt, tools)
+                usage = getattr(response, "usage", None)
+                output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                logger.info(
+                    f"Resposta API setmana {setmana}, sessió '{sessio.id}': "
+                    f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                    f"max_tokens={MAX_TOKENS_SESSIO}"
+                )
+    
+                # Retry si s'ha truncat per max_tokens
+                if response.stop_reason == "max_tokens":
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta truncada "
+                        f"(max_tokens). Reintentant amb instrucció de concisió."
+                    )
+                    prompt_concis = (
+                        prompt
+                        + "\n\nIMPORTANT: sigues més concís: màxim 3 exercicis per part."
+                    )
+                    response = _cridar_api_sessio(client, prompt_concis, tools)
+                    usage = getattr(response, "usage", None)
+                    output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                    logger.info(
+                        f"Resposta API (retry) setmana {setmana}, sessió '{sessio.id}': "
+                        f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                        f"max_tokens={MAX_TOKENS_SESSIO}"
+                    )
+                    if response.stop_reason == "max_tokens":
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': truncada de nou "
+                            f"després del retry. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                sessio_data = _extreure_tool_use_sessio(response)
+                if not sessio_data:
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta sense tool "
+                        f"use 'retornar_contingut_sessio'. Es deixa la sessió buida."
+                    )
+                    continue
+    
+                if not _extreure_parts(sessio_data):
+                    logger.info(
+                        f"Setmana {setmana}, sessió '{sessio.id}': 'parts' buit o absent. "
+                        f"Claus rebudes: {list(sessio_data.keys())}. Reintentant."
+                    )
+                    response = _cridar_api_sessio(client, prompt, tools)
+                    sessio_data = _extreure_tool_use_sessio(response)
+                    if not sessio_data or not _extreure_parts(sessio_data):
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': 'parts' encara "
+                            f"buit després del reintent. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+                # Verificar volum dins el rang flexible (amb marge del 10%)
+                volum_sessio = sum(
+                    ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
+                )
+                if sessio.volum_min is not None and sessio.volum_max is not None:
+                    fora_rang = (
+                        volum_sessio < sessio.volum_min * 0.9
+                        or volum_sessio > sessio.volum_max * 1.1
+                    )
+                    if fora_rang:
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': volum generat "
+                            f"{volum_sessio}m fora del rang "
+                            f"[{sessio.volum_min}, {sessio.volum_max}]m. Reintentant."
+                        )
+                        prompt_volum = (
+                            prompt
+                            + f"\n\nEl volum ha estat {volum_sessio} m; ha d'estar "
+                            f"entre {sessio.volum_min} i {sessio.volum_max} m."
+                        )
+>                       response = _cridar_api_sessio(client, prompt_volum, tools)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/blondswim/agents/generar_microcicle.py:979: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/blondswim/agents/generar_microcicle.py:706: in _cridar_api_sessio
+    return client.messages.create(
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='mock.messages.create' id='4445738320'>, args = ()
+kwargs = {'model': 'claude-sonnet-5', 'max_tokens': 4096, 'tools': [{'name': 'retornar_contingut_sessio', 'description': "Retor... 'items': {...}}}, 'required': ['parts']}}], 'tool_choice': {'type': 'tool', 'name': 'retornar_contingut_sessio'}, ...}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1185: StopIteration
+
+The above exception was the direct cause of the following exception:
+
+nedador_test = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+metodologia_test = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+sessions_test = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+
+    def test_retry_en_max_tokens(nedador_test, metodologia_test, sessions_test):
+        """Si stop_reason == 'max_tokens', es reintenta una vegada amb concisió."""
+        sessions = sessions_test[:1]
+    
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            _tool_use_sessio(sessions[0], stop_reason="max_tokens"),
+            _tool_use_sessio(sessions[0], stop_reason="tool_use"),
+        ]
+    
+        with patch(
+            "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+        ):
+>           resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/agents/test_generar_microcicle.py:1342: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...tensitat='A1', objectiu='Test')])]), es_dia_opcional=False, notes=None, rol='mitjana', volum_min=3300, volum_max=3850)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = None
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+                response = _cridar_api_sessio(client, prompt, tools)
+                usage = getattr(response, "usage", None)
+                output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                logger.info(
+                    f"Resposta API setmana {setmana}, sessió '{sessio.id}': "
+                    f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                    f"max_tokens={MAX_TOKENS_SESSIO}"
+                )
+    
+                # Retry si s'ha truncat per max_tokens
+                if response.stop_reason == "max_tokens":
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta truncada "
+                        f"(max_tokens). Reintentant amb instrucció de concisió."
+                    )
+                    prompt_concis = (
+                        prompt
+                        + "\n\nIMPORTANT: sigues més concís: màxim 3 exercicis per part."
+                    )
+                    response = _cridar_api_sessio(client, prompt_concis, tools)
+                    usage = getattr(response, "usage", None)
+                    output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                    logger.info(
+                        f"Resposta API (retry) setmana {setmana}, sessió '{sessio.id}': "
+                        f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                        f"max_tokens={MAX_TOKENS_SESSIO}"
+                    )
+                    if response.stop_reason == "max_tokens":
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': truncada de nou "
+                            f"després del retry. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                sessio_data = _extreure_tool_use_sessio(response)
+                if not sessio_data:
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta sense tool "
+                        f"use 'retornar_contingut_sessio'. Es deixa la sessió buida."
+                    )
+                    continue
+    
+                if not _extreure_parts(sessio_data):
+                    logger.info(
+                        f"Setmana {setmana}, sessió '{sessio.id}': 'parts' buit o absent. "
+                        f"Claus rebudes: {list(sessio_data.keys())}. Reintentant."
+                    )
+                    response = _cridar_api_sessio(client, prompt, tools)
+                    sessio_data = _extreure_tool_use_sessio(response)
+                    if not sessio_data or not _extreure_parts(sessio_data):
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': 'parts' encara "
+                            f"buit després del reintent. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+                # Verificar volum dins el rang flexible (amb marge del 10%)
+                volum_sessio = sum(
+                    ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
+                )
+                if sessio.volum_min is not None and sessio.volum_max is not None:
+                    fora_rang = (
+                        volum_sessio < sessio.volum_min * 0.9
+                        or volum_sessio > sessio.volum_max * 1.1
+                    )
+                    if fora_rang:
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': volum generat "
+                            f"{volum_sessio}m fora del rang "
+                            f"[{sessio.volum_min}, {sessio.volum_max}]m. Reintentant."
+                        )
+                        prompt_volum = (
+                            prompt
+                            + f"\n\nEl volum ha estat {volum_sessio} m; ha d'estar "
+                            f"entre {sessio.volum_min} i {sessio.volum_max} m."
+                        )
+                        response = _cridar_api_sessio(client, prompt_volum, tools)
+                        sessio_data = _extreure_tool_use_sessio(response)
+                        if sessio_data and _extreure_parts(sessio_data):
+                            _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+            # Verificar que totes les parts tenen contingut (advertir si no)
+            for sessio in sessions:
+                for part in sessio.estructura.parts:
+                    if not part.exercicis:
+                        logger.warning(
+                            f"Part '{part.nom}' de sessió '{sessio.id}' sense contingut assignat"
+                        )
+    
+            # Log de resum de la setmana
+            sessions_sense_contingut = [
+                s for s in sessions
+                if not any(part.exercicis for part in s.estructura.parts)
+            ]
+            if sessions_sense_contingut:
+                logger.warning(
+                    f"Setmana {setmana}: {len(sessions_sense_contingut)} sessions sense contingut"
+                )
+            else:
+                logger.info(f"Setmana {setmana} generada correctament")
+    
+            return sessions
+    
+        except GeneracioMicrocicleError:
+            # Re-llançar errors propis
+            raise
+        except Exception as e:
+            # Embolicar qualsevol altre error
+>           raise GeneracioMicrocicleError(
+                f"Error en generar contingut de microcicle: {e}"
+            ) from e
+E           blondswim.agents.generar_microcicle.GeneracioMicrocicleError: Error en generar contingut de microcicle:
+
+src/blondswim/agents/generar_microcicle.py:1011: GeneracioMicrocicleError
+------------------------------ Captured log call -------------------------------
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:912 Setmana 1, sessió 'meso1_s1_dilluns': resposta truncada (max_tokens). Reintentant amb instrucció de concisió.
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dilluns': volum generat 1000m fora del rang [3300, 3850]m. Reintentant.
+__________________________ test_rol_i_rang_al_prompt ___________________________
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = None
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+>               response = _cridar_api_sessio(client, prompt, tools)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/blondswim/agents/generar_microcicle.py:901: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/blondswim/agents/generar_microcicle.py:706: in _cridar_api_sessio
+    return client.messages.create(
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='mock.messages.create' id='4445677264'>, args = ()
+kwargs = {'model': 'claude-sonnet-5', 'max_tokens': 4096, 'tools': [{'name': 'retornar_contingut_sessio', 'description': "Retor... 'items': {...}}}, 'required': ['parts']}}], 'tool_choice': {'type': 'tool', 'name': 'retornar_contingut_sessio'}, ...}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1185: StopIteration
+
+The above exception was the direct cause of the following exception:
+
+nedador_test = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+metodologia_test = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+sessions_test = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+
+    def test_rol_i_rang_al_prompt(nedador_test, metodologia_test, sessions_test):
+        """El prompt inclou el rol i el rang de volum de la sessió."""
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            _tool_use_sessio(s) for s in sessions_test
+        ]
+    
+        with patch(
+            "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+        ):
+>           generar_microcicle(nedador_test, sessions_test, metodologia_test)
+
+tests/agents/test_generar_microcicle.py:1384: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = None
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+                response = _cridar_api_sessio(client, prompt, tools)
+                usage = getattr(response, "usage", None)
+                output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                logger.info(
+                    f"Resposta API setmana {setmana}, sessió '{sessio.id}': "
+                    f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                    f"max_tokens={MAX_TOKENS_SESSIO}"
+                )
+    
+                # Retry si s'ha truncat per max_tokens
+                if response.stop_reason == "max_tokens":
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta truncada "
+                        f"(max_tokens). Reintentant amb instrucció de concisió."
+                    )
+                    prompt_concis = (
+                        prompt
+                        + "\n\nIMPORTANT: sigues més concís: màxim 3 exercicis per part."
+                    )
+                    response = _cridar_api_sessio(client, prompt_concis, tools)
+                    usage = getattr(response, "usage", None)
+                    output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                    logger.info(
+                        f"Resposta API (retry) setmana {setmana}, sessió '{sessio.id}': "
+                        f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                        f"max_tokens={MAX_TOKENS_SESSIO}"
+                    )
+                    if response.stop_reason == "max_tokens":
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': truncada de nou "
+                            f"després del retry. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                sessio_data = _extreure_tool_use_sessio(response)
+                if not sessio_data:
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta sense tool "
+                        f"use 'retornar_contingut_sessio'. Es deixa la sessió buida."
+                    )
+                    continue
+    
+                if not _extreure_parts(sessio_data):
+                    logger.info(
+                        f"Setmana {setmana}, sessió '{sessio.id}': 'parts' buit o absent. "
+                        f"Claus rebudes: {list(sessio_data.keys())}. Reintentant."
+                    )
+                    response = _cridar_api_sessio(client, prompt, tools)
+                    sessio_data = _extreure_tool_use_sessio(response)
+                    if not sessio_data or not _extreure_parts(sessio_data):
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': 'parts' encara "
+                            f"buit després del reintent. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+                # Verificar volum dins el rang flexible (amb marge del 10%)
+                volum_sessio = sum(
+                    ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
+                )
+                if sessio.volum_min is not None and sessio.volum_max is not None:
+                    fora_rang = (
+                        volum_sessio < sessio.volum_min * 0.9
+                        or volum_sessio > sessio.volum_max * 1.1
+                    )
+                    if fora_rang:
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': volum generat "
+                            f"{volum_sessio}m fora del rang "
+                            f"[{sessio.volum_min}, {sessio.volum_max}]m. Reintentant."
+                        )
+                        prompt_volum = (
+                            prompt
+                            + f"\n\nEl volum ha estat {volum_sessio} m; ha d'estar "
+                            f"entre {sessio.volum_min} i {sessio.volum_max} m."
+                        )
+                        response = _cridar_api_sessio(client, prompt_volum, tools)
+                        sessio_data = _extreure_tool_use_sessio(response)
+                        if sessio_data and _extreure_parts(sessio_data):
+                            _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+            # Verificar que totes les parts tenen contingut (advertir si no)
+            for sessio in sessions:
+                for part in sessio.estructura.parts:
+                    if not part.exercicis:
+                        logger.warning(
+                            f"Part '{part.nom}' de sessió '{sessio.id}' sense contingut assignat"
+                        )
+    
+            # Log de resum de la setmana
+            sessions_sense_contingut = [
+                s for s in sessions
+                if not any(part.exercicis for part in s.estructura.parts)
+            ]
+            if sessions_sense_contingut:
+                logger.warning(
+                    f"Setmana {setmana}: {len(sessions_sense_contingut)} sessions sense contingut"
+                )
+            else:
+                logger.info(f"Setmana {setmana} generada correctament")
+    
+            return sessions
+    
+        except GeneracioMicrocicleError:
+            # Re-llançar errors propis
+            raise
+        except Exception as e:
+            # Embolicar qualsevol altre error
+>           raise GeneracioMicrocicleError(
+                f"Error en generar contingut de microcicle: {e}"
+            ) from e
+E           blondswim.agents.generar_microcicle.GeneracioMicrocicleError: Error en generar contingut de microcicle:
+
+src/blondswim/agents/generar_microcicle.py:1011: GeneracioMicrocicleError
+------------------------------ Captured log call -------------------------------
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dilluns': volum generat 1000m fora del rang [3300, 3850]m. Reintentant.
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dimarts': volum generat 1000m fora del rang [3075, 3525]m. Reintentant.
+____________________ test_volum_fora_rang_reintenta_un_cop _____________________
+
+nedador_test = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+metodologia_test = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+sessions_test = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+caplog = <_pytest.logging.LogCaptureFixture object at 0x108fcaad0>
+
+    def test_volum_fora_rang_reintenta_un_cop(
+        nedador_test, metodologia_test, sessions_test, caplog
+    ):
+        """Si el volum queda fora del rang, es reintenta una vegada amb el missatge."""
+        sessions = sessions_test[:1]
+        sessio = sessions[0]
+    
+        # Primera resposta amb volum=1000m, lluny del rang [2800, 3200]
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+>           _tool_use_sessio(sessio, volum=1000),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            _tool_use_sessio(sessio),
+        ]
+E       TypeError: _tool_use_sessio() got an unexpected keyword argument 'volum'
+
+tests/agents/test_generar_microcicle.py:1403: TypeError
+_______________________ test_parts_buit_reintenta_un_cop _______________________
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...tensitat='A1', objectiu='Test')])]), es_dia_opcional=False, notes=None, rol='mitjana', volum_min=3300, volum_max=3850)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = None
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+                response = _cridar_api_sessio(client, prompt, tools)
+                usage = getattr(response, "usage", None)
+                output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                logger.info(
+                    f"Resposta API setmana {setmana}, sessió '{sessio.id}': "
+                    f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                    f"max_tokens={MAX_TOKENS_SESSIO}"
+                )
+    
+                # Retry si s'ha truncat per max_tokens
+                if response.stop_reason == "max_tokens":
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta truncada "
+                        f"(max_tokens). Reintentant amb instrucció de concisió."
+                    )
+                    prompt_concis = (
+                        prompt
+                        + "\n\nIMPORTANT: sigues més concís: màxim 3 exercicis per part."
+                    )
+                    response = _cridar_api_sessio(client, prompt_concis, tools)
+                    usage = getattr(response, "usage", None)
+                    output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                    logger.info(
+                        f"Resposta API (retry) setmana {setmana}, sessió '{sessio.id}': "
+                        f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                        f"max_tokens={MAX_TOKENS_SESSIO}"
+                    )
+                    if response.stop_reason == "max_tokens":
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': truncada de nou "
+                            f"després del retry. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                sessio_data = _extreure_tool_use_sessio(response)
+                if not sessio_data:
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta sense tool "
+                        f"use 'retornar_contingut_sessio'. Es deixa la sessió buida."
+                    )
+                    continue
+    
+                if not _extreure_parts(sessio_data):
+                    logger.info(
+                        f"Setmana {setmana}, sessió '{sessio.id}': 'parts' buit o absent. "
+                        f"Claus rebudes: {list(sessio_data.keys())}. Reintentant."
+                    )
+                    response = _cridar_api_sessio(client, prompt, tools)
+                    sessio_data = _extreure_tool_use_sessio(response)
+                    if not sessio_data or not _extreure_parts(sessio_data):
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': 'parts' encara "
+                            f"buit després del reintent. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+                # Verificar volum dins el rang flexible (amb marge del 10%)
+                volum_sessio = sum(
+                    ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
+                )
+                if sessio.volum_min is not None and sessio.volum_max is not None:
+                    fora_rang = (
+                        volum_sessio < sessio.volum_min * 0.9
+                        or volum_sessio > sessio.volum_max * 1.1
+                    )
+                    if fora_rang:
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': volum generat "
+                            f"{volum_sessio}m fora del rang "
+                            f"[{sessio.volum_min}, {sessio.volum_max}]m. Reintentant."
+                        )
+                        prompt_volum = (
+                            prompt
+                            + f"\n\nEl volum ha estat {volum_sessio} m; ha d'estar "
+                            f"entre {sessio.volum_min} i {sessio.volum_max} m."
+                        )
+>                       response = _cridar_api_sessio(client, prompt_volum, tools)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/blondswim/agents/generar_microcicle.py:979: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/blondswim/agents/generar_microcicle.py:706: in _cridar_api_sessio
+    return client.messages.create(
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='mock.messages.create' id='4444590864'>, args = ()
+kwargs = {'model': 'claude-sonnet-5', 'max_tokens': 4096, 'tools': [{'name': 'retornar_contingut_sessio', 'description': "Retor... 'items': {...}}}, 'required': ['parts']}}], 'tool_choice': {'type': 'tool', 'name': 'retornar_contingut_sessio'}, ...}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1185: StopIteration
+
+The above exception was the direct cause of the following exception:
+
+nedador_test = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+metodologia_test = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+sessions_test = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...0.0, contingut=None, exercicis=[])]), es_dia_opcional=False, notes=None, rol='llarga', volum_min=4175, volum_max=4500)]
+
+    def test_parts_buit_reintenta_un_cop(nedador_test, metodologia_test, sessions_test):
+        """Si 'parts' és buit, es reintenta una vegada i s'aplica la resposta bona."""
+        sessions = sessions_test[:1]
+        sessio = sessions[0]
+    
+        buit = MagicMock()
+        buit.type = "tool_use"
+        buit.name = "retornar_contingut_sessio"
+        buit.input = {"parts": []}
+        response_buit = MagicMock()
+        response_buit.content = [buit]
+        response_buit.stop_reason = "tool_use"
+        response_buit.usage = MagicMock(output_tokens=10)
+    
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            response_buit,
+            _tool_use_sessio(sessio),
+        ]
+    
+        with patch(
+            "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+        ):
+>           resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/agents/test_generar_microcicle.py:1494: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+nedador = Nedador(id='test', nom='Test Nedador', edat=25, categoria='absolut', proves_objectiu=['100m lliure', '200m lliure'], p...tmes_cursa_objectiu=[], dies_disponibles=['dilluns', 'dimarts', 'dimecres', 'dijous'], dia_opcional=None, piscina_m=25)
+sessions = [Sessio(id='meso1_s1_dilluns', microcicle_setmana=1, dia='dilluns', tipus_sessio='carrega', volum_total=3575, estructu...tensitat='A1', objectiu='Test')])]), es_dia_opcional=False, notes=None, rol='mitjana', volum_min=3300, volum_max=3850)]
+metodologia = DecisioMetodologia(prova='200m lliure', categoria='absolut', metodologia_principal='Polaritzat', metodologies_complementaries=['Tècnica'], forca_evidencia='forta', justificacio='Test justificació', avisos=[])
+historial = None
+
+    def generar_microcicle(
+        nedador: Nedador,
+        sessions: list[Sessio],
+        metodologia: DecisioMetodologia,
+        historial: list[SessioRealitzada] | None = None,
+    ) -> list[Sessio]:
+        """
+        Generar contingut de microcicle amb LLM, UNA crida per sessió.
+    
+        Omple el camp exercicis de cada PartSessio de cada Sessio utilitzant l'API
+        de Claude amb tool-use forçat. NO modifica percentatges, volums, tipus, dies ni IDs.
+    
+        Per cada sessió:
+        - Es fa una crida independent (evita truncar per max_tokens en setmanes
+          amb moltes sessions).
+        - Si stop_reason == "max_tokens", es reintenta UNA vegada amb la instrucció
+          de ser més concís (màxim 3 exercicis per part). Si torna a fallar, s'emet
+          un WARNING i la sessió queda buida (no es llança excepció).
+        - Es passa un resum de les sessions ja generades de la setmana per evitar
+          repetir el mateix conjunt principal.
+        - Es passa el volum objectiu de la sessió (total setmana / n sessions,
+          múltiple de 25) i s'avisa si el volum generat queda fora del ±10%.
+    
+        Args:
+            nedador: Nedador amb zones CSS i proves objectiu
+            sessions: Llista de sessions amb estructura de parts (exercicis buits)
+            metodologia: Decisió de metodologia del Mòdul 5
+            historial: Historial de sessions realitzades per few-shot (opcional)
+    
+        Returns:
+            Llista de sessions amb contingut omplert (mateixa llista mutada)
+    
+        Raises:
+            GeneracioMicrocicleError: Si la crida a l'API falla o la resposta és invàlida
+        """
+        try:
+            # Llegir prompt template
+            prompt_path = Path(__file__).parent.parent / "prompts" / "generar_microcicle.md"
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_template = f.read()
+    
+            # Extreure few-shot
+            exemples_series = _extreure_few_shot(historial or [], metodologia, n=5)
+            exemples_text = (
+                "\n".join(f"- {ex}" for ex in exemples_series)
+                if exemples_series
+                else "(Cap exemple disponible)"
+            )
+    
+            if not sessions:
+                raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
+    
+            setmana = sessions[0].microcicle_setmana
+    
+            client = get_llm_client()
+            tools = _construir_tools_sessio()
+    
+            for sessio in sessions:
+                # Estructura de parts d'aquesta sessió
+                estructura_sessions_text = (
+                    f"\n**Sessió: {sessio.dia.capitalize()} "
+                    f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                )
+                for part in sessio.estructura.parts:
+                    if sessio.tipus_sessio == "carrega":
+                        perc = part.percentatge_carrega
+                    elif sessio.tipus_sessio == "qualitat":
+                        perc = part.percentatge_qualitat
+                    else:  # descarrega, taper, transicio
+                        perc = part.percentatge_descarrega
+                    volum_part = int(sessio.volum_total * perc / 100)
+                    estructura_sessions_text += f"  - {part.nom}: {perc}% ({volum_part}m)\n"
+    
+                sessions_setmana_text = (
+                    f"- sessio_id: \"{sessio.id}\" | dia: {sessio.dia} | "
+                    f"tipus: {sessio.tipus_sessio} | rol: {sessio.rol} | "
+                    f"volum_min: {sessio.volum_min}m | volum_max: {sessio.volum_max}m"
+                )
+    
+                resum_previ = _resum_sessions_generades(sessions)
+    
+                prompt = prompt_template.format(
+                    proves_objectiu=", ".join(nedador.proves_objectiu),
+                    categoria=nedador.categoria,
+                    estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                    zona_recuperacio=f"{nedador.ritmes_css.recuperacio:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a1=f"{nedador.ritmes_css.a1:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a2=f"{nedador.ritmes_css.a2:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_a3=f"{nedador.ritmes_css.a3:.2f}" if nedador.ritmes_css else "N/A",
+                    zona_velocitat=f"{nedador.ritmes_css.velocitat:.2f}" if nedador.ritmes_css else "N/A",
+                    offset_recuperacio_css=f"{nedador.parametres_ritme.offset_recuperacio_css:.1f}",
+                    offset_a1_css=f"{nedador.parametres_ritme.offset_a1_css:.1f}",
+                    offset_a2_css=f"{nedador.parametres_ritme.offset_a2_css:.1f}",
+                    offset_a3_css=f"{nedador.parametres_ritme.offset_a3_css:.1f}",
+                    setmana=setmana,
+                    tipus_base=sessio.tipus_sessio,
+                    volum_objectiu=sessio.volum_total,
+                    metodologia_principal=metodologia.metodologia_principal,
+                    metodologies_complementaries=", ".join(metodologia.metodologies_complementaries),
+                    forca_evidencia=metodologia.forca_evidencia,
+                    justificacio=metodologia.justificacio,
+                    estructura_sessions=estructura_sessions_text,
+                    exemples_series=exemples_text,
+                    sessions_setmana=sessions_setmana_text,
+                    resum_sessions_previ=resum_previ,
+                    rol=sessio.rol,
+                    volum_min=sessio.volum_min,
+                    volum_max=sessio.volum_max,
+                )
+    
+                # Crida inicial
+                response = _cridar_api_sessio(client, prompt, tools)
+                usage = getattr(response, "usage", None)
+                output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                logger.info(
+                    f"Resposta API setmana {setmana}, sessió '{sessio.id}': "
+                    f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                    f"max_tokens={MAX_TOKENS_SESSIO}"
+                )
+    
+                # Retry si s'ha truncat per max_tokens
+                if response.stop_reason == "max_tokens":
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta truncada "
+                        f"(max_tokens). Reintentant amb instrucció de concisió."
+                    )
+                    prompt_concis = (
+                        prompt
+                        + "\n\nIMPORTANT: sigues més concís: màxim 3 exercicis per part."
+                    )
+                    response = _cridar_api_sessio(client, prompt_concis, tools)
+                    usage = getattr(response, "usage", None)
+                    output_tokens = getattr(usage, "output_tokens", None) if usage else None
+                    logger.info(
+                        f"Resposta API (retry) setmana {setmana}, sessió '{sessio.id}': "
+                        f"stop_reason={response.stop_reason}, output_tokens={output_tokens}, "
+                        f"max_tokens={MAX_TOKENS_SESSIO}"
+                    )
+                    if response.stop_reason == "max_tokens":
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': truncada de nou "
+                            f"després del retry. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                sessio_data = _extreure_tool_use_sessio(response)
+                if not sessio_data:
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': resposta sense tool "
+                        f"use 'retornar_contingut_sessio'. Es deixa la sessió buida."
+                    )
+                    continue
+    
+                if not _extreure_parts(sessio_data):
+                    logger.info(
+                        f"Setmana {setmana}, sessió '{sessio.id}': 'parts' buit o absent. "
+                        f"Claus rebudes: {list(sessio_data.keys())}. Reintentant."
+                    )
+                    response = _cridar_api_sessio(client, prompt, tools)
+                    sessio_data = _extreure_tool_use_sessio(response)
+                    if not sessio_data or not _extreure_parts(sessio_data):
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': 'parts' encara "
+                            f"buit després del reintent. Es deixa la sessió buida."
+                        )
+                        continue
+    
+                _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+                # Verificar volum dins el rang flexible (amb marge del 10%)
+                volum_sessio = sum(
+                    ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
+                )
+                if sessio.volum_min is not None and sessio.volum_max is not None:
+                    fora_rang = (
+                        volum_sessio < sessio.volum_min * 0.9
+                        or volum_sessio > sessio.volum_max * 1.1
+                    )
+                    if fora_rang:
+                        logger.warning(
+                            f"Setmana {setmana}, sessió '{sessio.id}': volum generat "
+                            f"{volum_sessio}m fora del rang "
+                            f"[{sessio.volum_min}, {sessio.volum_max}]m. Reintentant."
+                        )
+                        prompt_volum = (
+                            prompt
+                            + f"\n\nEl volum ha estat {volum_sessio} m; ha d'estar "
+                            f"entre {sessio.volum_min} i {sessio.volum_max} m."
+                        )
+                        response = _cridar_api_sessio(client, prompt_volum, tools)
+                        sessio_data = _extreure_tool_use_sessio(response)
+                        if sessio_data and _extreure_parts(sessio_data):
+                            _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    
+            # Verificar que totes les parts tenen contingut (advertir si no)
+            for sessio in sessions:
+                for part in sessio.estructura.parts:
+                    if not part.exercicis:
+                        logger.warning(
+                            f"Part '{part.nom}' de sessió '{sessio.id}' sense contingut assignat"
+                        )
+    
+            # Log de resum de la setmana
+            sessions_sense_contingut = [
+                s for s in sessions
+                if not any(part.exercicis for part in s.estructura.parts)
+            ]
+            if sessions_sense_contingut:
+                logger.warning(
+                    f"Setmana {setmana}: {len(sessions_sense_contingut)} sessions sense contingut"
+                )
+            else:
+                logger.info(f"Setmana {setmana} generada correctament")
+    
+            return sessions
+    
+        except GeneracioMicrocicleError:
+            # Re-llançar errors propis
+            raise
+        except Exception as e:
+            # Embolicar qualsevol altre error
+>           raise GeneracioMicrocicleError(
+                f"Error en generar contingut de microcicle: {e}"
+            ) from e
+E           blondswim.agents.generar_microcicle.GeneracioMicrocicleError: Error en generar contingut de microcicle:
+
+src/blondswim/agents/generar_microcicle.py:1011: GeneracioMicrocicleError
+------------------------------ Captured log call -------------------------------
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dilluns': volum generat 1000m fora del rang [3300, 3850]m. Reintentant.
+=========================== short test summary info ============================
+FAILED tests/agents/test_generar_microcicle.py::test_omple_contingut_sense_tocar_percentatges
+FAILED tests/agents/test_generar_microcicle.py::test_few_shot_buit_no_trenca
+FAILED tests/agents/test_generar_microcicle.py::test_una_crida_per_sessio - b...
+FAILED tests/agents/test_generar_microcicle.py::test_retry_en_max_tokens - bl...
+FAILED tests/agents/test_generar_microcicle.py::test_rol_i_rang_al_prompt - b...
+FAILED tests/agents/test_generar_microcicle.py::test_volum_fora_rang_reintenta_un_cop
+FAILED tests/agents/test_generar_microcicle.py::test_parts_buit_reintenta_un_cop
+7 failed, 28 passed in 0.57s

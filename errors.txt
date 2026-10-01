@@ -1,0 +1,30 @@
+    
+        except GeneracioMicrocicleError:
+            # Re-llançar errors propis
+            raise
+        except Exception as e:
+            # Embolicar qualsevol altre error
+>           raise GeneracioMicrocicleError(
+                f"Error en generar contingut de microcicle: {e}"
+            ) from e
+E           blondswim.agents.generar_microcicle.GeneracioMicrocicleError: Error en generar contingut de microcicle:
+
+src/blondswim/agents/generar_microcicle.py:1011: GeneracioMicrocicleError
+------------------------------ Captured log call -------------------------------
+WARNING  blondswim.agents.generar_microcicle:generar_microcicle.py:969 Setmana 1, sessió 'meso1_s1_dilluns': volum generat 1000m fora del rang [3300, 3850]m. Reintentant.
+=========================== short test summary info ============================
+FAILED tests/agents/test_generar_macrocicle.py::test_generar_mesocicle_sense_historial_volums_de_taula
+FAILED tests/agents/test_generar_macrocicle.py::test_generar_microcicles_base_2_setmanes_bloc_parcial
+FAILED tests/agents/test_generar_microcicle.py::test_omple_contingut_sense_tocar_percentatges
+FAILED tests/agents/test_generar_microcicle.py::test_few_shot_buit_no_trenca
+FAILED tests/agents/test_generar_microcicle.py::test_una_crida_per_sessio - b...
+FAILED tests/agents/test_generar_microcicle.py::test_retry_en_max_tokens - bl...
+FAILED tests/agents/test_generar_microcicle.py::test_rol_i_rang_al_prompt - b...
+FAILED tests/agents/test_generar_microcicle.py::test_volum_fora_rang_reintenta_un_cop
+FAILED tests/agents/test_generar_microcicle.py::test_parts_buit_reintenta_un_cop
+9 failed, 187 passed in 2.91s
+All checks passed!
+46d8314 test: update microcicle tests for single-call volume validation
+a27f0d2 fix: use min volume for single load week and skip descàrrega in 1-week blocs
+20979eb fix: update test expectations to match new volume table constants
+28309a0 feat: add fixed session roles with flexible volume ranges
