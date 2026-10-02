@@ -1,5 +1,7 @@
 # Metodologia de la pestanya "Ritmes" — raonament i aplicació a altres nedadors
 
+> **Nota d'actualització (2026-10-02).** Un test CSS nou es registra amb `scripts/registrar_test_css.py --t400 ... --t200 ...` (`zones_css.ritmes_des_de_test_css()`), que aplica els offsets d'aquest document i desa les zones a `nedador_jep.json`. Detectat (Fase H2): les zones estimades actuals del Jep són més ràpides que el seu ritme real d'entrenament; cal el test CSS del 03/10/2026.
+
 Aquest document explica **per què** la pestanya `Ritmes` està dissenyada com està, quines fonts fonamenten cada xifra, i **què cal canviar** (i què no) per aplicar-la a Lou, Cris i Pere.
 
 ---

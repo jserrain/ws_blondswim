@@ -1,118 +1,111 @@
-BlondSwim — Arquitectura
-Decisió d'arquitectura
+# BlondSwim — Arquitectura
 
-Pipeline de funcions Python deterministes, amb crides a l'LLM (Claude, via API) només als punts de judici que ho requereixen realment. Es descarta un framework multi-agent complet (LangGraph/CrewAI) per a l'abast de l'MVP: la majoria de lògica (càlcul de zones, classificació de competicions, taper, validacions, esquelet de sessions) és determinista i no aporta res passar-la per un LLM — només cost, latència i risc d'al·lucinació en xifres.
+*Actualitzat 2026-10-02 — 340 tests, `ruff` net.*
 
-Dos entry points de Fase 3: generar_macrocicle(nedador_id) (🔲 pendent) i actualitzar_microcicle() (✅ fet, 2026-09-28 — vegeu fase2.md, implementat com a composició de 4 primitives: ajust de volum, canvi de classe de competició, eliminació de competició, log d'ajustos).
+## Decisió d'arquitectura
 
-Principi confirmat (2026-09-28): el pla generat és dinàmic, no una veritat fixa. Volum, classe de competició i tipus de setmana són el millor punt de partida; han de poder reajustar-se durant la temporada (fatiga, malaltia, canvi de classe d'una competició) sense refer tot el macrocicle.
+Pipeline de funcions Python deterministes, amb crides a l'LLM (Claude, via API) només als punts de judici que ho requereixen realment. Es descarta un framework multi-agent complet (LangGraph/CrewAI): la majoria de la lògica (zones, classificació de competicions, periodització, taper, volums, organització setmanal, pressupost d'intensitat, selecció d'exercicis de tècnica, validacions, càrrega i recuperació) és determinista, i passar-la per un LLM només afegiria cost, latència i risc d'al·lucinació en xifres. **L'LLM només redacta els exercicis de cada sessió de natació dins dels límits que fixa el codi.**
 
-Principi confirmat (2026-09-28): decisions de canvi sempre humanes, mai automàtiques. El sistema valida i avisa, però no decideix per si sol quant baixar un volum o quantes setmanes de represa calen — per això actualitzar_microcicle() és composició de primitives petites, no una funció monolítica tipus "gestionar malaltia".
+**Principis confirmats:**
+- **El pla és dinàmic** (2026-09-28): l'estructura de la temporada és el millor punt de partida; es genera el contingut setmana a setmana i es reajusta amb dades reals.
+- **Decisions de canvi sempre humanes** (2026-09-28): el sistema valida i avisa (ACWR, espaiat de pics A, franges, alertes de recuperació, recomanació de setmana suau), però mai aplica un canvi sol.
+- **Evidència abans que intuïció**: cada regla de planificació està contrastada amb fonts (TrainingPeaks/Friel, revisions científiques) i documentada a `fase3.md`, amb les limitacions explícites quan s'extrapola a màsters.
 
-Capes i agents
-Capa	Agent/Mòdul	Tipus	Fase	Estat
-Dades	Models pydantic (Nedador, Competicio, Macrocicle/Mesocicle/Microcicle, Sessio)	—	0	✅ Fet
-Dades	Conversor Excel→JSON (xlsx_to_json.py)	Determinista	0	✅ Fet
-Dades	Ingestió historial real (convertir_pretemporada, historial_jep.json)	Determinista	2	✅ Fet (6 tests)
-Dades	Ingestió Microcicles (convertir_microcicles, vincula Mesocicle.microcicles)	Determinista	2	✅ Fet (9 tests)
-Operativa	Zones CSS (zones_css.py)	Determinista	1	✅ Fet (12 tests)
-Operativa	Context de competició (context_competicio.py)	Determinista	1	✅ Fet (8 tests)
-Operativa	Taper (taper.py)	Determinista	1	✅ Fet (11 tests)
-Operativa	Esquelet de sessions (esquelet_sessions.py)	Determinista	2	✅ Fet (10 tests)
-Validació	Validació fisiològica/temporal (validacio.py), amb ACWR + historial real	Determinista	1/2	✅ Fet (13 tests)
-Estratègia	Selecció de model d'entrenament (seleccio_model.py)	Determinista + enriquiment LLM opcional	2	✅ Fet (32 tests) — validat amb crida real
-Estratègia	Generació de contingut de microcicle (generar_microcicle.py) + orquestració (generar_i_validar_microcicle) + log de decisions	LLM (judici, ús obligatori)	2	✅ Fet (10 tests) — validat amb crida real
-Estratègia	actualitzar_microcicle — 4 primitives (volum, classe competició, eliminació competició, log d'ajustos)	Determinista + judici del coach	2	✅ Fet (10 tests)
-Estratègia	generar_macrocicle(nedador_id) — orquestració temporada sencera	LLM (crides repetides) + determinista	3	🔲 No iniciat
-Estratègia	Ajust per feedback subjectiu/test periòdic	LLM (judici)	3	🔲 No iniciat
-Sortida	Exportador Excel + resum Markdown	Determinista	3	🔲 No iniciat
+## Flux d'ús setmanal (Fase 3)
 
-Fase 1 tancada (2026-09-27): 62 tests, make lint net.
+```
+nedador_jep.json + calendari.json + historial_jep.json + registres/*.xlsx
+        │
+scripts/generar_temporada_jep.py [--dilluns YYYY-MM-DD]
+        │
+        ├─ Recuperació: llegeix els fulls de registre omplerts → càrrega sRPE,
+        │  SRSS, sèrie de control → alertes de la setmana anterior
+        ├─ generar_macrocicle()          temporada sencera (convenció TrainingPeaks)
+        ├─ periodificar_temporada()      ATP enrere des de cada competició A
+        ├─ generar_mesocicle()           bloc que conté la setmana, volums i microcicles
+        ├─ generar_contingut_setmana()   esquelet determinista → LLM per sessió de natació
+        │                                → validació + 1 reintent → avisos
+        └─ Sortides: setmana_jep_<YYYY>-W<ww>.xlsx  (full de la piscina)
+                     registres/registre_jep_<YYYY>-W<ww>.xlsx  (en blanc, per omplir)
 
-Fase 2 tancada (2026-09-28): 144 tests, make lint net. Ingestió d'historial real, Mòdul 5 (Selecció de Model), extensió d'ACWR amb historial real, esquelet de sessions (amb es_dia_opcional), Mòdul 6 (Agent de Microcicle + orquestració + log de decisions), ingestió de Microcicles, i actualitzar_microcicle() complet (4 primitives), fets. Mòduls 5/6 validats amb una prova real end-to-end contra l'API de Claude (vegeu més avall). Detall complet: fase2.md.
+scripts/registrar_test_css.py --t400 --t200   → actualitza ritmes_css del nedador
+```
 
-Client LLM (Fase 2)
+## Capes i mòduls
 
-src/blondswim/llm/client.py: get_llm_client() retorna un client Anthropic configurat (clau via .env/ANTHROPIC_API_KEY, carregat amb load_dotenv(override=True)); DEFAULT_MODEL configurable via variable d'entorn LLM_MODEL (per defecte "claude-sonnet-5"). Reutilitzat pel Mòdul 5 (enriquiment opcional) i pel Mòdul 6 (generació, ús obligatori, tool-use forçat per garantir sortida estructurada).
+| Capa | Mòdul | Tipus | Fase | Tests |
+|---|---|---|---|---|
+| Dades | Models pydantic (`models/`: nedador, calendari, macrocicle, sessio, historial, decisio, **franja**, **registre**) | — | 0-E+I | 24 |
+| Dades | Conversor Excel→JSON (`ingestion/xlsx_to_json.py`): calendari, macrocicle, microcicles, ritmes, pretemporada | Determinista | 0-2 | 36 |
+| Dades | Ingestió del full de registre setmanal (`ingestion/registre_setmana.py`) | Determinista | E+I | 11 |
+| Operativa | Zones CSS (`zones_css.py`) + `ritmes_des_de_test_css()` | Determinista | 1 | 13 |
+| Operativa | Context de competició (`context_competicio.py`) | Determinista | 1 | 9 |
+| Operativa | Taper (`taper.py`) | Determinista | 1 | 11 |
+| Operativa | Periodització ATP (`periodificacio.py`): blocs, descàrregues, doble pic | Determinista | 3 | 14 |
+| Operativa | Organització setmanal (`pla_setmanal.py`): rols per dia, pesos de volum, parts i **bloc de cada part**, sèrie de control, pressupost d'intensitat, papallona | Determinista | H/H2 | 35 |
+| Operativa | Biblioteca i selector de tècnica (`tecnica.py`, `tecnica/biblioteca_tecnica.json`, 64 exercicis/18 famílies) | Determinista | H2 | 13 |
+| Operativa | Esquelet de sessions (`esquelet_sessions.py`): plantilla de 5 dies o esquelet antic, franges i gimnàs | Determinista | 2-E+I | 14 + 11 |
+| Validació | `validacio.py`: descàrrega periòdica, ACWR amb historial, taper, **franges natació/gimnàs** | Determinista | 1-E+I | 13 |
+| Seguiment | Càrrega real sRPE (`carrega.py`): diària, setmanal, aguda/crònica, alerta +15% | Determinista | E+I | 21 (amb recuperació) |
+| Seguiment | Indicadors de recuperació i regla de decisió (`recuperacio.py`): SRSS, sèrie de control | Determinista | E+I | (inclosos) |
+| Estratègia | Selecció de metodologia (`seleccio_model.py`) | Determinista + enriquiment LLM opcional | 2 | 32 |
+| Estratègia | Macrocicle i mesocicle (`generar_macrocicle.py`) | Determinista + enriquiment LLM opcional | 3 | 24 |
+| Estratègia | Contingut de sessions (`generar_microcicle.py`): 1 crida LLM per sessió de natació, tool-use forçat, validació i reintent; primitives d'ajust; logs | LLM (judici) + determinista | 2-3 | 41 |
+| Sortida | Full de la piscina (`export/mesocicle_excel.py`) | Determinista | 3 | 9 |
+| Sortida | Full de registre setmanal (`export/registre_excel.py`) | Determinista | E+I | (amb la ingestió) |
+| Utilitats | Dates (`utils/dates.py`): dilluns, setmanes que creuen d'any | Determinista | G2 | 9 |
 
-Regles de classificació i taper (TrainingPeaks/Joe Friel) — implementades
-Classificació de competicions (Mòdul 2)
-Classes A/B/C ja existents al calendari (Provisional26-27.xlsx).
-Validació implementada (validar_espaiat_pics_a): màxim 1-3 competicions classe A per temporada; mínim 8-12 setmanes de separació entre A consecutives (12-16 per esports de resistència llarga).
-Taper i recuperació (Mòdul 3)
-Classe	Taper pre-competició	Recuperació post-competició
-A	Progressiu, 14 dies per defecte (rang 7-21)	14 dies per defecte (rang 1-3 setmanes)
-B	Lleuger, 3 dies per defecte (rang 2-4) — aplica a totes les B	3 dies per defecte (rang 2-5), activa
-C	Cap	1 dia, estàndard
+**Fases tancades:** Fase 1 (2026-09-27, 62 tests) · Fase 2 (2026-09-28, 144 tests). **Fase 3 en curs** (vegeu `fase3.md`): fets A, B+C+D, F1-F2, G1-G2-G5-G6, H, H2, E+I, estructura de la sessió i script del test CSS.
 
-Re-taper (detectar_retaper): quan una B marcada pic_prioritzat cau dins de 4 setmanes després d'una A.
+## Client LLM
 
-Validació de coherència del pla (Mòdul 4)
-ACWR: ratio = volum_setmana / mitjana(volum_ultimes_4_setmanes), zona òptima 0.8–1.3, avís sever si >1.5.
-Ràtio càrrega:descàrrega per categoria: junior 2:1, master/absolut 3:1.
-Historial real per ACWR: validar_progressio_volum accepta historial_previ: list[int] | None. calcular_volums_setmanals_historial() agrupa historial_jep.json per setmana ISO.
-Selecció de model d'entrenament (Mòdul 5)
-Taula de decisió per distància (50m-1500m, IM, AAOO) basada en revisió d'evidència real — veure fase2.md per a les fonts.
-Determinista per defecte; enriquiment opcional via API de Claude només per a forca_evidencia "sense_evidencia"/"practica_documentada", i només sobre justificacio. Fallback silenciós si la crida LLM falla.
-Esquelet de sessions (prerequisit del Mòdul 6)
+`src/blondswim/llm/client.py`: `get_llm_client()` (clau via `.env`/`ANTHROPIC_API_KEY`, `load_dotenv(override=True)`); `DEFAULT_MODEL` via `LLM_MODEL` (per defecte `"claude-sonnet-5"`). Usos: enriquiment opcional de la metodologia (Mòdul 5) i de `fase_objectiu` del mesocicle (fallback silenciós), i generació obligatòria del contingut de cada sessió de natació (`GeneracioMicrocicleError` si falla).
 
-generar_esquelet_sessions(nedador, microcicle) -> list[Sessio] (src/blondswim/agents/esquelet_sessions.py), 100% determinista. Requereix Nedador.dies_disponibles: list[str] i dia_opcional: str | None. Decideix tipus_sessio per dia i percentatges de cada PartSessio segons tipus_base del microcicle i dies_qualitat. Marca explícitament Sessio.es_dia_opcional quan correspon al dia opcional del nedador. Repartiment de volum_total entre sessions: igual per a totes (assumpció MVP, a refinar). taper/transicio reutilitzen percentatges de descarrega (assumpció MVP, sense columna pròpia al model).
+## Generació del contingut d'una sessió
 
-Generació de contingut de microcicle (Mòdul 6)
+1. **Esquelet determinista** (`esquelet_sessions.py` + `pla_setmanal.py`): rol del dia segons el tipus de setmana (normal, competició dissabte/diumenge, post-competició), volum per pes de rol (± 5%, limitat per `minuts_max_sessio × 40 m/min`), parts del rol en l'ordre de l'estructura recomanada (escalfament → tècnica → bloc o blocs principals → tornada a la calma), sèrie de control fixa el dimecres, exercicis de tècnica obligatoris de la biblioteca, franja de la sessió i sessions de gimnàs informatives.
+2. **Prompt** (`prompts/generar_microcicle.md`): context del nedador i zones, rol i descripció, pressupost d'intensitat i de papallona, estructura de parts amb el seu bloc, exercicis de tècnica obligatoris, context de la setmana (competició, altres sessions del dia), resum de les sessions ja generades i few-shot de l'historial real.
+3. **LLM**: retorna exercicis estructurats (`series`, `distancia_m` múltiple de 25, `execucio`, `descans`, `material`, `intensitat`, `objectiu`, `id_biblioteca`). El volum el calcula el codi.
+4. **Validació** (`_problemes_sessio`): volum fora de rang, pressupost d'intensitat, papallona, regles de natació (estils 100/200, A3 ≥ 50 m), exercicis de tècnica obligatoris. Un sol reintent amb la llista de problemes; si persisteixen, avís al log.
 
-generar_microcicle(nedador, sessions, metodologia, historial=None) -> list[Sessio] (src/blondswim/agents/generar_microcicle.py). Omple només el camp contingut de cada PartSessio ja creada per l'esquelet; mai toca percentatges, volum, tipus_sessio, dia ni id. Crida l'API amb tool-use forçat. Prompt versionat a src/blondswim/prompts/generar_microcicle.md.
+## Regles implementades (resum; detall i fonts a `fase1.md`-`fase3.md`)
 
-generar_i_validar_microcicle(nedador, macrocicle, setmana, metodologia, pla_taper, avisos_pics_a, historial=None) -> tuple[list[Sessio], list[dict]]: orquestra esquelet → generació → validacio.validar_pla_complet() → guardar_log_decisio() (no bloquejant). Cerca la setmana amb _trobar_microcicle() (numeració global entre mesocicles).
+- **Competicions**: classes A/B/C; màxim 1-3 A per temporada; separació mínima 8-12 setmanes entre A, excepte **doble pic** (dues A a ≤ 4 setmanes: un sol període competitiu, Peak curt abans de la segona).
+- **Periodització (ATP enrere des de cada A)**: Cursa, Peak de 2 setmanes, Build2, Build1, Base, en blocs de fins a 4 setmanes amb descàrrega a l'última; Transició després de la A.
+- **Volum**: taula per fase (Base 13.600-15.000, Build 12.000-13.600), terra `volum_setmanal_min` (12.000), taper de Bosquet, setmana amb prova B × 0,8, post-competició = mínim. ACWR com a avís, mai com a regla.
+- **Setmana tipus (5 dies)**: Dl aeròbic + cames, Dt qualitat, Dc tècnica en estat fresc + sèrie de control, Dj aeròbic + tècnica, Dv aeròbica llarga + velocitat alàctica; activació 24 h abans de competir; rutina d'espatlla el dissabte.
+- **Pressupost d'intensitat per rol i fase** (sense làctic a Base) i **papallona 300-600 m/setmana**.
+- **Taper i recuperació** (Mòdul 3): A 14 dies; B 3 dies; C cap.
+- **Càrrega i recuperació (E+I)**: sRPE = RPE (CR-10) × minuts; aguda/crònica (7/28 dies); alertes de càrrega (+15%), SRSS (línia base individual ± 1 DE, 2 dies seguits) i sèrie de control (mateix temps amb més esforç o braçades); ≥ 2 alertes → recomanació de setmana suau (decisió del coach).
+- **Natació i gimnàs**: màxim 3 sessions al dia (matí/migdia/tarda), com a molt una de natació; avís si el gimnàs és en una franja contigua a la qualitat o el dia de tècnica, activació o recuperació.
 
-Prova real amb l'API (2026-09-27)
+## Model de dades
 
-Script manual scripts/prova_generacio_microcicle.py (no forma part de la suite automàtica) va encadenar Mòdul 5 → esquelet → Mòdul 6 contra l'API real amb dades del Jep, i va trobar dos bugs no detectables amb tests mockejats:
+- **`Nedador`**: identitat, categoria, proves objectiu, mode de ritme, marques i `ritmes_css` (+ paràmetres i offsets), `dies_disponibles`, `volum_setmanal_min`, `minuts_max_sessio`, `rutina_espatlla_dia`, `prioritats_tecniques`, **`setmana_tipus`** (`dict[dia, list[SlotSessio]]`; si hi és, `dies_disponibles` se'n deriva).
+- **`SlotSessio`**: `franja` (mati/migdia/tarda), `modalitat` (natacio/gimnas/altres), `durada_min`, `opcional`.
+- **`Competicio`**: id, nom, dates ISO, classe A/B/C, piscina. Calendari independent a `data/processed/calendari.json`.
+- **`Macrocicle` → `Mesocicle` → `Microcicle`**: temporada → bloc (`tipus` Base/Build1/Build2/Peak/Cursa/Transicio) → setmana (`volum_objectiu`, `tipus_base`, `dia_competicio`, `post_competicio`, `sessions_des_de`).
+- **`Sessio`**: dia, `franja`, `modalitat`, `durada_min`, `tipus_sessio`, `rol`, `volum_total`/`volum_min`/`volum_max`, `exercicis_tecnica`, `estructura.parts` → **`PartSessio`** (`nom`, **`bloc`**: Escalfament/Tècnica/Bloc principal/Tornada a la calma/Sèrie de control, `fixa`, `exercicis`) → **`Exercici`** (`series`, `distancia_m`, `execucio`, `descans`, `material`, `intensitat`, `objectiu`, `id_biblioteca`).
+- **`SessioRealitzada`**: data, `franja`, `modalitat`, `temps_total_min`, `volum_total_m`, `series`, **`rpe_sessio`** (CR-10), **`assoliment`** (1-5), `carrega` (sRPE).
+- **`RegistreSRSS`** (4 ítems de recuperació + 4 d'estrès, 0-6) i **`RegistreSerieControl`** (temps de cada 100, braçades/llargada, RPE).
+- **`DecisioMetodologia`** (Mòdul 5).
 
-Mòdul 6: el prompt no indicava el sessio_id exacte a retornar; l'LLM en va inventar. Fix: llistar explícitament els ids reals al prompt amb instrucció d'eco verbatim.
-Mòdul 5: max_tokens=1024 insuficient per completar la crida de tool-use forçat. Fix: max_tokens=4096.
+## Regla de reconciliació de ritmes
 
-Detall complet a fase2.md.
+1. **Test CSS** (400 + 200 m) — font preferent: CSS/100 = (T400 − T200) / 2; A2 = CSS, A3 = CSS − 4", A1 = CSS + 6", Recuperació = CSS + 12", Velocitat = CSS × 0,85. Es registra amb `scripts/registrar_test_css.py`.
+2. **Estimació per millor marca** (100 + 50 m lliure) — fallback; la Velocitat s'ancora a la marca de 50 m escalada a 100 m.
 
-Ingestió de "Microcicles" (2026-09-28)
+## Flux de treball de desenvolupament
 
-convertir_microcicles(fitxer_entrada, mesocicles) -> dict[str, list[Microcicle]] (src/blondswim/ingestion/xlsx_to_json.py), vinculada a Mesocicle.microcicles dins convertir_macrocicle_jep. Capçaleres a la fila 2. Meso (codi curt) es vincula al mesocicle_id pel primer tros del nom del Mesocicle abans de " - ". Tipus de setmana és text compost, detectat per paraula clau. 20 microcicles reals vinculats als 5 mesocicles. Detall complet: fase2.md.
+- **Canvis grans**: Claude escriu el codi i els tests en un entorn propi i lliura **patches `git am`** (un commit per pas), verificats sobre un clon net del repo; el Jep els aplica i executa `pytest -q && ruff check .`.
+- **Aider**: només per a canvis petits d'un sol fitxer (falla en canvis multi-fitxer).
+- **Consultes de lectura** (grep, signatures) directament al terminal, sense LLM.
+- Proves reals contra l'API abans de confiar en una funcionalitat generativa (els mocks no detecten errors de comportament del model).
 
-actualitzar_microcicle() — pla dinàmic i reajustable (fet, 2026-09-28)
+## Pendent (detall a `fase3.md`)
 
-Implementat com a composició de 4 primitives, totes a generar_microcicle.py, no una funció monolítica (decisió explícita per mantenir el principi "decisions humanes, mai automàtiques"):
-
-actualitzar_volum_microcicle(macrocicle, setmana, nou_volum_objectiu, motiu) — ajust de volum, valida amb ACWR (Mòdul 4), mai bloqueja.
-actualitzar_classe_competicio(competicions, competicio_id, nova_classe, motiu) — canvi A/B/C, recalcula taper i espaiat de pics A.
-eliminar_competicio(competicions, competicio_id, motiu) — treu la competició del tot (malaltia/lesió), diferent d'una simple baixada de classe.
-guardar_log_ajust(nedador_id, setmana, tipus_ajust, valor_anterior, valor_nou, motiu) — log append-only (data/processed/log_decisions/<nedador_id>_<setmana>_ajustos.json), separat del log de metodologia (guardar_log_decisio, que sobreescriu).
-
-El calendari de competicions (list[Competicio]) és un JSON independent (data/processed/calendari.json), no un camp de Macrocicle/Nedador; els pics prioritzats es deriven de classe == "A".
-
-Pendent explícit, no bloquejant: revertir tipus_base de microcicles amb taper obsolet després d'eliminar_competicio() — requereix saber quins microcicles es van marcar taper per aquella competició concreta, i tipus_base ve directament de la ingestió, no d'un càlcul enllaçat. Detall complet: fase2.md.
-
-Resum del model de dades
-Nedador: identitat, categoria, proves objectiu, pics prioritzats, mode de ritme (temps/RPE), marques de referència, zones CSS, paràmetres de càlcul de ritme, dies_disponibles/dia_opcional (Fase 2).
-Competicio: id, nom, dates ISO, classe A/B/C, piscina (25m/50m/aaoo).
-Macrocicle → Mesocicle → Microcicle: estructura niada; Microcicle és a nivell de setmana (volum objectiu, tipus_base, dies_qualitat, test_css, competicio_test_oficial, test_avaluacio, focus_especific), ingerit amb dades reals de la pestanya "Microcicles".
-Sessio: referencia el seu microcicle_setmana; es_dia_opcional: bool; EstructuraSessio amb 5 PartSessio (Escalfament, Tècnica+Subaquàtic, Aeròbic/Llindar, Específic/Qualitat, Tornada a la calma), cada una amb 3 percentatges i contingut: str | None (omplert pel Mòdul 6).
-SessioRealitzada/SerieRealitzada: registre diari d'entrenament executat, usat per ACWR i few-shot.
-DecisioMetodologia (Mòdul 5): prova, categoria, metodologia principal/complementàries, força d'evidència, justificació, avisos.
-Regla de reconciliació de ritmes (Ritmes tab)
-
-Dues fonts possibles per a les zones de ritme d'un nedador:
-
-Test CSS (400m+200m) — font preferent quan disponible.
-Estimació per millor marca (100m lliure + 50m lliure) — fallback.
-
-La zona Velocitat es calcula de manera diferent segons la font: amb marca, s'ancora a marca_50_lliure × factor_escala_50_100. Amb CSS, s'usa css_pace_100m × factor_velocitat.
-
-Pendent
-Refinar assumpcions MVP de l'esquelet de sessions: repartiment de volum per dia i percentatges de taper/transicio.
-Revertir tipus_base obsolet després d'eliminar_competicio() (no bloquejant).
-(Opcional) wiring automàtic de guardar_log_ajust() dins les tres primitives d'ajust.
-Fase 3: generar_macrocicle(nedador_id) (orquestració temporada sencera) + exportador Excel — en curs.
-Fase 4: validació golden-reference contra el pla manual del Jep; seguiment dels resultats de tests (CSS, controls B) al llarg de la temporada.
-Extensió a Lou (CSS real), Cris i Pere (RPE fins al primer test).
-Nota operativa: consum de tokens
-
-Consultes purament de lectura (grep, signatures, estructura de fitxers) es fan directament al terminal, fora d'aider — sense cap crida a LLM. Aider només s'usa per escriure/modificar codi.
+- Temps per exercici (Etapa 3b) i validació de cicles respecte al ritme de la zona.
+- G3 (continuïtat i dades reals al prompt) i G4 (previsualització N+1).
+- Calibrar els llindars de càrrega i recuperació amb dades reals; historial de plans i de tests CSS.
+- F3-F7 (volum mòbil, taper exponencial, salt agut, intensitat agregada, cota per temps).
+- Fase 4 (validació amb criteri de referència) i Fase 5 (Lou, Cris i Pere).

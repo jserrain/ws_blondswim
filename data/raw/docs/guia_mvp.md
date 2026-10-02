@@ -1,5 +1,7 @@
 # BlondSwim — Guia de construcció del MVP
 
+> **Nota d'actualització (2026-10-02).** Guia inicial del MVP, històrica. Decisions superades: Espanya d'Hivern ara és **classe A** (doble pic); la sessió ja no és una plantilla fixa de 5 parts sinó una **plantilla setmanal de 5 dies amb parts per rol** (escalfament, tècnica, blocs principals, tornada a la calma); el contingut es genera setmana a setmana i el seguiment es fa amb el **full de registre** (sRPE, SRSS, sèrie de control). Estat actual: `Architecture.md` i `Fase3.md`.
+
 Guia de referència per construir el sistema d'agents de planificació d'entrenament de natació. Ús propi + 3 nedadors coachejats, amb objectiu de prospecció com a entrenador personal (fase 2: clubs).
 
 ---
