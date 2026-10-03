@@ -14,25 +14,40 @@ cp .env.example .env       # i posa-hi ANTHROPIC_API_KEY
 
 Opcional: `LLM_MODEL` a `.env` per canviar el model (per defecte `claude-sonnet-5`).
 
-## Dades (`data/processed/`, fora de git)
+## Dades (fora de git): una carpeta per nedador
 
-| Fitxer | Contingut |
-|---|---|
-| `nedador_jep.json` | Fitxa del nedador: proves objectiu, `ritmes_css`, `setmana_tipus` (natació i gimnàs per franja), `rutina_espatlla_dia`, `prioritats_tecniques`, `volum_setmanal_min` |
-| `calendari.json` | Competicions amb classe A/B/C (`make run-ingestion` des de l'Excel) |
-| `historial_jep.json` | Sessions reals de la pretemporada (few-shot) |
-| `registres/registre_*.xlsx` | Fulls de registre setmanals omplerts (RPE, SRSS, sèrie de control) |
+```
+data/
+├── competicions.json            catàleg comú (id, nom, dates, piscina)
+└── nedadors/<id>/               <id> = identificador del nedador (jep, lou, cris, pere)
+    ├── nedador.json             fitxa: proves objectiu, ritmes_css, setmana_tipus, ...
+    ├── calendari.json           [{competicio_id, classe A/B/C, proves}]
+    ├── historial.json           sessions reals (few-shot)
+    ├── macrocicle.json          última temporada generada
+    ├── setmanes/                setmana_<id>_<YYYY>-W<ww>.xlsx (full per a la piscina)
+    ├── registres/               registre_<id>_<YYYY>-W<ww>.xlsx (RPE, SRSS, sèrie de control)
+    └── log_decisions/
+```
+
+Les competicions són comunes; la classe A/B/C és de cada nedador. Per afegir un nedador: crea `data/nedadors/<id>/nedador.json` (amb `"id": "<id>"`) i el seu `calendari.json` apuntant als ids de `competicions.json`.
+
+`make run-ingestion` regenera des dels Excel de `data/raw/` el catàleg, el calendari i l'historial del Jep; la fitxa `nedador.json` només es crea si no existeix.
+
+**Migració des de l'estructura antiga** (`data/processed/`): `python scripts/migrar_a_carpetes.py --simular` i després sense `--simular`. Copia, no esborra.
 
 ## Ús setmanal
 
+Executa els scripts des de l'arrel del repo.
+
 ```bash
 # 1. Generar la setmana del proper dilluns (o una de concreta)
-python scripts/generar_temporada_jep.py [--dilluns 2026-10-05]
+python scripts/generar_temporada.py --nedador jep [--dilluns 2026-10-05]
+make setmana NEDADOR=jep [DILLUNS=2026-10-05]
 ```
 
-Sortides a `data/processed/`:
-- `setmana_jep_<YYYY>-W<ww>.xlsx` — full per a la piscina. Cada dia porta la franja i el rol, i cada exercici la part de la sessió (escalfament, tècnica, bloc principal, tornada a la calma).
-- `registres/registre_jep_<YYYY>-W<ww>.xlsx` — full de registre en blanc (no se sobreescriu si ja existeix).
+Sortides a `data/nedadors/<id>/`:
+- `setmanes/setmana_<id>_<YYYY>-W<ww>.xlsx` — full per a la piscina. Cada dia porta la franja i el rol, i cada exercici la part de la sessió (escalfament, tècnica, bloc principal, tornada a la calma).
+- `registres/registre_<id>_<YYYY>-W<ww>.xlsx` — full de registre en blanc (no se sobreescriu si ja existeix).
 
 ```bash
 # 2. Durant la setmana: omplir el full de registre
@@ -47,8 +62,8 @@ Sortides a `data/processed/`:
 Test CSS (400 + 200 m), per actualitzar les zones de ritme:
 
 ```bash
-python scripts/registrar_test_css.py --t400 6:52.3 --t200 3:18.1 --data 2026-10-03 --simular
-python scripts/registrar_test_css.py --t400 6:52.3 --t200 3:18.1 --data 2026-10-03
+python scripts/registrar_test_css.py --nedador jep --t400 6:52.3 --t200 3:18.1 --data 2026-10-03 --simular
+python scripts/registrar_test_css.py --nedador jep --t400 6:52.3 --t200 3:18.1 --data 2026-10-03
 ```
 
 ## Principis

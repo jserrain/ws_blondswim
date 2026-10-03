@@ -515,3 +515,16 @@ Les zones de `Ritmes_Jep.xlsx` (A2 1'22", A3 1'18") són més ràpides que el ri
 ```
 
 Notes: la qualitat de dimarts a la tarda queda a ~11 h de la tècnica de dimecres a les 7:00 (acceptable: volum baix i sense intensitat). El dimecres surt l'avís `gimnas_dia_no_recomanat`, que en aquest cas és un fals positiu (pendent, punt 4).
+
+## Multi-nedador: dades per carpeta (2026-10-03)
+
+Preparació de la Fase 5 (Lou, Cris i Pere). Decisions: (1) calendari en dues capes, catàleg comú `data/competicions.json` + calendari per nedador amb classe A/B/C i proves; (2) ritmes dins de la fitxa del nedador; (3) identificador = nom de la carpeta `data/nedadors/<id>/`. JSON com a font de veritat, Excel només com a sortida.
+
+Commits (patches `git am`):
+
+1. **calendari** — `CompeticioCataleg`, `InscripcioCompeticio`, `resoldre_calendari()`, `separar_calendari()`, `fusionar_cataleg()`; `Competicio.proves` opcional. Els agents continuen rebent `list[Competicio]`. 7 tests.
+2. **rutes** — `blondswim/rutes.py`: `RutesNedador` deriva totes les rutes de l'id; `carregar_nedador` (comprova id = carpeta), `carregar_competicions`, `carregar_historial`, `llistar_nedadors`. Els logs de decisions van a `data/nedadors/<id>/log_decisions/`. 15 tests.
+3. **scripts** — `generar_temporada.py --nedador <id>` (substitueix `generar_temporada_jep.py`), `registrar_test_css.py --nedador <id>`, `make setmana NEDADOR=<id>`.
+4. **migració** — `scripts/migrar_a_carpetes.py [--simular]` copia `data/processed/` a la nova estructura (no esborra ni sobreescriu). `make run-ingestion` escriu la nova estructura i ja no trepitja `nedador.json` si existeix. 7 tests.
+
+**Pendent:** fitxes i calendaris de Lou, Cris i Pere; dates de temporada per nedador (ara fixes a l'script).

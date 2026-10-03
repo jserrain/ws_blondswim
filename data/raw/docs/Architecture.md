@@ -1,6 +1,6 @@
 # BlondSwim — Arquitectura
 
-*Actualitzat 2026-10-02 — 340 tests, `ruff` net.*
+*Actualitzat 2026-10-03 — 369 tests, `ruff` net.*
 
 ## Decisió d'arquitectura
 
@@ -14,9 +14,9 @@ Pipeline de funcions Python deterministes, amb crides a l'LLM (Claude, via API) 
 ## Flux d'ús setmanal (Fase 3)
 
 ```
-nedador_jep.json + calendari.json + historial_jep.json + registres/*.xlsx
+data/competicions.json + data/nedadors/<id>/{nedador,calendari,historial}.json + registres/*.xlsx
         │
-scripts/generar_temporada_jep.py [--dilluns YYYY-MM-DD]
+scripts/generar_temporada.py --nedador <id> [--dilluns YYYY-MM-DD]
         │
         ├─ Recuperació: llegeix els fulls de registre omplerts → càrrega sRPE,
         │  SRSS, sèrie de control → alertes de la setmana anterior
@@ -25,17 +25,20 @@ scripts/generar_temporada_jep.py [--dilluns YYYY-MM-DD]
         ├─ generar_mesocicle()           bloc que conté la setmana, volums i microcicles
         ├─ generar_contingut_setmana()   esquelet determinista → LLM per sessió de natació
         │                                → validació + 1 reintent → avisos
-        └─ Sortides: setmana_jep_<YYYY>-W<ww>.xlsx  (full de la piscina)
-                     registres/registre_jep_<YYYY>-W<ww>.xlsx  (en blanc, per omplir)
+        └─ Sortides a data/nedadors/<id>/:
+                     setmanes/setmana_<id>_<YYYY>-W<ww>.xlsx    (full de la piscina)
+                     registres/registre_<id>_<YYYY>-W<ww>.xlsx  (en blanc, per omplir)
 
-scripts/registrar_test_css.py --t400 --t200   → actualitza ritmes_css del nedador
+scripts/registrar_test_css.py --nedador <id> --t400 --t200   → actualitza ritmes_css
 ```
 
 ## Capes i mòduls
 
 | Capa | Mòdul | Tipus | Fase | Tests |
 |---|---|---|---|---|
-| Dades | Models pydantic (`models/`: nedador, calendari, macrocicle, sessio, historial, decisio, **franja**, **registre**) | — | 0-E+I | 24 |
+| Dades | Models pydantic (`models/`: nedador, calendari, macrocicle, sessio, historial, decisio, **franja**, **registre**; calendari en dues capes) | — | 0-Multi | 31 |
+| Dades | Rutes i càrrega per nedador (`rutes.py`): `RutesNedador`, catàleg + calendari resolt, llistat de nedadors | Determinista | Multi | 15 |
+| Dades | Migració `data/processed/` → carpetes per nedador (`ingestion/migracio.py`) | Determinista | Multi | 7 |
 | Dades | Conversor Excel→JSON (`ingestion/xlsx_to_json.py`): calendari, macrocicle, microcicles, ritmes, pretemporada | Determinista | 0-2 | 36 |
 | Dades | Ingestió del full de registre setmanal (`ingestion/registre_setmana.py`) | Determinista | E+I | 11 |
 | Operativa | Zones CSS (`zones_css.py`) + `ritmes_des_de_test_css()` | Determinista | 1 | 13 |
@@ -83,12 +86,16 @@ scripts/registrar_test_css.py --t400 --t200   → actualitza ritmes_css del neda
 
 - **`Nedador`**: identitat, categoria, proves objectiu, mode de ritme, marques i `ritmes_css` (+ paràmetres i offsets), `dies_disponibles`, `volum_setmanal_min`, `minuts_max_sessio`, `rutina_espatlla_dia`, `prioritats_tecniques`, **`setmana_tipus`** (`dict[dia, list[SlotSessio]]`; si hi és, `dies_disponibles` se'n deriva).
 - **`SlotSessio`**: `franja` (mati/migdia/tarda), `modalitat` (natacio/gimnas/altres), `durada_min`, `opcional`.
-- **`Competicio`**: id, nom, dates ISO, classe A/B/C, piscina. Calendari independent a `data/processed/calendari.json`.
+- **Calendari en dues capes**: **`CompeticioCataleg`** (id, nom, dates ISO, piscina; comú, `data/competicions.json`) + **`InscripcioCompeticio`** (`competicio_id`, classe A/B/C, `proves`; per nedador, `data/nedadors/<id>/calendari.json`). `resoldre_calendari()` les combina en **`Competicio`** (amb classe), que és el que fan servir els agents.
 - **`Macrocicle` → `Mesocicle` → `Microcicle`**: temporada → bloc (`tipus` Base/Build1/Build2/Peak/Cursa/Transicio) → setmana (`volum_objectiu`, `tipus_base`, `dia_competicio`, `post_competicio`, `sessions_des_de`).
 - **`Sessio`**: dia, `franja`, `modalitat`, `durada_min`, `tipus_sessio`, `rol`, `volum_total`/`volum_min`/`volum_max`, `exercicis_tecnica`, `estructura.parts` → **`PartSessio`** (`nom`, **`bloc`**: Escalfament/Tècnica/Bloc principal/Tornada a la calma/Sèrie de control, `fixa`, `exercicis`) → **`Exercici`** (`series`, `distancia_m`, `execucio`, `descans`, `material`, `intensitat`, `objectiu`, `id_biblioteca`).
 - **`SessioRealitzada`**: data, `franja`, `modalitat`, `temps_total_min`, `volum_total_m`, `series`, **`rpe_sessio`** (CR-10), **`assoliment`** (1-5), `carrega` (sRPE).
 - **`RegistreSRSS`** (4 ítems de recuperació + 4 d'estrès, 0-6) i **`RegistreSerieControl`** (temps de cada 100, braçades/llargada, RPE).
 - **`DecisioMetodologia`** (Mòdul 5).
+
+## Dades per nedador
+
+Una carpeta per nedador, `data/nedadors/<id>/` (fora de git), amb `nedador.json`, `calendari.json`, `historial.json`, `macrocicle.json`, `setmanes/`, `registres/` i `log_decisions/`. L'identificador és `Nedador.id` i ha de coincidir amb el nom de la carpeta; tots els noms de fitxer se'n deriven a `rutes.py`. La metodologia de ritmes de cada nedador és dins de la seva fitxa (`mode_ritme`, `ritmes_css`, `parametres_ritme`). Decisions (2026-10-03): carpeta per nedador amb JSON com a font de veritat i Excel només com a sortida; competicions comunes amb la classe per nedador; identificador = nom de la carpeta.
 
 ## Regla de reconciliació de ritmes
 
@@ -108,4 +115,5 @@ scripts/registrar_test_css.py --t400 --t200   → actualitza ritmes_css del neda
 - G3 (continuïtat i dades reals al prompt) i G4 (previsualització N+1).
 - Calibrar els llindars de càrrega i recuperació amb dades reals; historial de plans i de tests CSS.
 - F3-F7 (volum mòbil, taper exponencial, salt agut, intensitat agregada, cota per temps).
-- Fase 4 (validació amb criteri de referència) i Fase 5 (Lou, Cris i Pere).
+- Fase 4 (validació amb criteri de referència) i Fase 5 (Lou, Cris i Pere: l'estructura per nedador ja hi és; falten les fitxes i els calendaris).
+- Dates de temporada fixes a `generar_temporada.py` (2026-08-18 a 2027-07-09) per a tots els nedadors.
