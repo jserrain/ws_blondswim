@@ -2,6 +2,8 @@
 
 *Creat 2026-10-02, revisat el mateix dia (coherència amb el calendari i els fitxers). Base: `Fase3.md` (340 tests, `ruff` net).*
 
+> **Actualització 2026-10-03.** Dades per nedador a `data/nedadors/<id>/` i catàleg comú `data/competicions.json` (369 tests). Abans de l'Sprint 0, migrar les dades: `python scripts/migrar_a_carpetes.py`. Els scripts reben `--nedador <id>`.
+
 ## Criteris d'ordre
 
 1. **Calendari real**: la W41 comença dilluns 05/10, i el Peak d'hivern comença la W53 (28/12).
@@ -24,10 +26,10 @@
 - [ ] **0.3** Comprovar que la Velocitat (CSS × 0,85) és **més lenta** que el ritme del 100 de cursa. Si no ho és, ajustar l'offset abans de desar.
 - [ ] **0.4** Registrar-lo de debò (sense `--simular`). Es crea una còpia `.bak` del JSON.
 - [ ] **0.5** Confirmar l'ordre de l'aeròbica llarga (velocitat alàctica al principi o al final). Si cal canviar-lo, s'ha de fer a `PARTS_ROL` abans del pas 0.6.
-- [ ] **0.6** Calendari: copiar el `Provisional26-27.xlsx` corregit a `data/raw/`, executar `make run-ingestion` i comprovar a `calendari.json` que Espanya d'Hivern és **classe A, 06-07/02/2027**, i que les dues proves de Budapest (aigües obertes i piscina) hi són.
+- [ ] **0.6** Calendari: copiar el `Provisional26-27.xlsx` corregit a `data/raw/`, executar `make run-ingestion` i comprovar a `data/nedadors/jep/calendari.json` que Espanya d'Hivern és **classe A**, i a `data/competicions.json` que té les dates **06-07/02/2027** i que les dues proves de Budapest (aigües obertes i piscina) hi són.
 - [ ] **0.7** Regenerar la W41:
   ```bash
-  python scripts/generar_temporada_jep.py --dilluns 2026-10-05
+  python scripts/generar_temporada.py --nedador jep --dilluns 2026-10-05
   ```
 - [ ] **0.8** Revisar la W41 contra la taula de l'Etapa 4 (distribució per zones, papallona, volums per sessió, cicles). Anotar els problemes per a l'Sprint 2.
 - [ ] **0.9** Decidir quin pla es neda la W41: el generat o el manual de la pestanya `Oct` del `Provisional` (setmana 10).
@@ -41,8 +43,8 @@
 Objectiu: que la W41 surti sense soroll i que les dades comencin a acumular-se des del primer dia.
 
 - [ ] **1.1 Avís de gimnàs** (`validacio.py`, aider). Avisar només si el gimnàs va **abans** de la tècnica o de l'activació el mateix dia. Test: el dimecres del Jep (natació al matí, gimnàs a la tarda) no ha d'avisar.
-- [ ] **1.2 `--nomes-registre`** (`generar_temporada_jep.py`, aider). Crea el full de registre de la setmana sense fer cap crida a l'API.
-- [ ] **1.3 Historial de plans** (patch). En cada generació, desar el pla a `data/processed/plans/plan_<nedador>_<YYYY>-W<ww>.json`: `volum_objectiu`, `tipus_base`, rol i volum de cada sessió. Mai sobreescriure sense un `.bak`. Prerequisit del punt 5.3.
+- [ ] **1.2 `--nomes-registre`** (`generar_temporada.py`, aider). Crea el full de registre de la setmana sense fer cap crida a l'API.
+- [ ] **1.3 Historial de plans** (patch). En cada generació, desar el pla a `data/nedadors/<id>/plans/plan_<id>_<YYYY>-W<ww>.json` (afegir la ruta a `RutesNedador`): `volum_objectiu`, `tipus_base`, rol i volum de cada sessió. Mai sobreescriure sense un `.bak`. Prerequisit del punt 5.3.
 - [ ] **1.4 Historial de tests CSS** (patch). Fer que `registrar_test_css.py` afegeixi una entrada (data, T400, T200, CSS) a `historial_tests_css`, a més de desar `ritmes_css`. Migrar el test del pas 0.4 a l'historial. Prerequisit del segon dia de qualitat.
 - [ ] **1.5** Executar `pytest -q && ruff check .`.
 
@@ -113,7 +115,7 @@ G3, continuïtat al prompt.
 ## Sprint 5 — Principis de novembre (~W44-45, amb 3-4 setmanes de dades)
 
 - [ ] **5.1 Calibrar llindars**: revisar les alertes reals (falsos positius i negatius) de càrrega +15%, de l'SRSS (±1 DE, 2 dies) i de la sèrie de control. Ajustar els paràmetres i documentar-ho.
-- [ ] **5.2 F3 — base de volum mòbil**: EWMA de 4-6 setmanes del volum realitzat, reutilitzant `carrega.py` i excloent descàrrega, taper i transició. Font: el registre real (`historial_jep.json` + fulls de registre), no les pestanyes de novembre-febrer del `Provisional` (són de la 25-26 i `Gen` és una còpia de `Desc`).
+- [ ] **5.2 F3 — base de volum mòbil**: EWMA de 4-6 setmanes del volum realitzat, reutilitzant `carrega.py` i excloent descàrrega, taper i transició. Font: el registre real (`data/nedadors/<id>/historial.json` + fulls de registre), no les pestanyes de novembre-febrer del `Provisional` (són de la 25-26 i `Gen` és una còpia de `Desc`).
 - [ ] **5.3 Base de càrrega**: amb l'historial de plans (pas 1.3), excloure les setmanes de descàrrega, taper i transició i aplicar el `ratio_planificat` a l'alerta del +15%.
 
 ---

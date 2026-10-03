@@ -107,11 +107,11 @@ def generar_mesocicle(
 - Columnes: `Part, Treball, Execució, Descans, Material, Intensitat, Objectiu, Temps (min), Volum (m)`. La columna **Part** (abans `Dia`, sempre buida) porta l'etiqueta del bloc a la primera fila de cada part (vegeu «Estructura de la sessió»). Una fila per `Exercici`; fila `Total`; `Temps (min)` en blanc (Etapa 3b).
 - **Rutina d'espatlla (Fase H)**: si `Nedador.rutina_espatlla_dia` és un dia de descans de la setmana, bloc "Descans a l'aigua. Rutina d'espatlla (opcional, 15 min)" en ordre cronològic.
 
-## Script `scripts/generar_temporada_jep.py`
+## Script `scripts/generar_temporada.py --nedador <id>`
 
-Per defecte: estructura de la temporada + contingut **només de la setmana del proper dilluns** → `setmana_<nom>_<YYYY>-W<ww>.xlsx`. Opcions: `--dilluns YYYY-MM-DD` (accepta setmanes passades), `--mesocicle-sencer` (comportament antic), `--data-referencia`. Avisa si el nedador no fa servir la plantilla setmanal. Des de la E+I, a més: avaluació de la recuperació de la setmana anterior i full de registre en blanc (vegeu Fase E+I).
+*(Fins al 2026-10-03, `generar_temporada_jep.py`.)* Per defecte: estructura de la temporada + contingut **només de la setmana del proper dilluns** → `data/nedadors/<id>/setmanes/setmana_<id>_<YYYY>-W<ww>.xlsx`. Opcions: `--dilluns YYYY-MM-DD` (accepta setmanes passades), `--mesocicle-sencer` (comportament antic), `--data-referencia`. Avisa si el nedador no fa servir la plantilla setmanal. Des de la E+I, a més: avaluació de la recuperació de la setmana anterior i full de registre en blanc (vegeu Fase E+I).
 
-**Dades del Jep (`data/processed/nedador_jep.json`, gitignored)**: vegeu «Dades del Jep» al final (Fase H2 + E+I).
+**Dades del Jep (`data/nedadors/jep/nedador.json`, gitignored)**: vegeu «Dades del Jep» al final (Fase H2 + E+I).
 
 ---
 
@@ -370,8 +370,8 @@ Commits (patches `git am`, sobre H + H2 + `style: sort imports`):
 ## Script `scripts/registrar_test_css.py` (fet 2026-10-01)
 
 ```bash
-python scripts/registrar_test_css.py --t400 6:52.3 --t200 3:18.1 --data 2026-10-03 --simular
-python scripts/registrar_test_css.py --t400 6:52.3 --t200 3:18.1 --data 2026-10-03
+python scripts/registrar_test_css.py --nedador jep --t400 6:52.3 --t200 3:18.1 --data 2026-10-03 --simular
+python scripts/registrar_test_css.py --nedador jep --t400 6:52.3 --t200 3:18.1 --data 2026-10-03
 ```
 
 Temps com `6:52.3`, `6'52.3` o segons. Calcula CSS/100 = (T400 − T200) / 2 i les zones amb els offsets del nedador (`zones_css.ritmes_des_de_test_css()`), mostra les zones d'abans i les noves i les desa a `ritmes_css` (font `css_test`, `data_test`), amb còpia `.bak` del JSON. Velocitat = CSS × 0,85: comprovar que queda més lenta que el ritme del 100 de cursa.
@@ -496,7 +496,7 @@ Hivern 2026-27: Peak 53-1 · Cursa Catalunya (2) · Build2 (3) · Peak (4) · Cu
 
 Les zones de `Ritmes_Jep.xlsx` (A2 1'22", A3 1'18") són més ràpides que el ritme de la millor marca de 200 m (1'31,5"/100); el Jep manté ~1'40"/100 entrenant. **Test CSS dissabte 03/10/2026** (400 + 200 m, repartint l'esforç: cada 100 com a molt 2" més ràpid que la mitjana); CSS/100 = (T400 − T200) / 2; zones = CSS + offsets (A2 = CSS, A3 = CSS − 4", A1 = CSS + 6", Recuperació = CSS + 12").
 
-### Dades del Jep (`nedador_jep.json`, actualitzat 2026-10-01)
+### Dades del Jep (`data/nedadors/jep/nedador.json`, actualitzat 2026-10-01)
 
 `dies_disponibles`: dilluns-divendres (derivat de `setmana_tipus`) · `rutina_espatlla_dia`: "dissabte" · `proves_objectiu`: 100m lliure, 100m estils, 200m lliure, 50m papallona · `prioritats_tecniques`: "Ritme de cursa", "Viratges", "Coordinació de braça".
 

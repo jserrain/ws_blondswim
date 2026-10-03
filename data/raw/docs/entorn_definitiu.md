@@ -1,5 +1,7 @@
 # BlondSwim — Guia definitiva d'entorn (ws_blondswim)
 
+> **Rutes (2026-10-03).** Les dades ja no són a `data/processed/`: hi ha una carpeta per nedador, `data/nedadors/<id>/` (`nedador.json`, `calendari.json`, `historial.json`, `setmanes/`, `registres/`, `log_decisions/`), i el catàleg comú `data/competicions.json`. Les referències a `data/processed/`, `nedador_jep.json`, `historial_jep.json` o `calendari.json` amb classe d'aquest document són històriques; vegeu «Dades per nedador» a `Architecture.md`.
+
 Versió definitiva i completa. Substitueix els esborranys anteriors (`fase0_setup.md`, `entorn_ws.md`). Decisions confirmades: Python 3.11, `pyproject.toml`, Makefile, documentació dins `docs/`.
 
 ---

@@ -1,5 +1,7 @@
 # BlondSwim — Guia de construcció del MVP
 
+> **Rutes (2026-10-03).** Les dades ja no són a `data/processed/`: hi ha una carpeta per nedador, `data/nedadors/<id>/` (`nedador.json`, `calendari.json`, `historial.json`, `setmanes/`, `registres/`, `log_decisions/`), i el catàleg comú `data/competicions.json`. Les referències a `data/processed/`, `nedador_jep.json`, `historial_jep.json` o `calendari.json` amb classe d'aquest document són històriques; vegeu «Dades per nedador» a `Architecture.md`.
+
 > **Nota d'actualització (2026-10-02).** Guia inicial del MVP, històrica. Decisions superades: Espanya d'Hivern ara és **classe A** (doble pic); la sessió ja no és una plantilla fixa de 5 parts sinó una **plantilla setmanal de 5 dies amb parts per rol** (escalfament, tècnica, blocs principals, tornada a la calma); el contingut es genera setmana a setmana i el seguiment es fa amb el **full de registre** (sRPE, SRSS, sèrie de control). Estat actual: `Architecture.md` i `Fase3.md`.
 
 Guia de referència per construir el sistema d'agents de planificació d'entrenament de natació. Ús propi + 3 nedadors coachejats, amb objectiu de prospecció com a entrenador personal (fase 2: clubs).

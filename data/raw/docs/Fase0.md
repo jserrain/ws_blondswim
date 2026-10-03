@@ -1,5 +1,7 @@
 # BlondSwim — Guia d'ús d'aider per als models i el conversor
 
+> **Rutes (2026-10-03).** Les dades ja no són a `data/processed/`: hi ha una carpeta per nedador, `data/nedadors/<id>/` (`nedador.json`, `calendari.json`, `historial.json`, `setmanes/`, `registres/`, `log_decisions/`), i el catàleg comú `data/competicions.json`. Les referències a `data/processed/`, `nedador_jep.json`, `historial_jep.json` o `calendari.json` amb classe d'aquest document són històriques; vegeu «Dades per nedador» a `Architecture.md`.
+
 > **Nota d'actualització (2026-10-02).** Guia històrica de la Fase 0 (feta). Canvis posteriors:
 > - **Calendari**: ara té **3 competicions de classe A** (Catalunya Hivern, Espanya Hivern 06-07/02/2027 i Catalunya Estiu); Espanya va passar de B a A a la Fase H2 (doble pic). El Pas 7 deia «2 de classe A».
 > - **Columna `id`**: la còpia de `Provisional26-27.xlsx` d'aquest projecte no té la columna `id` (capçaleres: `class, data, competicio, piscina, modalitat`). La font de la ingestió és el fitxer de `data/raw/` del repo; si s'hi copia el del projecte, cal comprovar que `convertir_calendari()` continua generant els `id`.

@@ -1,5 +1,7 @@
 # BlondSwim — Fase 2: Mòduls amb LLM (judici)
 
+> **Rutes (2026-10-03).** Les dades ja no són a `data/processed/`: hi ha una carpeta per nedador, `data/nedadors/<id>/` (`nedador.json`, `calendari.json`, `historial.json`, `setmanes/`, `registres/`, `log_decisions/`), i el catàleg comú `data/competicions.json`. Les referències a `data/processed/`, `nedador_jep.json`, `historial_jep.json` o `calendari.json` amb classe d'aquest document són històriques; vegeu «Dades per nedador» a `Architecture.md`.
+
 > **Nota d'actualització (2026-10-02).** Aquest document és històric (Fase 2 tancada). Parts superades per la Fase 3 (detall a `fase3.md`):
 > - **Esquelet de sessions**: el repartiment igual del volum i els dies Dl-Dj + dia opcional s'han substituït per la **plantilla setmanal de 5 dies** (Fases H i H2): rols per dia, pesos de volum, parts pròpies de cada rol amb el seu **bloc** (escalfament, tècnica, bloc principal, tornada a la calma), sèrie de control i pressupost d'intensitat. Per a nedadors sense la plantilla es manté l'esquelet antic. `dia_opcional` per defecte és `None`.
 > - **Contingut**: `PartSessio.contingut` (text) s'ha substituït per `PartSessio.exercicis` (`Exercici` estructurat; el volum el calcula el codi) i es fa **una crida LLM per sessió** (no una per setmana), amb validació i un reintent.
