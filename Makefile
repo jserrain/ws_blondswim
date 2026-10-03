@@ -1,4 +1,4 @@
-.PHONY: setup test lint format run-ingestion aider clean
+.PHONY: setup test lint format run-ingestion setmana aider clean
 
 setup:
 	python3 -m venv .venv
@@ -15,6 +15,11 @@ format:
 
 run-ingestion:
 	. .venv/bin/activate && python -m blondswim.ingestion.xlsx_to_json
+
+# Ús: make setmana NEDADOR=jep [DILLUNS=2026-10-05]
+setmana:
+	. .venv/bin/activate && python scripts/generar_temporada.py --nedador $(NEDADOR) \
+		$(if $(DILLUNS),--dilluns $(DILLUNS))
 
 MODEL ?= deepseek/deepseek-chat
 

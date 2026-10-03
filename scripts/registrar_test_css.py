@@ -3,8 +3,11 @@
 Registra un test CSS (400 m + 200 m) i actualitza les zones del nedador.
 
 Ús:
-    python scripts/registrar_test_css.py --t400 6:52.3 --t200 3:18.1 \
-        [--data 2026-10-03] [--nedador data/processed/nedador_jep.json] [--simular]
+    python scripts/registrar_test_css.py --nedador jep --t400 6:52.3 --t200 3:18.1 \
+        [--data 2026-10-03] [--simular]
+
+--nedador és l'identificador (carpeta de data/nedadors/); també accepta la
+ruta d'un fitxer .json de nedador.
 
 Calcula CSS/100 = (T400 - T200) / 2 i les zones (A2 = CSS, A3 = CSS - 4",
 A1 = CSS + 6", Recuperació = CSS + 12", segons els offsets del nedador),
@@ -25,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from blondswim.agents.zones_css import ritmes_des_de_test_css
 from blondswim.ingestion.registre_setmana import parsejar_temps_100
 from blondswim.models.nedador import Nedador
+from blondswim.rutes import RutesNedador, llistar_nedadors
 
 ZONES = ["recuperacio", "a1", "a2", "a3", "velocitat"]
 
@@ -42,8 +46,8 @@ def main() -> int:
     parser.add_argument("--data", default=datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat(), help="Data del test")
     parser.add_argument(
         "--nedador",
-        default=str(Path(__file__).parent.parent / "data/processed/nedador_jep.json"),
-        help="Fitxer JSON del nedador",
+        required=True,
+        help="Identificador del nedador (o ruta d'un fitxer .json de nedador)",
     )
     parser.add_argument(
         "--simular", action="store_true", help="Només mostra les zones, no desa res"
@@ -52,7 +56,20 @@ def main() -> int:
 
     t400 = parsejar_temps_100(args.t400)
     t200 = parsejar_temps_100(args.t200)
-    path = Path(args.nedador)
+    arrel_dades = Path(__file__).parent.parent / "data"
+    try:
+        path = (
+            Path(args.nedador)
+            if args.nedador.endswith(".json")
+            else RutesNedador(args.nedador, arrel_dades).nedador
+        )
+    except ValueError as e:
+        print(f"✗ {e}")
+        return 2
+    if not path.is_file():
+        disponibles = ", ".join(llistar_nedadors(arrel_dades)) or "cap"
+        print(f"✗ No hi ha {path} (nedadors disponibles: {disponibles})")
+        return 2
     dades = json.loads(path.read_text(encoding="utf-8"))
     nedador = Nedador(**dades)
 

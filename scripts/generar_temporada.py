@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Script d'integració end-to-end: temporada 2026-27 d'en Jep.
+"""Script d'integració end-to-end: temporada 2026-27 d'un nedador.
+
+Ús:
+    python scripts/generar_temporada.py --nedador jep [--dilluns 2026-10-05]
+
+Les dades es llegeixen de data/nedadors/<id>/ (nedador.json, calendari.json,
+historial.json) i del catàleg comú data/competicions.json; les sortides van a
+la mateixa carpeta del nedador (vegeu blondswim.rutes).
 
 Encadena: generar_macrocicle() -> periodificació de la temporada (taula) ->
 generar_mesocicle() del bloc que conté la setmana objectiu ->
@@ -7,11 +14,11 @@ contingut LLM i Excel.
 
 Per defecte (G1/G6) genera el contingut NOMÉS de la setmana que comença el
 proper dilluns (o el dilluns de --dilluns) i l'exporta a
-setmana_<nom>_<YYYY>-W<ww>.xlsx. Amb --mesocicle-sencer recupera el
-comportament anterior (tot el mesocicle, mesocicle_<nom>_<id>.xlsx).
+setmanes/setmana_<id>_<YYYY>-W<ww>.xlsx. Amb --mesocicle-sencer recupera el
+comportament anterior (tot el mesocicle, setmanes/mesocicle_<id>_<meso>.xlsx).
 
 Fase E+I: llegeix els fulls de registre omplerts de
-data/processed/registres/ (registre_*.xlsx), avalua la recuperació de la
+data/nedadors/<id>/registres/ (registre_*.xlsx), avalua la recuperació de la
 setmana anterior (càrrega sRPE, SRSS, sèrie de control) i, en mode setmana,
 crea el full de registre en blanc de la setmana generada (no sobreescriu un
 full que ja existeix).
@@ -41,9 +48,13 @@ from blondswim.agents.taper import generar_pla_taper_temporada
 from blondswim.export.mesocicle_excel import exportar_mesocicle_excel, exportar_setmana_excel
 from blondswim.export.registre_excel import exportar_registre_setmana
 from blondswim.ingestion.registre_setmana import carregar_registres
-from blondswim.models.calendari import Competicio
-from blondswim.models.historial import SessioRealitzada
-from blondswim.models.nedador import Nedador
+from blondswim.rutes import (
+    RutesNedador,
+    carregar_competicions,
+    carregar_historial,
+    carregar_nedador,
+    llistar_nedadors,
+)
 from blondswim.utils.dates import seguent_dilluns
 
 TEMPORADA_DATA_INICI = "2026-08-18"
@@ -70,7 +81,7 @@ TIPUS_AVIS_FRANGES = {"separacio_insuficient", "gimnas_dia_no_recomanat"}
 def _avaluar_recuperacio(registres_dir: Path, dilluns_objectiu: date) -> None:
     """Imprimeix les alertes de recuperació de la setmana anterior."""
     if not registres_dir.exists():
-        print("   · Encara no hi ha fulls de registre (data/processed/registres/)")
+        print(f"   · Encara no hi ha fulls de registre ({registres_dir})")
         return
     try:
         registre = carregar_registres(registres_dir)
@@ -102,7 +113,12 @@ def main() -> int:
     import logging
     logging.basicConfig(level=logging.INFO)
 
-    parser = argparse.ArgumentParser(description="Genera la temporada 2026-27 d'en Jep.")
+    parser = argparse.ArgumentParser(description="Genera la temporada 2026-27 d'un nedador.")
+    parser.add_argument(
+        "--nedador",
+        required=True,
+        help="Identificador del nedador (nom de la carpeta a data/nedadors/)",
+    )
     parser.add_argument(
         "--data-referencia",
         type=str,
@@ -136,20 +152,28 @@ def main() -> int:
     else:
         dilluns_objectiu = seguent_dilluns(data_referencia or avui())
 
-    base_dir = Path(__file__).parent.parent
-    data_processed = base_dir / "data" / "processed"
+    arrel_dades = Path(__file__).parent.parent / "data"
+    try:
+        rutes = RutesNedador(args.nedador, arrel_dades)
+        nedador = carregar_nedador(rutes)
+        competicions = carregar_competicions(rutes)
+        historial = carregar_historial(rutes)
+    except FileNotFoundError as e:
+        print(f"✗ {e}")
+        return 2
+    except ValueError as e:
+        print(f"✗ {e}")
+        disponibles = ", ".join(llistar_nedadors(arrel_dades)) or "cap"
+        print(f"  Nedadors disponibles: {disponibles}")
+        return 2
+    if not competicions:
+        print(f"⚠ {rutes.calendari} buit o inexistent: temporada sense competicions")
 
     print("=" * 80)
-    print("GENERACIÓ COMPLETA DE TEMPORADA 2026-27 — JEP")
+    print(f"GENERACIÓ COMPLETA DE TEMPORADA 2026-27 — {nedador.nom.upper()}")
     print("=" * 80)
 
-    print("\n1. Carregant dades...")
-    with open(data_processed / "nedador_jep.json", encoding="utf-8") as f:
-        nedador = Nedador(**json.load(f))
-    with open(data_processed / "calendari.json", encoding="utf-8") as f:
-        competicions = [Competicio(**c) for c in json.load(f)]
-    with open(data_processed / "historial_jep.json", encoding="utf-8") as f:
-        historial = [SessioRealitzada(**s) for s in json.load(f)]
+    print(f"\n1. Dades carregades de {rutes.carpeta}")
 
     print(f"   ✓ Nedador: {nedador.nom} ({nedador.categoria})")
     print(
@@ -174,7 +198,7 @@ def main() -> int:
         )
 
     print("\n   Recuperació (fulls de registre)...")
-    registres_dir = data_processed / "registres"
+    registres_dir = rutes.registres_dir
     _avaluar_recuperacio(registres_dir, dilluns_objectiu)
 
     print("\n2. Generant macrocicle...")
@@ -219,8 +243,8 @@ def main() -> int:
     for avis in avisos:
         print(f"   ⚠ {avis}")
 
-    output_dir = base_dir / "data" / "processed"
-    macrocicle_path = output_dir / "macrocicle_temporada_26_27.json"
+    macrocicle_path = rutes.macrocicle
+    macrocicle_path.parent.mkdir(parents=True, exist_ok=True)
     with open(macrocicle_path, "w", encoding="utf-8") as f:
         json.dump(macrocicle.model_dump(mode="json"), f, ensure_ascii=False, indent=2)
     print(f"\n   ✓ Macrocicle desat a {macrocicle_path}")
@@ -253,7 +277,7 @@ def main() -> int:
             print(f"   ⚠ Setmana {avis.get('setmana')}: {avis.get('error')}")
 
         print("\n6. Exportant a Excel...")
-        output_path = output_dir / f"mesocicle_{nedador.nom.lower()}_{mesocicle.id}.xlsx"
+        output_path = rutes.mesocicle_xlsx(mesocicle.id)
         exportar_mesocicle_excel(nedador, mesocicle, resultats, output_path)
         print(f"   ✓ Excel exportat a {output_path}")
     else:
@@ -293,16 +317,11 @@ def main() -> int:
                 print(f"   ⚠ {avis['missatge']}")
 
         print("\n6. Exportant a Excel...")
-        any_iso, setmana_iso, _ = dilluns_objectiu.isocalendar()
-        output_path = (
-            output_dir / f"setmana_{nedador.nom.lower()}_{any_iso}-W{setmana_iso:02d}.xlsx"
-        )
+        output_path = rutes.setmana_xlsx(dilluns_objectiu)
         exportar_setmana_excel(nedador, mesocicle, microcicle, sessions, output_path)
         print(f"   ✓ Excel exportat a {output_path}")
 
-        registre_path = (
-            registres_dir / f"registre_{nedador.nom.lower()}_{any_iso}-W{setmana_iso:02d}.xlsx"
-        )
+        registre_path = rutes.registre_xlsx(dilluns_objectiu)
         if registre_path.exists():
             print(f"   · El full de registre ja existeix, no es toca: {registre_path}")
         else:
