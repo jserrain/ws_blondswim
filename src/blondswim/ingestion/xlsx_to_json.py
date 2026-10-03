@@ -10,7 +10,7 @@ from typing import Any
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 
-from blondswim.models.calendari import Competicio
+from blondswim.models.calendari import Competicio, fusionar_cataleg, separar_calendari
 from blondswim.models.historial import SerieRealitzada, SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle
 from blondswim.models.nedador import (
@@ -19,6 +19,7 @@ from blondswim.models.nedador import (
     RitmeCursaObjectiu,
     RitmesCSS,
 )
+from blondswim.rutes import RutesNedador, carregar_cataleg, desar_json, ruta_competicions
 
 logger = logging.getLogger(__name__)
 
@@ -946,27 +947,61 @@ def convertir_pretemporada(fitxer_entrada: Path) -> list[SessioRealitzada]:
     return sessions
 
 
+NEDADOR_FONTS = "jep"  # els Excel de data/raw/ són del Jep
+
+
+def _desar_nou(path: Path, dades: Any) -> bool:
+    """Desa només si el fitxer no existeix (protegeix les edicions a mà)."""
+    if path.exists():
+        return False
+    desar_json(path, dades)
+    return True
+
+
 def main():
-    """Executar totes les conversions i imprimir resum."""
+    """Executar totes les conversions i imprimir resum.
+
+    Escriu a l'estructura per nedador (vegeu blondswim.rutes):
+    - data/competicions.json: fusiona les competicions de l'Excel amb el catàleg.
+    - data/nedadors/jep/calendari.json i historial.json: es regeneren (font: Excel).
+    - data/nedadors/<id>/nedador.json i macrocicle_referencia.json: només es creen
+      si no existeixen (la fitxa s'edita a mà: setmana_tipus, ritmes_css...).
+    """
+    import tempfile
+
     logging.basicConfig(level=logging.INFO)
 
     base_dir = Path(__file__).parent.parent.parent.parent
     data_raw = base_dir / "data" / "raw"
-    data_processed = base_dir / "data" / "processed"
+    arrel = base_dir / "data"
+    rutes_jep = RutesNedador(NEDADOR_FONTS, arrel)
+    tmp = Path(tempfile.mkdtemp(prefix="blondswim_"))
 
     print("=" * 60)
     print("CONVERSIÓ XLSX → JSON")
     print("=" * 60)
 
-    # 1. Calendari
+    # 1. Calendari → catàleg comú + calendari del Jep
     print("\n1. Convertint Calendari...")
     try:
         stats_cal = convertir_calendari(
             data_raw / "Provisional26-27.xlsx",
-            data_processed / "calendari.json",
+            tmp / "calendari.json",
         )
+        competicions = [
+            Competicio(**c)
+            for c in json.loads((tmp / "calendari.json").read_text(encoding="utf-8"))
+        ]
+        cataleg, inscripcions = separar_calendari(competicions)
+        desar_json(
+            ruta_competicions(arrel),
+            [c.model_dump() for c in fusionar_cataleg(carregar_cataleg(arrel), cataleg)],
+        )
+        desar_json(rutes_jep.calendari, [i.model_dump() for i in inscripcions])
         print(f"   ✓ {stats_cal['total']} competicions processades")
         print(f"   ✓ {stats_cal['classe_a']} competicions de classe A")
+        print(f"   ✓ Catàleg: {ruta_competicions(arrel)}")
+        print(f"   ✓ Calendari: {rutes_jep.calendari}")
         if stats_cal["advertencies"]:
             print(f"   ⚠ {len(stats_cal['advertencies'])} advertències:")
             for adv in stats_cal["advertencies"]:
@@ -975,15 +1010,19 @@ def main():
         print(f"   ✗ Error: {e}")
         return
 
-    # 2. Macrocicle Jep (amb microcicles)
+    # 2. Macrocicle Jep (amb microcicles): planificació de referència
     print("\n2. Convertint Macrocicle Jep (amb microcicles)...")
     try:
         stats_macro = convertir_macrocicle_jep(
             data_raw / "Planificacio_Mesocicles_Jep.xlsx",
-            data_processed / "macrocicle_jep.json",
+            tmp / "macrocicle_jep.json",
         )
+        desti = rutes_jep.carpeta / "macrocicle_referencia.json"
+        dades = json.loads((tmp / "macrocicle_jep.json").read_text(encoding="utf-8"))
+        nou = _desar_nou(desti, dades)
         print(f"   ✓ {stats_macro['mesocicles']} mesocicles processats")
         print(f"   ✓ {stats_macro['microcicles']} microcicles vinculats")
+        print(f"   {'✓ Desat a' if nou else '· Ja existeix, no es toca:'} {desti}")
     except Exception as e: # noqa: BLE001
         print(f"   ✗ Error: {e}")
         return
@@ -993,11 +1032,14 @@ def main():
     try:
         stats_ned = convertir_nedador_ritmes(
             data_raw / "Planificacio_Mesocicles_Jep.xlsx",
-            data_processed,
+            tmp,
         )
         print(f"   ✓ {len(stats_ned['nedadors'])} nedadors processats:")
         for ned in stats_ned["nedadors"]:
-            print(f"     - {ned['nom']} ({ned['fitxer']})")
+            dades = json.loads((tmp / ned["fitxer"]).read_text(encoding="utf-8"))
+            desti = RutesNedador(dades["id"], arrel).nedador
+            nou = _desar_nou(desti, dades)
+            print(f"     - {ned['nom']}: {'creat' if nou else 'ja existeix, no es toca'} ({desti})")
             print(f"       Font ritmes: {ned['font_ritmes']}")
             print(f"       Ritmes cursa objectiu: {ned['ritmes_cursa']}")
     except Exception as e: # noqa: BLE001
@@ -1010,19 +1052,8 @@ def main():
         sessions = convertir_pretemporada(
             data_raw / "PretemporadaSep26-27.xlsx"
         )
-        
-        # Escriure JSON
-        fitxer_historial = data_processed / "historial_jep.json"
-        fitxer_historial.parent.mkdir(parents=True, exist_ok=True)
-        with open(fitxer_historial, "w", encoding="utf-8") as f:
-            json.dump(
-                [s.model_dump() for s in sessions],
-                f,
-                ensure_ascii=False,
-                indent=2,
-            )
-        
-        print(f"   ✓ {len(sessions)} sessions processades")
+        desar_json(rutes_jep.historial, [s.model_dump() for s in sessions])
+        print(f"   ✓ {len(sessions)} sessions processades ({rutes_jep.historial})")
         if sessions:
             print(f"   ✓ Període: {sessions[0].data} a {sessions[-1].data}")
     except Exception as e: # noqa: BLE001

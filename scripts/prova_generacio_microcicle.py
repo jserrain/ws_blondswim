@@ -17,6 +17,7 @@ from blondswim.agents.seleccio_model import seleccionar_metodologia
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle
 from blondswim.models.nedador import Nedador
+from blondswim.rutes import RutesNedador
 
 
 def main():
@@ -25,7 +26,7 @@ def main():
     logging.basicConfig(level=logging.DEBUG)
     
     base_dir = Path(__file__).parent.parent
-    data_processed = base_dir / "data" / "processed"
+    rutes = RutesNedador("jep", base_dir / "data")
 
     print("=" * 80)
     print("PROVA DE GENERACIÓ DE MICROCICLE AMB DADES REALS DEL JEP")
@@ -33,7 +34,7 @@ def main():
 
     # 1. Carregar nedador
     print("\n1. Carregant nedador...")
-    nedador_path = data_processed / "nedador_jep.json"
+    nedador_path = rutes.nedador
     if not nedador_path.exists():
         print(f"   ✗ Error: No s'ha trobat {nedador_path}")
         return 1
@@ -47,7 +48,7 @@ def main():
 
     # 2. Carregar macrocicle i construir microcicle manual
     print("\n2. Carregant macrocicle...")
-    macrocicle_path = data_processed / "macrocicle_jep.json"
+    macrocicle_path = rutes.carpeta / "macrocicle_referencia.json"
     if not macrocicle_path.exists():
         print(f"   ✗ Error: No s'ha trobat {macrocicle_path}")
         return 1
@@ -88,7 +89,7 @@ def main():
 
     # 3. Carregar historial
     print("\n3. Carregant historial...")
-    historial_path = data_processed / "historial_jep.json"
+    historial_path = rutes.historial
     if not historial_path.exists():
         print(f"   ✗ Error: No s'ha trobat {historial_path}")
         return 1
