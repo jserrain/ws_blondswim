@@ -25,6 +25,7 @@ from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import Exercici, Sessio
+from blondswim.rutes import RutesNedador
 from blondswim.utils.dates import parsejar_rang_dates
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ def guardar_log_decisio(
     microcicle_generat: dict | None = None,
 ) -> Path:
     """
-    Guarda un registre JSON a data/processed/log_decisions/<nedador_id>_<setmana>.json.
+    Guarda un registre JSON a data/nedadors/<nedador_id>/log_decisions/<nedador_id>_<setmana>.json.
 
     Crea el directori si no existeix. Retorna el Path del fitxer escrit.
 
@@ -58,7 +59,7 @@ def guardar_log_decisio(
         Path del fitxer JSON creat
     """
     # Crear directori si no existeix
-    log_dir = Path("data/processed/log_decisions")
+    log_dir = RutesNedador(nedador_id).log_dir
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Construir nom de fitxer
@@ -96,7 +97,7 @@ def guardar_log_ajust(
     generació), aquesta AFEGEIX a una llista, perquè hi pot haver diversos
     ajustos sobre la mateixa setmana al llarg de la temporada.
 
-    Guarda/actualitza data/processed/log_decisions/<nedador_id>_<setmana>_ajustos.json,
+    Guarda/actualitza data/nedadors/<nedador_id>/log_decisions/<nedador_id>_<setmana>_ajustos.json,
     una llista de:
     {
       "timestamp": ISO 8601 UTC actual,
@@ -121,7 +122,7 @@ def guardar_log_ajust(
         Path del fitxer JSON creat/actualitzat
     """
     # Crear directori si no existeix
-    log_dir = Path("data/processed/log_decisions")
+    log_dir = RutesNedador(nedador_id).log_dir
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Construir nom de fitxer

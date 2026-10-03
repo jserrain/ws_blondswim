@@ -4,6 +4,8 @@ __pycache__/
 *.pyc
 *.egg-info/
 data/processed/
+data/nedadors/
+data/competicions.json
 .pytest_cache/
 .ruff_cache/
 .aider*
