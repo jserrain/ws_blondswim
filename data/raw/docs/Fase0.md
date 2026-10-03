@@ -1,5 +1,12 @@
 # BlondSwim — Guia d'ús d'aider per als models i el conversor
 
+> **Nota d'actualització (2026-10-02).** Guia històrica de la Fase 0 (feta). Canvis posteriors:
+> - **Calendari**: ara té **3 competicions de classe A** (Catalunya Hivern, Espanya Hivern 06-07/02/2027 i Catalunya Estiu); Espanya va passar de B a A a la Fase H2 (doble pic). El Pas 7 deia «2 de classe A».
+> - **Columna `id`**: la còpia de `Provisional26-27.xlsx` d'aquest projecte no té la columna `id` (capçaleres: `class, data, competicio, piscina, modalitat`). La font de la ingestió és el fitxer de `data/raw/` del repo; si s'hi copia el del projecte, cal comprovar que `convertir_calendari()` continua generant els `id`.
+> - **Pestanya `Ritmes`**: les adreces de cel·la del Pas 5 són les de `Planificacio_Mesocicles_Jep.xlsx`; `Ritmes_Jep.xlsx` del projecte és una versió antiga de 3 zones (vegeu `metodologia_ritmes.md`).
+> - **Sessió**: l'estructura fixa de 5 parts del Pas 4 s'ha substituït per la plantilla setmanal de 5 dies amb parts per rol (Fases H/H2, `Fase3.md`).
+> - **Flux de treball**: aider només per a canvis petits d'un sol fitxer; els canvis grans es lliuren com a patches `git am`.
+
 Objectiu d'aquesta sessió amb aider: (1) actualitzar `nedador.py` amb el disseny final de `Ritmes`, (2) generar `macrocicle.py` i `sessio.py`, i (3) generar el conversor complet `xlsx_to_json.py` — tot a partir de les dades reals dels teus fitxers.
 
 **Nota de rutes**: el projecte fa servir el layout `src/blondswim/...` (no `src/...`), confirma-ho abans de començar:
@@ -248,6 +255,6 @@ inconsistent i un per al format de data no reconegut.
 make run-ingestion
 ```
 
-Revisa manualment els 3 JSON generats: `calendari.json` (17 competicions, 2 de classe A, tots amb `id` legible i estable com `"2027-01-16_campionat-catalunya-hivern"`), `macrocicle_jep.json` (volums coincidint amb el full), i `nedador_jep.json` (`font="estimat_marca"`, zones amb els valors que ja vam validar: A2≈82.09s, Velocitat≈67.55s).
+Revisa manualment els 3 JSON generats: `calendari.json` (17 competicions, 2 de classe A en aquell moment — **ara 3**, vegeu la nota inicial —, tots amb `id` legible i estable com `"2027-01-16_campionat-catalunya-hivern"`), `macrocicle_jep.json` (volums coincidint amb el full), i `nedador_jep.json` (`font="estimat_marca"`, zones amb els valors que ja vam validar: A2≈82.09s, Velocitat≈67.55s).
 
 Quan ho tinguis fet, comparteix el resultat i ho revisem junts.

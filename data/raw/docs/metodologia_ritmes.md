@@ -1,6 +1,10 @@
 # Metodologia de la pestanya "Ritmes" — raonament i aplicació a altres nedadors
 
 > **Nota d'actualització (2026-10-02).** Un test CSS nou es registra amb `scripts/registrar_test_css.py --t400 ... --t200 ...` (`zones_css.ritmes_des_de_test_css()`), que aplica els offsets d'aquest document i desa les zones a `nedador_jep.json`. Detectat (Fase H2): les zones estimades actuals del Jep són més ràpides que el seu ritme real d'entrenament; cal el test CSS del 03/10/2026.
+>
+> **Quin fitxer descriu aquest document.** Les adreces de cel·la (B4-B22, B44, B48:B52, files 76-79) són les de la pestanya `Ritmes` de `Planificacio_Mesocicles_Jep.xlsx` (a `data/raw/` del repo), la que llegeix `xlsx_to_json.py`. **`Ritmes_Jep.xlsx`, el fitxer d'aquest projecte, és la versió antiga**: només 3 zones (A1-A3), sense Font 1 (CSS), sense Recuperació ni Velocitat, i amb adreces diferents. Es manté com a referència històrica.
+>
+> **Dues taules del Jep no coincideixen.** `Ritmes_Jep.xlsx` dona per 100 m A1 1'27", A2 1'22", A3 1'18"; la pestanya `Ritmes` de `Provisional26-27.xlsx` dona A1 1'27"-1'30", A2 1'24"-1'25", A3 1'20"-1'21". Totes dues són estimacions per millor marca (Font 2) i **queden substituïdes pel test CSS** (Font 1). La pestanya `Ritmes` del `Provisional` també conté la taula de Lou i les proves objectiu A de cada nedador.
 
 Aquest document explica **per què** la pestanya `Ritmes` està dissenyada com està, quines fonts fonamenten cada xifra, i **què cal canviar** (i què no) per aplicar-la a Lou, Cris i Pere.
 
