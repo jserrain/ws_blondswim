@@ -143,13 +143,19 @@ def proves_pic(nedador: Nedador, pic: Pic) -> list[ProvaPic]:
 def competicions_control(
     competicions: list[Competicio], pic: Pic, prova: str
 ) -> list[Competicio]:
-    """Competicions B/C abans del pic, a la mateixa piscina, on es neda la prova."""
+    """
+    Competicions B/C entre el pic anterior i aquest, a la mateixa piscina, on es
+    neda la prova. Les d'abans del pic anterior no compten: són d'un altre cicle.
+    """
+    anteriors = [p for p in pics_temporada(competicions) if p.data_fi < pic.data_inici]
+    des_de = anteriors[-1].data_fi if anteriors else date.min
     return sorted(
         (
             c
             for c in competicions
             if c.classe in ("B", "C")
             and c.piscina == pic.piscina
+            and des_de < _data(c.data_inici)
             and _data(c.data_fi) < pic.data_inici
             and any(mateixa_prova(prova, p) for p in c.proves)
         ),

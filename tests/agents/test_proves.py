@@ -140,6 +140,15 @@ def test_competicions_control_mateixa_piscina_i_abans_del_pic():
     ]
 
 
+def test_competicions_control_del_pic_2_comencen_despres_del_pic_1():
+    calendari = calendari_jep() + [
+        _comp("cornella", "2027-04-17", "C", piscina="50m", proves=["100m Lliure"]),
+    ]
+    pic2 = pics_temporada(calendari)[1]
+    # Girona (24/10, 50 m) és del cicle del pic 1: no compta per al pic 2.
+    assert [c.id for c in competicions_control(calendari, pic2, "100m Lliure")] == ["cornella"]
+
+
 # --- Validacions ---------------------------------------------------------------
 
 
