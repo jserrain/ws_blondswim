@@ -4,9 +4,11 @@ Prerequisit complert: Fase 2 tancada (144 tests, `actualitzar_microcicle()` fet 
 
 ---
 
-## Estat actual (actualitzat 2026-10-02)
+## Estat actual (actualitzat 2026-10-02, revisió de coherència)
 
 **340 tests (inclosos els d'`ingestion`), lint net.** Jerarquia de 3 nivells completa. Fetes: Fase A, Fase B+C+D, Etapa 4 (primera setmana real generada), F1, F2, G1, G2, G5, G6, **Fase H** (organització setmanal, pressupost d'intensitat i control de la recuperació), **Fase H2** (5 dies, biblioteca de tècnica, doble pic), **Fase E+I** (càrrega real sRPE, SRSS, sèrie de control i sessions múltiples al dia), **estructura de la sessió** (bloc de cada part a l'Excel) i **script del test CSS**. Llista completa del que falta: secció «Pendent» al final.
+
+**Organització setmanal vigent: la de la Fase H2 (5 dies, dilluns a divendres).** La plantilla de 4 dies de la Fase H es conserva més avall només com a historial.
 
 **Historial de lliuraments (2026-10-01):** el repo del Jep no tenia aplicades la H ni la H2 (179 tests). `blondswim_faseEI.zip` (8 patches: H, H2, estil i E+I, 328 tests), `blondswim_test_css.patch` (329) i `blondswim_estructura_sessio.patch` (340), aplicats i verificats al repo del Jep. La `setmana_tipus` del Jep ja és a `nedador_jep.json`.
 
@@ -18,7 +20,7 @@ Prerequisit complert: Fase 2 tancada (144 tests, `actualitzar_microcicle()` fet 
 - **Fase B+C+D** — Model `Exercici`, generació estructurada, exportador. ✅ Etapa 4 feta (vegeu "Etapa 4" més avall).
 - **Fase F** — Volum setmanal amb evidència. ✅ F1, F2. Pendents F3-F7.
 - **Fase G** — Contingut setmana a setmana. ✅ G1, G2, G5, G6. Pendents G3, G4.
-- **Fase H** — Organització setmanal, pressupost d'intensitat i control de la recuperació. ✅
+- **Fase H** — Organització setmanal, pressupost d'intensitat i control de la recuperació. ✅ (plantilla de 4 dies substituïda per la H2; el pressupost d'intensitat i la validació continuen vigents)
 - **Fase H2** — 5 dies, biblioteca de tècnica (64 exercicis, 18 famílies), doble pic d'hivern. ✅ Implementada; pendent test CSS i regenerar la setmana 41 real.
 - **Fase E+I** — Càrrega real (sRPE CR-10), benestar (SRSS), sèrie de control, sessions múltiples per dia (natació + gimnàs informatiu) i regla de decisió. ✅ Implementada (5 commits); pendent calibrar llindars amb 3-4 setmanes de dades. Substitueix l'antiga "Fase E".
 - **Estructura de la sessió** — cada part porta el seu bloc (escalfament, tècnica, bloc principal 1..n, tornada a la calma) i l'Excel l'indica. ✅ (2026-10-01)
@@ -81,7 +83,7 @@ def generar_mesocicle(
 
 **Setmana posterior a una competició (Fase H)** — objectiu = `volum_setmanal_min` (prioritat recuperació, complint el mínim).
 
-**Classificació de la setmana (Fase H)** — `Microcicle.dia_competicio` ("dissabte"/"diumenge") i `Microcicle.post_competicio` via `pla_setmanal.classificar_setmana()` (només competicions A i B).
+**Classificació de la setmana (Fase H)** — `Microcicle.dia_competicio` ("dissabte"/"diumenge") i `Microcicle.post_competicio` via `pla_setmanal.classificar_setmana()` (només competicions A i B). **Atenció**: una competició només fa setmana de competició si la seva `data_inici` cau en dissabte o diumenge. Un rang que comenci entre setmana (p.ex. 04-07/02) no activa l'activació ni el `dia_competicio`; per això el calendari ha de portar els dies en què el nedador competeix realment (Espanya: 06-07/02/2027).
 
 ---
 
@@ -105,7 +107,7 @@ def generar_mesocicle(
 - `exportar_setmana_excel(nedador, mesocicle, microcicle, sessions, output_path)` (**G6, fet**) — una pestanya "Setmana N"; és el full per a la piscina. Tots dos comparteixen `_escriure_setmana()` (refactor verificat: cel·les, fonts i amplades idèntiques).
 - Capçalera de setmana: `"<Mes(os)> <Any> — Setmana <ISO> (<dates>) — <mesocicle>, Fase <tipus>"`. Capçalera de dia: `"Dilluns 5 — <franja> — <rol>"` (franja només si el nedador té `setmana_tipus`; rol només amb la plantilla setmanal). Sessions de gimnàs: una línia `"Dilluns 5 — tarda — Gimnàs (60 min, informatiu)"`.
 - Columnes: `Part, Treball, Execució, Descans, Material, Intensitat, Objectiu, Temps (min), Volum (m)`. La columna **Part** (abans `Dia`, sempre buida) porta l'etiqueta del bloc a la primera fila de cada part (vegeu «Estructura de la sessió»). Una fila per `Exercici`; fila `Total`; `Temps (min)` en blanc (Etapa 3b).
-- **Rutina d'espatlla (Fase H)**: si `Nedador.rutina_espatlla_dia` és un dia de descans de la setmana, bloc "Descans a l'aigua. Rutina d'espatlla (opcional, 15 min)" en ordre cronològic.
+- **Rutina d'espatlla**: si `Nedador.rutina_espatlla_dia` és un dia de descans de la setmana, bloc "Descans a l'aigua. Rutina d'espatlla (opcional, 15 min)" en ordre cronològic. Jep: dissabte (H2).
 
 ## Script `scripts/generar_temporada.py --nedador <id>`
 
@@ -132,23 +134,36 @@ Setmana 41 (05-11/10/2026) generada amb crides reals: 4 sessions, cap truncament
 - Volums per sessió fora dels rangs acordats (dijous 4.150, dimarts 3.100).
 - Cicle massa curt: 5x100 IM A3 a c/1'50" (~8" de descans amb marca de 1'38").
 
-Observacions del calendari: avís `cap_competicio_a_restant` confús (es refereix a les setmanes 23-27 de 2027, després de l'última A); el Mundial de Budapest surt duplicat a la setmana 26; el Campionat d'Espanya d'Hivern (setmana 5) és B dins d'un bloc de Base. **Decisió pendent del Jep: classe del Mundial de Budapest.** (El Campionat d'Espanya es va resoldre a la Fase H2: classe A, doble pic.)
+Observacions del calendari: avís `cap_competicio_a_restant` confús (es refereix a les setmanes 23-27 de 2027, després de l'última A); el Mundial de Budapest surt dues vegades a la setmana 26 (vegeu «Calendari 2026-27» més avall: **no és un duplicat**, són dues proves diferents); el Campionat d'Espanya d'Hivern (setmana 5) era B dins d'un bloc de Base. **Decisió pendent del Jep: classe del Mundial de Budapest.** (El Campionat d'Espanya es va resoldre a la Fase H2: classe A, doble pic.)
+
+---
+
+## Calendari 2026-27 — notes de coherència (2026-10-02)
+
+Font: pestanya `Calendari` de `Provisional26-27.xlsx` (corregida el 2026-10-02) → `data/processed/calendari.json` via `convertir_calendari()`.
+
+- **Campionat d'Espanya d'Hivern**: classe **A**, **06-07/02/2027** (decisió H2). El full tenia `B` i `2027-02-04 a 2027-02-07`; corregit. Cal regenerar `calendari.json` i comprovar-hi la classe i les dates (amb el rang 04-07 la setmana no es classificaria com a setmana de competició perquè comença en dijous).
+- **Mundial de Budapest 2027**: dues proves, **aigües obertes 29-30/06** (`modalitat="aaoo"`) i **piscina 50 m 03-09/07**. Totes dues cauen a la setmana 26 i formen un sol bloc competitiu. No s'ha d'eliminar cap fila: cal decidir-ne la classe (pendent del coach) i, si escau, tractar-les juntes a la periodització.
+- **Proves B de la tardor que afecten les setmanes generades**: Barceloneta **ds 17/10** (W42: setmana de competició → activació divendres, sense aeròbica llarga, volum × 0,8; W43: post-competició → dilluns de recuperació, qualitat dijous, objectiu = mínim), UE Horta **ds 07/11** (W45 / W46) i CNSF Marrugat **ds 12/12** (W50 / W51). Les C (Girona 24/10, Sabadell 21/11, etc.) no modifiquen la plantilla.
+- Ordre de files: Sant Jordi (25/04, C) apareix abans de Cornellà (24/04, B). No afecta la ingestió.
 
 ---
 
 ## Fase H — Organització setmanal, pressupost d'intensitat i control de la recuperació (acordat i implementat 2026-09-30)
 
+> **Historial.** La plantilla de 4 dies (Dl, Dt, Dj, Dv), la sèrie de control del dilluns, la rutina d'espatlla del dimecres i els pesos de volum d'aquesta secció **van ser substituïts per la Fase H2** (5 dies, sèrie de control el dimecres, rutina d'espatlla el dissabte). Continuen vigents: 1 dia de qualitat, activació 24 h abans, setmana post-competició, pressupost d'intensitat, límits de papallona, regles de natació i indicadors de recuperació. El patch original de la H (`Fase_Patch.md`) s'ha retirat del projecte.
+
 ### Decisions del coach (Jep)
 
 1. **1 sol dia de qualitat per setmana**; s'avalua amb tests de seguiment abans d'afegir-ne un segon.
 2. **Papallona 300-600 m/setmana**, equilibri entre tècnica i nedar papallona.
-3. **4 sessions no consecutives: dilluns, dimarts, dijous, divendres** (mai 3 dies seguits sense nedar).
+3. ~~4 sessions no consecutives: dilluns, dimarts, dijous, divendres~~ → **5 sessions (H2)**.
 4. **Competicions**: dissabte o diumenge; els dos dies només en proves A (segons les proves).
 5. **Prioritat recuperació**, però **complint sempre el mínim** setmanal; tests per avaluar la recuperació.
 6. **Dia abans de competir: activació. Dies de descans: descans total a l'aigua.**
-7. **Sèrie de control** 4x100 crol A2 cada dilluns; **rutina d'espatlla** opcional de 15 min el dimecres.
+7. **Sèrie de control** 4x100 crol A2 cada setmana (dilluns a la H → **dimecres a la H2**); **rutina d'espatlla** opcional de 15 min (dimecres a la H → **dissabte a la H2**).
 
-### Plantilla setmanal (`pla_setmanal.rols_setmana`)
+### Plantilla setmanal de la Fase H (historial, 4 dies)
 
 | Dia | Normal | Competició dissabte | Competició diumenge | Post-competició |
 |---|---|---|---|---|
@@ -160,15 +175,15 @@ Observacions del calendari: avís `cap_competicio_a_restant` confús (es referei
 | Ds | Descans | 🏁 | **Activació** | Descans |
 | Dg | Descans | Descans | 🏁 | Descans |
 
-Post-competició i competició el mateix cap de setmana: sense dia de qualitat (les curses fan d'estímul intens). Setmana de Cursa (A): mateixa lògica d'activació; la Transició posterior és setmana post-competició.
+Plantilla vigent: vegeu «Fase H2». Post-competició i competició el mateix cap de setmana: sense dia de qualitat (les curses fan d'estímul intens). Setmana de Cursa (A): mateixa lògica d'activació; la Transició posterior és setmana post-competició.
 
 ### Volum i parts per rol
 
-*(Ordre de les parts revisat el 2026-10-01: vegeu «Estructura de la sessió».)*
+*(Ordre de les parts revisat el 2026-10-01: vegeu «Estructura de la sessió». Pesos vigents: vegeu «Fase H2».)*
 
-Pesos de volum (`PES_ROL`): aeròbica 1,0 · llarga 1,1 · qualitat 0,95 · tècnica 0,95 · activació 0,5 · recuperació 0,6. Rang de cada sessió = objectiu ± 5%, limitat a `minuts_max_sessio × 40 m/min`. Parts pròpies per rol (`PARTS_ROL`); la sèrie de control (400 m) és una part fixa després de l'escalfament del dilluns, amb cicle = ritme A2 + 15" arrodonit a 5" (Jep: c/1'40").
+Pesos de volum de la H (historial): aeròbica 1,0 · llarga 1,1 · qualitat 0,95 · tècnica 0,95 · activació 0,5 · recuperació 0,6. Rang de cada sessió = objectiu ± 5%, limitat a `minuts_max_sessio × 40 m/min`. Parts pròpies per rol (`PARTS_ROL`); la sèrie de control (400 m) és una part fixa, amb cicle = ritme A2 + 15" arrodonit a 5" (Jep amb les zones estimades: c/1'40"; es recalcula amb el test CSS).
 
-### Pressupost d'intensitat per sessió (validat en codi)
+### Pressupost d'intensitat per sessió (validat en codi, vigent)
 
 | Rol / fase | A3+AeM | Velocitat | Làctic (MPLA/TOLA) |
 |---|---|---|---|
@@ -378,15 +393,15 @@ Temps com `6:52.3`, `6'52.3` o segons. Calcula CSS/100 = (T400 − T200) / 2 i l
 
 ---
 
-## Volum setmanal — criteris amb evidència (acordat 2026-09-30)
+## Volum setmanal — criteris amb evidència (acordat 2026-09-30, actualitzat amb la H2)
 
-**Context del Jep**: A = 100 crol i 100 estils; B = alguna prova de 200 crol; 4 dies/setmana sense dia opcional; sessió màxima 1:30-1:45 h; sense molèsties d'espatlla; **12.000 m/setmana = mínim normal** (no aplica a taper ni transició).
+**Context del Jep**: A = 100 crol i 100 estils; B = alguna prova de 200 crol; **5 dies/setmana (H2; a la H eren 4)** sense dia opcional; sessió màxima 1:30-1:45 h; sense molèsties d'espatlla; **12.000 m/setmana = mínim normal** (no aplica a taper ni transició).
 
 **Evidència (resum)**: no hi ha criteri científic de volum absolut; la distribució per zones pesa més que els metres ([Nugent et al. 2017](https://pubmed.ncbi.nlm.nih.gov/27465628/); [Kilen et al.](https://onlinelibrary.wiley.com/doi/10.1080/17461391.2015.1028466)); en màsters, bloc de volum → bloc d'intensitat ([IJSPP 2015](https://pubmed.ncbi.nlm.nih.gov/25710182/)); l'edat i el volum prediuen el rendiment màster ([Lapierre et al. 2018](https://pubmed.ncbi.nlm.nih.gov/30130814/); [Zamparo et al. 2012](https://link.springer.com/article/10.1007/s00421-012-2376-y)); lesió associada a càrrega aguda i ACWR alts, però ACWR qüestionat → avís, no regla ([PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC9205558/); [Impellizzeri et al. 2020](https://www.researchgate.net/publication/341936245_AcuteChronic_Workload_Ratio_Conceptual_Issues_and_Fundamental_Pitfalls)); taper de 2 setmanes amb −41-60% de volum ([Bosquet et al. 2007](https://www.semanticscholar.org/paper/Effects-of-tapering-on-performance:-a-Bosquet-Montpetit/a41517ab5fa06b92568b861e2b1aa32b3003d214)).
 
-**Dades històriques** (`Provisional26-27.xlsx`, planificat 25-26, 5 dies): 2.800 m/sessió de mitjana (p25-p75 2.700-2.900), ~62 min/sessió, ~45 m/min, 13.930 m/setmana.
+**Dades de referència** (`Provisional26-27.xlsx`, sessions planificades a mà, 5 dies): 2.800 m/sessió de mitjana (p25-p75 2.700-2.900), ~62 min/sessió, ~45 m/min, 13.930 m/setmana. **El fitxer barreja dues temporades**: les pestanyes **Sept i Oct** tenen les dates del **2026** (setmanes 5-13; la setmana 5 té les etiquetes de dia desplaçades, «Dilluns 1» hauria de ser «Dilluns 31/08») i són la planificació manual d'aquesta temporada; les pestanyes **Nov, Desc, Gen i Feb** tenen les dates del **2025** (dilluns 3/11, 1/12, 16/02) i són la planificació de la 25-26; **Gen és una còpia exacta de Desc** (no hi ha dades reals de gener) i la numeració salta de la setmana 20 a la 27. El registre real d'entrenament és `historial_jep.json` (`PretemporadaSep26-27.xlsx`, 18/08-25/09/2026).
 
-**Rangs per tipus de setmana (4 dies)**: càrrega 13.600-15.000 · qualitat 12.000-13.600 · descàrrega 12.000-12.400 · taper A setmana 1: 8.400-9.800 · taper A setmana 2: 5.600-8.200 · taper B: 10.400-12.000. Provisionals: recalibrar amb F3.
+**Rangs per tipus de setmana**: càrrega 13.600-15.000 · qualitat 12.000-13.600 · descàrrega 12.000-12.400 · taper A setmana 1: 8.400-9.800 · taper A setmana 2: 5.600-8.200 · taper B: 10.400-12.000. Es van calcular amb 4 dies; amb la H2 el volum setmanal no canvia i es reparteix en 5 sessions. Provisionals: recalibrar amb F3.
 
 ### Millores (Fase F)
 
@@ -417,9 +432,10 @@ Estructura de temporada sencera (determinista), contingut LLM setmana a setmana:
 
 **Tasques del coach (sense codi)**
 - Test CSS dissabte 03/10, registrar-lo amb `registrar_test_css.py` i comprovar la zona de velocitat.
-- Regenerar i revisar la W41 amb les zones noves (re-verificació de l'Etapa 4).
+- Regenerar `calendari.json` amb el `Calendari` corregit i comprovar-hi Espanya (A, 06-07/02/2027).
+- Regenerar i revisar la W41 amb les zones noves (re-verificació de l'Etapa 4). Decidir quin pla es neda la W41: el generat o el manual de la pestanya `Oct` del `Provisional`.
 - Revisar la biblioteca de tècnica (`Biblioteca_tecnica_v1_families.xlsx`).
-- Decidir la classe del Mundial de Budapest.
+- Decidir la classe del Mundial de Budapest (les dues proves, aigües obertes i piscina).
 - Confirmar l'ordre de l'aeròbica llarga (velocitat alàctica al principi).
 
 **Qualitat dels fulls (prioritat)**
@@ -441,7 +457,7 @@ Estructura de temporada sencera (determinista), contingut LLM setmana a setmana:
 
 **Contingut (Fase G)**: G4 previsualització N+1 com a esborrany.
 
-**Pendents menors**: revertir `tipus_base` obsolet després d'`eliminar_competicio()`; cablejat de `guardar_log_ajust()`; missatge de `cap_competicio_a_restant` (a partir de quina setmana); model "judge" configurable (`BLONDSWIM_LLM_PROVIDER`); contingut de gimnàs generat; esquelet antic per a Lou, Cris i Pere fins que tinguin plantilla pròpia.
+**Pendents menors**: revertir `tipus_base` obsolet després d'`eliminar_competicio()`; cablejat de `guardar_log_ajust()`; missatge de `cap_competicio_a_restant` (a partir de quina setmana); tractar les dues proves de Budapest com un sol bloc competitiu (no eliminar-ne cap); model "judge" configurable (`BLONDSWIM_LLM_PROVIDER`); contingut de gimnàs generat; esquelet antic per a Lou, Cris i Pere fins que tinguin plantilla pròpia.
 
 ## Pendent general
 
@@ -450,7 +466,7 @@ Estructura de temporada sencera (determinista), contingut LLM setmana a setmana:
 
 ---
 
-## Fase H2 — 5 dies, biblioteca de tècnica i doble pic (acordat i implementat 2026-10-01)
+## Fase H2 — 5 dies, biblioteca de tècnica i doble pic (acordat i implementat 2026-10-01) — VIGENT
 
 ### Decisions del coach (Jep)
 
@@ -494,7 +510,7 @@ Hivern 2026-27: Peak 53-1 · Cursa Catalunya (2) · Build2 (3) · Peak (4) · Cu
 
 ### Zones de ritme (problema detectat)
 
-Les zones de `Ritmes_Jep.xlsx` (A2 1'22", A3 1'18") són més ràpides que el ritme de la millor marca de 200 m (1'31,5"/100); el Jep manté ~1'40"/100 entrenant. **Test CSS dissabte 03/10/2026** (400 + 200 m, repartint l'esforç: cada 100 com a molt 2" més ràpid que la mitjana); CSS/100 = (T400 − T200) / 2; zones = CSS + offsets (A2 = CSS, A3 = CSS − 4", A1 = CSS + 6", Recuperació = CSS + 12").
+Les zones estimades per millor marca són més ràpides que el ritme de la millor marca de 200 m (1'31,5"/100); el Jep manté ~1'40"/100 entrenant. A més, **hi ha dues taules del Jep que no coincideixen**: `Ritmes_Jep.xlsx` (A1 1'27", A2 1'22", A3 1'18" per 100) i la pestanya `Ritmes` de `Provisional26-27.xlsx` (A1 1'27"-1'30", A2 1'24"-1'25", A3 1'20"-1'21"). Totes dues són estimacions per marca i **queden substituïdes pel test CSS**; `Ritmes_Jep.xlsx` és, a més, la versió antiga de 3 zones (vegeu `metodologia_ritmes.md`). **Test CSS dissabte 03/10/2026** (400 + 200 m, repartint l'esforç: cada 100 com a molt 2" més ràpid que la mitjana); CSS/100 = (T400 − T200) / 2; zones = CSS + offsets (A2 = CSS, A3 = CSS − 4", A1 = CSS + 6", Recuperació = CSS + 12").
 
 ### Dades del Jep (`data/nedadors/jep/nedador.json`, actualitzat 2026-10-01)
 
