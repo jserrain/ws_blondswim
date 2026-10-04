@@ -44,6 +44,8 @@ from blondswim.agents.generar_microcicle import (
 )
 from blondswim.agents.periodificacio import _dilluns_de, avui, periodificar_temporada
 from blondswim.agents.pla_setmanal import DIES_PLANTILLA, usa_plantilla
+from blondswim.agents.progressio import avaluar_pic, format_informe
+from blondswim.agents.proves import validar_objectius
 from blondswim.agents.taper import generar_pla_taper_temporada
 from blondswim.export.mesocicle_excel import exportar_mesocicle_excel, exportar_setmana_excel
 from blondswim.export.registre_excel import exportar_registre_setmana
@@ -53,6 +55,7 @@ from blondswim.rutes import (
     carregar_competicions,
     carregar_historial,
     carregar_nedador,
+    carregar_resultats,
     llistar_nedadors,
 )
 from blondswim.utils.dates import seguent_dilluns
@@ -107,6 +110,19 @@ def _avaluar_recuperacio(registres_dir: Path, dilluns_objectiu: date) -> None:
         print(f"   ✓ Setmana del {setmana_anterior:%d/%m}: cap alerta de recuperació")
     for avis in avisos:
         print(f"   ⚠ {avis['missatge']}")
+
+
+def _informe_progressio(rutes, nedador, competicions, data: date) -> None:
+    """Imprimeix la progressió cap a l'objectiu A (no atura la generació si falla)."""
+    try:
+        resultats = carregar_resultats(rutes)
+    except (ValueError, ValidationError) as e:
+        print(f"   ✗ Error llegint {rutes.resultats}: {e}")
+        return
+    avisos = validar_objectius(nedador, competicions, resultats, data)
+    pic, estats = avaluar_pic(nedador, competicions, resultats, data)
+    for linia in format_informe(pic, estats, avisos):
+        print(f"   {linia}" if linia else "")
 
 
 def main() -> int:
@@ -200,6 +216,9 @@ def main() -> int:
     print("\n   Recuperació (fulls de registre)...")
     registres_dir = rutes.registres_dir
     _avaluar_recuperacio(registres_dir, dilluns_objectiu)
+
+    print("\n   Progressió cap a l'objectiu A...")
+    _informe_progressio(rutes, nedador, competicions, data_referencia or avui())
 
     print("\n2. Generant macrocicle...")
     macrocicle, avisos_macro = generar_macrocicle(
