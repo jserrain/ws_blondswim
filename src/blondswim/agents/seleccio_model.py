@@ -95,7 +95,7 @@ def _enriquir_justificacio_amb_llm(
         ]
 
         # Construir prompt
-        proves_str = ", ".join(nedador.proves_objectiu)
+        proves_str = ", ".join(nedador.noms_proves)
         prompt = f"""Ets un expert en metodologies d'entrenament de natació.
 
 CONTEXT DEL NEDADOR:

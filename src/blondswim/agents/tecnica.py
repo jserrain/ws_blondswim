@@ -21,6 +21,7 @@ from pathlib import Path
 
 from blondswim.models.macrocicle import Microcicle
 from blondswim.models.nedador import Nedador
+from blondswim.utils.proves import clau_prova
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +64,6 @@ _FASE_PER_TIPUS: dict[str, str] = {
 }
 _ORDRE_NIVELL = {"Base": 0, "Intermedi": 1, "Refinament": 2}
 
-_ESTILS = {
-    "crol": "crol", "lliure": "crol", "free": "crol",
-    "estils": "estils", "im": "estils",
-    "papallona": "papallona", "pap": "papallona",
-    "esquena": "esquena", "braça": "braça", "braca": "braça",
-}
-
 
 @cache
 def carregar_biblioteca() -> tuple[dict, ...]:
@@ -89,15 +83,11 @@ def families() -> list[str]:
 
 def normalitzar_prova(prova: str) -> str | None:
     """'100m lliure' / '100 crol' / '100 IM' -> '100 crol' / '100 estils'."""
-    m = re.match(r"\s*(\d+)\s*m?\s+(.+)", prova.lower())
-    if not m:
-        return None
-    estil = _ESTILS.get(m.group(2).strip().split()[0])
-    return f"{m.group(1)} {estil}" if estil else None
+    return clau_prova(prova)
 
 
 def _proves_nedador(nedador: Nedador) -> set[str]:
-    return {p for p in (normalitzar_prova(x) for x in nedador.proves_objectiu) if p}
+    return {p for p in (normalitzar_prova(x) for x in nedador.noms_proves) if p}
 
 
 def _rotacio_bloc(mesocicle_id: str) -> int:

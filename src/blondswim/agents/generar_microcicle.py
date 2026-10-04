@@ -271,7 +271,7 @@ def _seleccionar_metodologia_nedador(
     nedador: Nedador, categoria: Literal["absolut", "master"]
 ) -> DecisioMetodologia:
     """Metodologia per a la primera prova objectiu del nedador."""
-    prova_objectiu = nedador.proves_objectiu[0] if nedador.proves_objectiu else "200m lliure"
+    prova_objectiu = nedador.noms_proves[0] if nedador.proves_objectiu else "200m lliure"
     return seleccio_model.seleccionar_metodologia(
         nedador=nedador,
         prova_objectiu=prova_objectiu,
@@ -603,7 +603,7 @@ def generar_contingut_mesocicle(
        ValueError si no existeix.
     2. Per cada Microcicle del mesocicle (ordenats per setmana):
        a. seleccionar_metodologia() per triar la metodologia d'aquella
-          setmana (usa el primer element de nedador.proves_objectiu).
+          setmana (usa la primera prova objectiu del nedador).
        b. Crida generar_i_validar_microcicle(nedador, macrocicle,
           microcicle.setmana, metodologia, pla_taper, avisos_pics_a,
           historial).
@@ -1050,9 +1050,9 @@ def generar_microcicle(
             resum_previ = _resum_sessions_generades(sessions)
 
             prompt = prompt_template.format(
-                proves_objectiu=", ".join(nedador.proves_objectiu),
+                proves_objectiu=", ".join(nedador.noms_proves),
                 categoria=nedador.categoria,
-                estil_preferent=nedador.proves_objectiu[0] if nedador.proves_objectiu else "Lliure",
+                estil_preferent=nedador.noms_proves[0] if nedador.proves_objectiu else "Lliure",
                 zona_recuperacio=_fmt_ritme(nedador.ritmes_css.recuperacio if nedador.ritmes_css else None),
                 zona_a1=_fmt_ritme(nedador.ritmes_css.a1 if nedador.ritmes_css else None),
                 zona_a2=_fmt_ritme(nedador.ritmes_css.a2 if nedador.ritmes_css else None),

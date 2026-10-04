@@ -9,6 +9,7 @@ Estructura (fora de git):
             ├── nedador.json           perfil, marques, ritmes_css, setmana_tipus
             ├── calendari.json         [{competicio_id, classe, proves}]
             ├── historial.json         sessions realitzades (few-shot, volums)
+            ├── resultats.json         temps de competició (B/C/A), parcials i braçades
             ├── macrocicle.json        última temporada generada
             ├── setmanes/              setmana_<id>_<YYYY>-W<ww>.xlsx (full de la piscina)
             ├── registres/             registre_<id>_<YYYY>-W<ww>.xlsx (RPE, SRSS, control)
@@ -35,6 +36,7 @@ from blondswim.models.calendari import (
 )
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.nedador import Nedador
+from blondswim.models.resultat import ResultatCompeticio
 
 ARREL_DADES_PER_DEFECTE = Path("data")
 FITXER_COMPETICIONS = "competicions.json"
@@ -83,6 +85,10 @@ class RutesNedador:
     @property
     def historial(self) -> Path:
         return self.carpeta / "historial.json"
+
+    @property
+    def resultats(self) -> Path:
+        return self.carpeta / "resultats.json"
 
     @property
     def macrocicle(self) -> Path:
@@ -174,3 +180,10 @@ def carregar_historial(rutes: RutesNedador) -> list[SessioRealitzada]:
     if not rutes.historial.is_file():
         return []
     return [SessioRealitzada(**s) for s in _llegir_json(rutes.historial)]
+
+
+def carregar_resultats(rutes: RutesNedador) -> list[ResultatCompeticio]:
+    """Resultats de competició del nedador; llista buida si encara no en té."""
+    if not rutes.resultats.is_file():
+        return []
+    return [ResultatCompeticio(**r) for r in _llegir_json(rutes.resultats)]

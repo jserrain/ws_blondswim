@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from blondswim.models.franja import (
     DIES_SETMANA,
@@ -9,6 +9,8 @@ from blondswim.models.franja import (
     ORDRE_FRANJA,
     SlotSessio,
 )
+from blondswim.utils.proves import mateixa_prova
+from blondswim.utils.temps import parsejar_temps
 
 
 class RitmesCSS(BaseModel):
@@ -66,12 +68,92 @@ class RitmeCursaObjectiu(BaseModel):
     distancia_m: int
     temps_objectiu_seg: float | None = None
 
+class NivellActual(BaseModel):
+    """
+    Nivell actual en una prova, com a rang: la millor marca (extrem optimista) i
+    el temps que el coach estima que faria ara (extrem pessimista). Els temps
+    s'accepten en segons o com a text («1:17.08», «1'20\"00»).
+    """
+
+    millor_marca: float
+    estimacio_pessimista: float
+
+    @field_validator("millor_marca", "estimacio_pessimista", mode="before")
+    @classmethod
+    def _temps(cls, v):
+        return parsejar_temps(v)
+
+    @model_validator(mode="after")
+    def _ordre(self) -> "NivellActual":
+        if self.millor_marca > self.estimacio_pessimista:
+            raise ValueError(
+                "nivell_actual: la millor marca no pot ser més lenta que l'estimació pessimista"
+            )
+        return self
+
+
+class ObjectiuProva(BaseModel):
+    """Objectiu d'una prova en una competició A, com a rang (realista ≥ ambiciós)."""
+
+    competicio_id: str
+    realista: float
+    ambicios: float
+
+    @field_validator("realista", "ambicios", mode="before")
+    @classmethod
+    def _temps(cls, v):
+        return parsejar_temps(v)
+
+    @model_validator(mode="after")
+    def _ordre(self) -> "ObjectiuProva":
+        if self.ambicios > self.realista:
+            raise ValueError(
+                f"objectiu {self.competicio_id}: l'ambiciós no pot ser més lent que el realista"
+            )
+        return self
+
+
+class ProvaObjectiu(BaseModel):
+    """
+    Prova objectiu del nedador: prioritat P (principal) o S (secundària),
+    piscina, nivell actual i objectius per competició A.
+    """
+
+    prova: str
+    prioritat: Literal["P", "S"] = "P"
+    piscina: Literal["25m", "50m"] = "25m"
+    nivell_actual: NivellActual | None = None
+    objectius: list[ObjectiuProva] = []
+
+    def objectiu_per(self, competicio_ids: list[str]) -> ObjectiuProva | None:
+        """Primer objectiu definit per a alguna de les competicions (p. ex. un doble pic)."""
+        for comp_id in competicio_ids:
+            for objectiu in self.objectius:
+                if objectiu.competicio_id == comp_id:
+                    return objectiu
+        return None
+
+
+class ParametresProgressio(BaseModel):
+    """Paràmetres de l'avaluació de la progressió (calibrables per nedador)."""
+
+    # Millora esperada pel taper de la competició A (Mujika: ~2-3%).
+    guany_taper: float = 0.02
+    # Marge de soroll entre competicions (elit ~0,8%; màsters, més).
+    marge: float = 0.01
+    # Millora màxima raonable abans del taper (fins a la A) abans d'avisar.
+    exigencia_max: float = 0.04
+    # Competicions de control (B/C) mínimes per prova abans de la A.
+    min_competicions_control: int = 2
+
+
 class Nedador(BaseModel):
     id: str
     nom: str
     edat: int | None = None
     categoria: Literal["absolut", "master", "junior"]
-    proves_objectiu: list[str]
+    # Proves objectiu. També accepta la llista antiga de textos (-> prioritat P).
+    proves_objectiu: list[ProvaObjectiu]
     pics_prioritzats: list[str] = []
     mode_ritme: Literal["temps", "rpe"]
     marques_referencia: MarquesReferencia | None = None
@@ -93,6 +175,26 @@ class Nedador(BaseModel):
     # (màxim 3 al dia, una per franja; com a molt una de natació). Si hi és,
     # dies_disponibles es deriva d'aquí (dies amb sessió de natació).
     setmana_tipus: dict[str, list[SlotSessio]] | None = None
+    parametres_progressio: ParametresProgressio = ParametresProgressio()
+
+    @field_validator("proves_objectiu", mode="before")
+    @classmethod
+    def _proves_text(cls, v):
+        if isinstance(v, list):
+            return [{"prova": p} if isinstance(p, str) else p for p in v]
+        return v
+
+    @property
+    def noms_proves(self) -> list[str]:
+        """Noms de les proves objectiu, en l'ordre de la fitxa."""
+        return [p.prova for p in self.proves_objectiu]
+
+    def prova_objectiu(self, nom: str) -> ProvaObjectiu | None:
+        """Prova objectiu per nom («100m Lliure» = «100 lliures» = «100 crol»)."""
+        for prova in self.proves_objectiu:
+            if mateixa_prova(prova.prova, nom):
+                return prova
+        return None
 
     @model_validator(mode="after")
     def _validar_setmana_tipus(self) -> "Nedador":
