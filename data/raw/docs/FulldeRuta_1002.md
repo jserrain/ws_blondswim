@@ -2,6 +2,12 @@
 
 *Creat 2026-10-02, revisat el mateix dia (coherència amb el calendari i els fitxers). Base: `Fase3.md` (340 tests, `ruff` net).*
 
+> **Actualització 2026-10-05 (llegir primer).**
+> - **Fet fora de sprint:** objectius i progressió (proves P/S, pics, bandes, zones, projecció), simulacions i `registrar_resultat.py` (456 tests). Vegeu `Disseny_proves_objectius.md` i `Manual.md`.
+> - **Calendari nou** (PDF del Circuit Català): Horta passa al 14/11, Girona al 19/12 (50 m), Cornellà al 17/04. La **Barceloneta (17/10) és una simulació**: la W42 **no** és setmana de competició ni la W43 post-competició (corregeix els punts 2.8 i 3.4). Única B abans del pic 1: **CNSF 12/12** → W50 setmana de competició, W51 post-competició.
+> - **Sprint 0:** test CSS ajornat a dilluns 05/10 (piscina tancada); 0.6 fet (calendari refet a mà, no des de l'Excel).
+> - **Nou sprint prioritari («Objectius-2»):** planificador setmanal LLM (patch 4) i prompt per focus de prova (patch 5). Recomanat abans del Build (desembre), després de l'Sprint 2.
+
 > **Actualització 2026-10-03.** Dades per nedador a `data/nedadors/<id>/` i catàleg comú `data/competicions.json` (369 tests). Abans de l'Sprint 0, migrar les dades: `python scripts/migrar_a_carpetes.py`. Els scripts reben `--nedador <id>`.
 
 ## Criteris d'ordre
@@ -12,7 +18,7 @@
 
 **Ruta crítica:** test CSS → Sprint 1 → Etapa 3b + cicles → G3 → F4 abans de desembre.
 
-**Setmanes amb competició B (afecten la plantilla):** W42 (Barceloneta, ds 17/10) i W43 post-competició · W45 (UE Horta, ds 07/11) i W46 post · W50 (CNSF, ds 12/12) i W51 post. Les C no canvien la plantilla.
+**Setmanes amb competició B (afecten la plantilla):** ~~W42 (Barceloneta) i W43 post~~ (ara simulació) · ~~W45-W46 (UE Horta)~~ (ara C, 14/11) · **W50 (CNSF, ds 12/12) i W51 post**. Les C i les simulacions no canvien la plantilla.
 
 ---
 
@@ -149,11 +155,13 @@ G3, continuïtat al prompt.
 
 | Quan | Sprint | Clau |
 |---|---|---|
-| 03-04/10 | 0 | Test CSS, `calendari.json` corregit, regenerar la W41 |
+| 03-04/10 | 0 | ~~Test CSS~~ (→ 05/10), calendari refet ✅, generar la W41 |
+| 04-05/10 | — | Objectius, progressió i simulacions ✅ |
 | fins al 05/10 | 1 | Avís de gimnàs, `--nomes-registre`, historials |
 | setmana del 05/10 | 2 | Etapa 3b, cicles, F7 → W42 (competició B) |
 | setmana del 12/10 | 3 | G3 → W43 (post-competició) |
 | octubre | 4 | F5 i pendents menors (Budapest com a bloc) |
+| oct-nov | Objectius-2 | Planificador setmanal LLM i prompt per focus de prova |
 | ~W44-45 | 5 | Calibratge, F3, base de càrrega |
 | abans del 15/12 | 6 | F4 taper (Peak de la W53) |
 | febrer 2027 | 7 | Mundial, segon dia de qualitat, Fases 4-5 |

@@ -4,11 +4,13 @@ Prerequisit complert: Fase 2 tancada (144 tests, `actualitzar_microcicle()` fet 
 
 ---
 
-## Estat actual (actualitzat 2026-10-02, revisió de coherència)
+## Estat actual (actualitzat 2026-10-05)
 
-**340 tests (inclosos els d'`ingestion`), lint net.** Jerarquia de 3 nivells completa. Fetes: Fase A, Fase B+C+D, Etapa 4 (primera setmana real generada), F1, F2, G1, G2, G5, G6, **Fase H** (organització setmanal, pressupost d'intensitat i control de la recuperació), **Fase H2** (5 dies, biblioteca de tècnica, doble pic), **Fase E+I** (càrrega real sRPE, SRSS, sèrie de control i sessions múltiples al dia), **estructura de la sessió** (bloc de cada part a l'Excel) i **script del test CSS**. Llista completa del que falta: secció «Pendent» al final.
+**456 tests (inclosos els d'`ingestion`), lint net.** Jerarquia de 3 nivells completa. Fetes: Fase A, Fase B+C+D, Etapa 4 (primera setmana real generada), F1, F2, G1, G2, G5, G6, **Fase H** (organització setmanal, pressupost d'intensitat i control de la recuperació), **Fase H2** (5 dies, biblioteca de tècnica, doble pic), **Fase E+I** (càrrega real sRPE, SRSS, sèrie de control i sessions múltiples al dia), **estructura de la sessió** (bloc de cada part a l'Excel), **script del test CSS**, **multi-nedador** (dades per carpeta) i **objectius i progressió** (proves P/S, pics, bandes, simulacions; vegeu la secció al final i `Disseny_proves_objectius.md`). Manual d'ús: `Manual.md`. Llista completa del que falta: secció «Pendent» al final.
 
 **Organització setmanal vigent: la de la Fase H2 (5 dies, dilluns a divendres).** La plantilla de 4 dies de la Fase H es conserva més avall només com a historial.
+
+**Historial de lliuraments (2026-10-03/05):** `blondswim_multinedador.zip` (5 patches, 369), patch de documentació de rutes, `blondswim_objectius.zip` (3 patches, 447), correcció de les competicions de control del pic 2 (448) i simulacions + `registrar_resultat.py` (456), aplicats al repo del Jep (`main` = `dcb20c0` + aquesta documentació).
 
 **Historial de lliuraments (2026-10-01):** el repo del Jep no tenia aplicades la H ni la H2 (179 tests). `blondswim_faseEI.zip` (8 patches: H, H2, estil i E+I, 328 tests), `blondswim_test_css.patch` (329) i `blondswim_estructura_sessio.patch` (340), aplicats i verificats al repo del Jep. La `setmana_tipus` del Jep ja és a `nedador_jep.json`.
 
@@ -25,6 +27,8 @@ Prerequisit complert: Fase 2 tancada (144 tests, `actualitzar_microcicle()` fet 
 - **Fase E+I** — Càrrega real (sRPE CR-10), benestar (SRSS), sèrie de control, sessions múltiples per dia (natació + gimnàs informatiu) i regla de decisió. ✅ Implementada (5 commits); pendent calibrar llindars amb 3-4 setmanes de dades. Substitueix l'antiga "Fase E".
 - **Estructura de la sessió** — cada part porta el seu bloc (escalfament, tècnica, bloc principal 1..n, tornada a la calma) i l'Excel l'indica. ✅ (2026-10-01)
 - **Script del test CSS** — `scripts/registrar_test_css.py`. ✅ (2026-10-01)
+- **Multi-nedador** — una carpeta per nedador, catàleg comú i calendari per nedador. ✅ (2026-10-03)
+- **Objectius i progressió** — proves P/S, pics del calendari, perfil per durada, bandes, zones, projecció, simulacions i registre de resultats. ✅ (2026-10-04/05). Pendents: planificador setmanal LLM i prompt per focus de prova (patches 4-5).
 
 ---
 
@@ -428,12 +432,16 @@ Estructura de temporada sencera (determinista), contingut LLM setmana a setmana:
 
 ---
 
-## Pendent (actualitzat 2026-10-02)
+## Pendent (actualitzat 2026-10-05)
+
+**Objectius i progressió (prioritat)**
+0. **Planificador setmanal LLM** (patch 4) i **prompt per focus de prova** (patch 5): vegeu `Disseny_proves_objectius.md`, seccions 5-6. Fins llavors, la metodologia es tria per la primera prova de la fitxa (ara el 100 lliure).
 
 **Tasques del coach (sense codi)**
-- Test CSS dissabte 03/10, registrar-lo amb `registrar_test_css.py` i comprovar la zona de velocitat.
-- Regenerar `calendari.json` amb el `Calendari` corregit i comprovar-hi Espanya (A, 06-07/02/2027).
-- Regenerar i revisar la W41 amb les zones noves (re-verificació de l'Etapa 4). Decidir quin pla es neda la W41: el generat o el manual de la pestanya `Oct` del `Provisional`.
+- ~~Test CSS dissabte 03/10~~ (piscina tancada) → **dilluns 05/10**; registrar-lo amb `registrar_test_css.py --nedador jep` abans de generar la W41.
+- ~~Regenerar `calendari.json`~~ ✅ Catàleg nou a partir del PDF del Circuit Català i calendari del Jep refet (Espanya A, 06-07/02/2027).
+- Generar i revisar la W41 amb les zones del test (re-verificació de l'Etapa 4).
+- Marge al nivell del 100 IM (ara 1'38" = 1'38") i objectius del pic 2 (abans del febrer); data definitiva de Sant Andreu (13 o 20/03).
 - Revisar la biblioteca de tècnica (`Biblioteca_tecnica_v1_families.xlsx`).
 - Decidir la classe del Mundial de Budapest (les dues proves, aigües obertes i piscina).
 - Confirmar l'ordre de l'aeròbica llarga (velocitat alàctica al principi).
@@ -544,3 +552,25 @@ Commits (patches `git am`):
 4. **migració** — `scripts/migrar_a_carpetes.py [--simular]` copia `data/processed/` a la nova estructura (no esborra ni sobreescriu). `make run-ingestion` escriu la nova estructura i ja no trepitja `nedador.json` si existeix. 7 tests.
 
 **Pendent:** fitxes i calendaris de Lou, Cris i Pere; dates de temporada per nedador (ara fixes a l'script).
+
+## Objectius, progressió i simulacions (2026-10-04/05)
+
+Disseny complet, decisions i evidència: **`Disseny_proves_objectius.md`**. Ús: **`Manual.md`**, seccions 4, 6 i 7.
+
+**Problema de partida:** la metodologia es triava per `proves_objectiu[0]` (50 papallona) per a tota la temporada, amb una regla per distància pensada per a temps d'elit, i el sistema no mesurava el rendiment.
+
+**Decisions del coach (Jep):** proves P/S a la fitxa (pesos 2/1); pics calculats de les competicions A del calendari; perfil per durada; metodologia per fase; objectiu A com a rang (realista/ambiciós) i nivell actual com a rang; B i C com a punts de control progressius; vídeo per a parcials i braçades; 50 papallona fora; el calendari del nedador només conté les competicions on va; simulacions (contrarellotge en entrenament).
+
+Commits (patches `git am`):
+
+1. **objectius** — `ProvaObjectiu`, `NivellActual`, `ObjectiuProva`, `ParametresProgressio`; `ResultatCompeticio` i `resultats.json`; `utils/temps.py`, `utils/proves.py`. La llista antiga de textos continua funcionant. 38 tests.
+2. **proves** — `agents/proves.py`: pics (doble pic a ≤ 4 setmanes), pesos, perfil per durada, competicions de control, `validar_objectius()` (només el pic actiu per defecte). 22 tests.
+3. **progressio** — `agents/progressio.py`: bandes (línia ràpida de la millor marca a l'ambiciós, línia lenta de l'estimació pessimista al realista, fins al temps sense taper de la A), zones, calibratge, projecció lineal amb interval ±1σ (soroll mínim = `marge`), ritme de cursa de referència; `informe_progressio.py` i informe dins `generar_temporada.py`. 18 tests.
+4. **fix** — les competicions de control d'un pic comencen després del pic anterior. 1 test.
+5. **simulacions** — `InscripcioCompeticio.tipus` (`competicio`/`simulacio`), simulacions sobre el catàleg o definides amb `data` i `piscina`; fora de la planificació (`competicions_planificacio()`); a l'informe `[S]`, sense «sense millora» ni «nova millor marca»; `scripts/registrar_resultat.py`. 8 tests.
+
+**Revisió durant la implementació:** el ritme de cursa ja no es mou amb un sol resultat dins la banda (a l'inici, l'amplada és incertesa del nivell, no progrés): realista fins que hi ha projecció, i després la projecció, com a molt l'ambiciós.
+
+**Calendari del Jep (pic 1, 25 m):** simulació Barceloneta 17/10, Horta 14/11 (C), Granollers 28/11 (C), CNSF 12/12 (B, assaig general; W50 setmana de competició, W51 post-competició), Girona 19/12 (C, 50 m, pic 2), Catalunya 16-17/01 i Espanya 06-07/02 (A, doble pic). Pesos del pic 1: 100 lliure 50%, 100 IM 50%. El 200 lliure passa al pic 2.
+
+**Limitacions:** taper 2%, marge 1%, exigència 4% i pesos 2/1 són punts de partida raonats (dades d'elit i de màsters joves); amb 3-4 curses per pic la projecció és orientativa.

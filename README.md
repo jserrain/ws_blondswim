@@ -2,7 +2,7 @@
 
 Sistema de planificació d'entrenament de natació per a màsters: periodització de la temporada, organització setmanal, contingut de cada sessió (generat amb Claude dins de límits deterministes), full per a la piscina i seguiment de la càrrega i la recuperació.
 
-Documentació detallada a `data/raw/docs/`: `Architecture.md` (visió general), `Fase1.md`-`Fase3.md` (decisions, evidència i estat de cada fase).
+**Manual d'ús: `data/raw/docs/Manual.md`.** Documentació detallada a `data/raw/docs/`: `Architecture.md` (visió general), `Fase1.md`-`Fase3.md` (decisions, evidència i estat de cada fase), `Disseny_proves_objectius.md` (objectius i progressió), `FulldeRuta_1002.md` (sprints).
 
 ## Instal·lació
 
@@ -21,7 +21,8 @@ data/
 ├── competicions.json            catàleg comú (id, nom, dates, piscina)
 └── nedadors/<id>/               <id> = identificador del nedador (jep, lou, cris, pere)
     ├── nedador.json             fitxa: proves objectiu, ritmes_css, setmana_tipus, ...
-    ├── calendari.json           [{competicio_id, classe A/B/C, proves}]
+    ├── calendari.json           [{competicio_id, classe A/B/C, proves, tipus}] (només on va)
+    ├── resultats.json           temps de competicions i simulacions (registrar_resultat.py)
     ├── historial.json           sessions reals (few-shot)
     ├── macrocicle.json          última temporada generada
     ├── setmanes/                setmana_<id>_<YYYY>-W<ww>.xlsx (full per a la piscina)

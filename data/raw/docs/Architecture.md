@@ -1,6 +1,6 @@
 # BlondSwim — Arquitectura
 
-*Actualitzat 2026-10-03 — 369 tests, `ruff` net.*
+*Actualitzat 2026-10-05 — 456 tests, `ruff` net. Manual d'ús: `Manual.md`.*
 
 ## Decisió d'arquitectura
 
@@ -20,6 +20,9 @@ scripts/generar_temporada.py --nedador <id> [--dilluns YYYY-MM-DD]
         │
         ├─ Recuperació: llegeix els fulls de registre omplerts → càrrega sRPE,
         │  SRSS, sèrie de control → alertes de la setmana anterior
+        ├─ Progressió: resultats.json + calendari → bandes, zones, calibratge,
+        │  projecció a la A i ritme de cursa de referència (pic actiu)
+        ├─ (les simulacions del calendari no entren a la planificació)
         ├─ generar_macrocicle()          temporada sencera (convenció TrainingPeaks)
         ├─ periodificar_temporada()      ATP enrere des de cada competició A
         ├─ generar_mesocicle()           bloc que conté la setmana, volums i microcicles
@@ -30,6 +33,9 @@ scripts/generar_temporada.py --nedador <id> [--dilluns YYYY-MM-DD]
                      registres/registre_<id>_<YYYY>-W<ww>.xlsx  (en blanc, per omplir)
 
 scripts/registrar_test_css.py --nedador <id> --t400 --t200   → actualitza ritmes_css
+scripts/registrar_resultat.py --nedador <id> --competicio --prova --temps [--parcials]
+                                                              → resultats.json
+scripts/informe_progressio.py --nedador <id> [--data]         → informe del pic actiu
 ```
 
 ## Capes i mòduls
@@ -37,7 +43,8 @@ scripts/registrar_test_css.py --nedador <id> --t400 --t200   → actualitza ritm
 | Capa | Mòdul | Tipus | Fase | Tests |
 |---|---|---|---|---|
 | Dades | Models pydantic (`models/`: nedador, calendari, macrocicle, sessio, historial, decisio, **franja**, **registre**; calendari en dues capes) | — | 0-Multi | 31 |
-| Dades | Rutes i càrrega per nedador (`rutes.py`): `RutesNedador`, catàleg + calendari resolt, llistat de nedadors | Determinista | Multi | 15 |
+| Dades | Rutes i càrrega per nedador (`rutes.py`): `RutesNedador`, catàleg + calendari resolt, resultats, llistat de nedadors | Determinista | Multi | 15 |
+| Dades | Proves objectiu i resultats (`models/nedador.py`: `ProvaObjectiu`, `NivellActual`, `ObjectiuProva`, `ParametresProgressio`; `models/resultat.py`); simulacions al calendari | — | Obj | 38 + 5 |
 | Dades | Migració `data/processed/` → carpetes per nedador (`ingestion/migracio.py`) | Determinista | Multi | 7 |
 | Dades | Conversor Excel→JSON (`ingestion/xlsx_to_json.py`): calendari, macrocicle, microcicles, ritmes, pretemporada | Determinista | 0-2 | 36 |
 | Dades | Ingestió del full de registre setmanal (`ingestion/registre_setmana.py`) | Determinista | E+I | 11 |
@@ -51,14 +58,17 @@ scripts/registrar_test_css.py --nedador <id> --t400 --t200   → actualitza ritm
 | Validació | `validacio.py`: descàrrega periòdica, ACWR amb historial, taper, **franges natació/gimnàs** | Determinista | 1-E+I | 13 |
 | Seguiment | Càrrega real sRPE (`carrega.py`): diària, setmanal, aguda/crònica, alerta +15% | Determinista | E+I | 21 (amb recuperació) |
 | Seguiment | Indicadors de recuperació i regla de decisió (`recuperacio.py`): SRSS, sèrie de control | Determinista | E+I | (inclosos) |
+| Seguiment | Proves i pics (`proves.py`): pics del calendari (doble pic), pesos P/S, perfil per durada, competicions de control, validació dels objectius | Determinista | Obj | 23 |
+| Seguiment | Progressió (`progressio.py`): bandes, zones, calibratge, projecció amb interval, ritme de cursa de referència, informe | Determinista | Obj | 21 |
 | Estratègia | Selecció de metodologia (`seleccio_model.py`) | Determinista + enriquiment LLM opcional | 2 | 32 |
 | Estratègia | Macrocicle i mesocicle (`generar_macrocicle.py`) | Determinista + enriquiment LLM opcional | 3 | 24 |
 | Estratègia | Contingut de sessions (`generar_microcicle.py`): 1 crida LLM per sessió de natació, tool-use forçat, validació i reintent; primitives d'ajust; logs | LLM (judici) + determinista | 2-3 | 41 |
 | Sortida | Full de la piscina (`export/mesocicle_excel.py`) | Determinista | 3 | 9 |
 | Sortida | Full de registre setmanal (`export/registre_excel.py`) | Determinista | E+I | (amb la ingestió) |
 | Utilitats | Dates (`utils/dates.py`): dilluns, setmanes que creuen d'any | Determinista | G2 | 9 |
+| Utilitats | Temps de natació (`utils/temps.py`) i clau canònica de prova (`utils/proves.py`) | Determinista | Obj | (amb els models) |
 
-**Fases tancades:** Fase 1 (2026-09-27, 62 tests) · Fase 2 (2026-09-28, 144 tests). **Fase 3 en curs** (vegeu `fase3.md`): fets A, B+C+D, F1-F2, G1-G2-G5-G6, H, H2, E+I, estructura de la sessió i script del test CSS.
+**Fases tancades:** Fase 1 (2026-09-27, 62 tests) · Fase 2 (2026-09-28, 144 tests). **Fase 3 en curs** (vegeu `fase3.md`): fets A, B+C+D, F1-F2, G1-G2-G5-G6, H, H2, E+I, estructura de la sessió, script del test CSS, multi-nedador i **objectius i progressió** (patches 1-3 de `Disseny_proves_objectius.md`, simulacions).
 
 ## Client LLM
 
@@ -84,9 +94,10 @@ scripts/registrar_test_css.py --nedador <id> --t400 --t200   → actualitza ritm
 
 ## Model de dades
 
-- **`Nedador`**: identitat, categoria, proves objectiu, mode de ritme, marques i `ritmes_css` (+ paràmetres i offsets), `dies_disponibles`, `volum_setmanal_min`, `minuts_max_sessio`, `rutina_espatlla_dia`, `prioritats_tecniques`, **`setmana_tipus`** (`dict[dia, list[SlotSessio]]`; si hi és, `dies_disponibles` se'n deriva).
+- **`Nedador`**: identitat, categoria, **`proves_objectiu`** (llista de `ProvaObjectiu`: `prova`, `prioritat` P/S, `piscina`, `nivell_actual` {millor marca, estimació pessimista}, `objectius` [{competició A, realista, ambiciós}]; la llista antiga de textos es llegeix com a proves P), `parametres_progressio` (taper 2%, marge 1%, exigència 4%, mínim 2 controls), mode de ritme, marques i `ritmes_css` (+ paràmetres i offsets), `dies_disponibles`, `volum_setmanal_min`, `minuts_max_sessio`, `rutina_espatlla_dia`, `prioritats_tecniques`, **`setmana_tipus`** (`dict[dia, list[SlotSessio]]`; si hi és, `dies_disponibles` se'n deriva).
 - **`SlotSessio`**: `franja` (mati/migdia/tarda), `modalitat` (natacio/gimnas/altres), `durada_min`, `opcional`.
-- **Calendari en dues capes**: **`CompeticioCataleg`** (id, nom, dates ISO, piscina; comú, `data/competicions.json`) + **`InscripcioCompeticio`** (`competicio_id`, classe A/B/C, `proves`; per nedador, `data/nedadors/<id>/calendari.json`). `resoldre_calendari()` les combina en **`Competicio`** (amb classe), que és el que fan servir els agents.
+- **Calendari en dues capes**: **`CompeticioCataleg`** (id, nom, dates ISO, piscina; comú, `data/competicions.json`) + **`InscripcioCompeticio`** (`competicio_id`, classe A/B/C, `proves`; per nedador, `data/nedadors/<id>/calendari.json`). `resoldre_calendari()` les combina en **`Competicio`** (amb classe i `tipus`), que és el que fan servir els agents. El calendari del nedador només conté les competicions on va. **Simulacions** (`tipus="simulacio"`): contrarellotge en entrenament, sobre una competició del catàleg o definida amb `data` i `piscina`; `competicions_planificacio()` les exclou de la planificació.
+- **`ResultatCompeticio`** (`data/nedadors/<id>/resultats.json`): competició, prova, temps, parcials de 25 m (vídeo; han de sumar el temps), braçades per llargada, font, notes.
 - **`Macrocicle` → `Mesocicle` → `Microcicle`**: temporada → bloc (`tipus` Base/Build1/Build2/Peak/Cursa/Transicio) → setmana (`volum_objectiu`, `tipus_base`, `dia_competicio`, `post_competicio`, `sessions_des_de`).
 - **`Sessio`**: dia, `franja`, `modalitat`, `durada_min`, `tipus_sessio`, `rol`, `volum_total`/`volum_min`/`volum_max`, `exercicis_tecnica`, `estructura.parts` → **`PartSessio`** (`nom`, **`bloc`**: Escalfament/Tècnica/Bloc principal/Tornada a la calma/Sèrie de control, `fixa`, `exercicis`) → **`Exercici`** (`series`, `distancia_m`, `execucio`, `descans`, `material`, `intensitat`, `objectiu`, `id_biblioteca`).
 - **`SessioRealitzada`**: data, `franja`, `modalitat`, `temps_total_min`, `volum_total_m`, `series`, **`rpe_sessio`** (CR-10), **`assoliment`** (1-5), `carrega` (sRPE).
@@ -110,6 +121,8 @@ Una carpeta per nedador, `data/nedadors/<id>/` (fora de git), amb `nedador.json`
 - Proves reals contra l'API abans de confiar en una funcionalitat generativa (els mocks no detecten errors de comportament del model).
 
 ## Pendent (detall a `fase3.md`)
+
+- **Planificador setmanal LLM** (patch 4 de `Disseny_proves_objectius.md`): focus de prova per sessió dins dels pesos P/S, validat pel codi i aprovat pel coach; i **prompt del redactor** (patch 5): focus i ritme de cursa de referència en lloc de la metodologia per a la primera prova.
 
 - Temps per exercici (Etapa 3b) i validació de cicles respecte al ritme de la zona.
 - G3 (continuïtat i dades reals al prompt) i G4 (previsualització N+1).
