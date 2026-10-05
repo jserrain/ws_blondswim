@@ -83,6 +83,10 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 
    **IMPORTANT:** Retorna el camp `sessio_id` EXACTAMENT igual com apareix aquí, sense modificar-lo.
 
+   **NOM DE CADA PART:** al camp `nom` de cada part, escriu EXACTAMENT el valor de `nom` de l'estructura (p. ex. `"Aeròbic"`), mai l'etiqueta del bloc (`"Bloc principal 1 — Aeròbic"`). Omple TOTES les parts no fixades: cap part pot quedar sense exercicis.
+
+   **SENSE FARCIMENT:** cada exercici ha de tenir contingut real. Mai escriguis exercicis com "placeholder", "N.A." o similars per quadrar metres.
+
    **VOLUM FLEXIBLE:** la sessió ha de fer entre {volum_min} i {volum_max} m (piscina 25 m). La suma de `series × distancia_m` de tots els exercicis ha d'estar dins d'aquest rang. Si no hi arribes, ajusta el nombre de `series` o la `distancia_m` (sempre múltiple de 25) fins a quedar-hi dins.
 
    **ROL DE LA SESSIÓ ({rol}):** {descripcio_rol}

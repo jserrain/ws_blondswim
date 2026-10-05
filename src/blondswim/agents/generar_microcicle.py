@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Literal
@@ -24,7 +25,7 @@ from blondswim.models.franja import ETIQUETA_FRANJA, ETIQUETA_MODALITAT
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.macrocicle import Macrocicle, Mesocicle, Microcicle
 from blondswim.models.nedador import Nedador
-from blondswim.models.sessio import Exercici, Sessio
+from blondswim.models.sessio import Exercici, PartSessio, Sessio
 from blondswim.rutes import RutesNedador
 from blondswim.utils.dates import parsejar_rang_dates
 
@@ -699,8 +700,16 @@ def generar_contingut_mesocicle(
     return resultats, errors
 
 
-def _construir_tools_sessio() -> list[dict]:
-    """Tool schema per a la generació del contingut d'UNA sola sessió."""
+def _construir_tools_sessio(noms_parts: list[str] | None = None) -> list[dict]:
+    """
+    Tool schema per a la generació del contingut d'UNA sola sessió.
+
+    Amb `noms_parts`, el camp `nom` de cada part es limita a aquests valors
+    (enum), perquè l'LLM no hi posi l'etiqueta del bloc («Bloc principal 1 — …»).
+    """
+    nom_schema: dict = {"type": "string"}
+    if noms_parts:
+        nom_schema = {"type": "string", "enum": list(noms_parts)}
     return [
         {
             "name": "retornar_contingut_sessio",
@@ -719,7 +728,7 @@ def _construir_tools_sessio() -> list[dict]:
                         "items": {
                             "type": "object",
                             "properties": {
-                                "nom": {"type": "string"},
+                                "nom": nom_schema,
                                 "exercicis": {
                                     "type": "array",
                                     "items": {
@@ -868,13 +877,49 @@ def _arrodonir_distancia_25(distancia_m: int) -> int:
     return max(25, round(distancia_m / 25) * 25)
 
 
+# Textos de farciment que l'LLM fa servir per quadrar metres: l'exercici es descarta.
+TEXTOS_FARCIMENT = {"", "-", "placeholder", "n.a.", "n.a", "na", "n/a", "tbd", "...", "x"}
+
+_RE_PREFIX_BLOC = re.compile(r"^\s*bloc principal(\s+\d+)?\s*[—–-]\s*", re.IGNORECASE)
+
+
+def _normalitzar_nom_part(nom: str) -> str:
+    """'Bloc principal 1 — Aeròbic' / 'Aeròbic [Bloc principal 1 — Aeròbic]' -> 'aeròbic'."""
+    nom = re.sub(r"\[.*?\]|\(.*?\)", "", str(nom))
+    nom = _RE_PREFIX_BLOC.sub("", nom)
+    return nom.strip().strip('"').strip().casefold()
+
+
+def _trobar_part(sessio: Sessio, nom_part: str | None) -> PartSessio | None:
+    """
+    Part de la sessió pel nom que retorna l'LLM. Accepta el nom exacte i, si no,
+    el nom amb l'etiqueta del bloc (p. ex. «Bloc principal 1 — Aeròbic»), que és
+    com apareix a l'Excel i al prompt.
+    """
+    if nom_part is None:
+        return None
+    parts = sessio.estructura.parts
+    exacta = next((p for p in parts if p.nom == nom_part), None)
+    if exacta is not None:
+        return exacta
+    clau = _normalitzar_nom_part(nom_part)
+    return next((p for p in parts if _normalitzar_nom_part(p.nom) == clau), None)
+
+
+def _es_farciment(ex_data: dict) -> bool:
+    """Exercici sense contingut real («placeholder», «N.A.»...)."""
+    execucio = str(ex_data.get("execucio") or "").strip().casefold()
+    objectiu = str(ex_data.get("objectiu") or "").strip().casefold()
+    return execucio in TEXTOS_FARCIMENT or objectiu in {"placeholder", "n.a.", "n/a"}
+
+
 def _aplicar_contingut_sessio(sessio: Sessio, sessio_data: dict, setmana: int) -> None:
     """Aplica els exercicis del tool_use a les parts de la sessió."""
     for part_data in _extreure_parts(sessio_data):
         nom_part = part_data.get("nom")
         exercicis_data = part_data.get("exercicis", [])
 
-        part = next((p for p in sessio.estructura.parts if p.nom == nom_part), None)
+        part = _trobar_part(sessio, nom_part)
         if part is not None and part.fixa:
             logger.info(f"Part fixa '{nom_part}' a sessió '{sessio.id}': no es modifica")
             continue
@@ -889,6 +934,13 @@ def _aplicar_contingut_sessio(sessio: Sessio, sessio_data: dict, setmana: int) -
         n_rebuts = len(exercicis_data)
         n_descartats = 0
         for ex_data in exercicis_data:
+            if isinstance(ex_data, dict) and _es_farciment(ex_data):
+                n_descartats += 1
+                logger.warning(
+                    f"Exercici de farciment a sessió '{sessio.id}', part '{nom_part}', "
+                    f"descartat: {ex_data.get('execucio')!r}"
+                )
+                continue
             distancia = ex_data.get("distancia_m")
             if isinstance(distancia, int) and distancia % 25 != 0:
                 arrodonida = _arrodonir_distancia_25(distancia)
@@ -1010,9 +1062,10 @@ def generar_microcicle(
         setmana = sessions_natacio[0].microcicle_setmana
 
         client = get_llm_client()
-        tools = _construir_tools_sessio()
-
         for sessio in sessions_natacio:
+            tools = _construir_tools_sessio(
+                [p.nom for p in sessio.estructura.parts if not p.fixa]
+            )
             # Estructura de parts d'aquesta sessió
             estructura_sessions_text = (
                 f"\n**Sessió: {sessio.dia.capitalize()} "
@@ -1036,9 +1089,9 @@ def generar_microcicle(
                 else:  # descarrega, taper, transicio
                     perc = part.percentatge_descarrega
                 volum_part = int(sessio.volum_total * perc / 100)
-                bloc = f" [{etiqueta}]" if part.bloc else ""
+                bloc = f" — bloc: {etiqueta}" if part.bloc and etiqueta != part.nom else ""
                 estructura_sessions_text += (
-                    f"  - {part.nom}{bloc}: {perc}% ({volum_part}m)\n"
+                    f"  - nom: \"{part.nom}\"{bloc}: {perc}% ({volum_part}m)\n"
                 )
 
             sessions_setmana_text = (
