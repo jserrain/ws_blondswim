@@ -18,6 +18,11 @@ Per a cada prova del pic actiu:
 5. **Temps de referència del ritme de cursa**: el realista; amb projecció, el
    temps projectat (com a molt l'ambiciós), també si el realista no és assolible.
 
+Les **simulacions** (contrarellotges en entrenament) compten com a punts de control
+(calibratge, zona i projecció), però no fan saltar l'avís «sense millora» ni
+generen «nova millor marca»: sense competició, el temps sol ser una mica més lent
+i no és oficial.
+
 Mai es compara una competició amb l'anterior: el progrés previst entre dues B
 és més petit que la variabilitat entre competicions (Pyne et al. 2004: ~0,8%).
 """
@@ -259,7 +264,11 @@ def avaluar_pic(
                     ),
                 })
         if nivell:
-            millors = [p.resultat for p in amb_resultat if p.resultat < nivell.millor_marca]
+            millors = [
+                p.resultat
+                for p in amb_resultat
+                if p.resultat < nivell.millor_marca and not p.competicio.es_simulacio
+            ]
             if millors:
                 estat.avisos.append({
                     "tipus": "nova_millor_marca",
@@ -274,6 +283,8 @@ def avaluar_pic(
             estat.projeccio = projectar(punts_xy, x_a, objectiu, params)
         vermelles = 0
         for p in amb_resultat:
+            if p.competicio.es_simulacio:
+                continue
             vermelles = vermelles + 1 if p.zona == "vermella" else 0
         if vermelles >= 2:
             estat.avisos.append({
@@ -321,8 +332,9 @@ def format_informe(
                 banda_txt = (
                     f"{_ft(p.rapid)} – {_ft(p.lent)}" if p.rapid is not None else "—"
                 )
+                nom = ("[S] " if p.competicio.es_simulacio else "") + p.competicio.nom
                 linies.append(
-                    f"    {p.competicio.nom[:34]:<34} {p.data:%d/%m} {banda_txt:<17} "
+                    f"    {nom[:34]:<34} {p.data:%d/%m} {banda_txt:<17} "
                     f"{_ft(p.resultat):<9} {p.zona or ''}"
                 )
         if estat.exigencia_realista is not None:
@@ -340,6 +352,9 @@ def format_informe(
             linies.append(f"    Ritme de cursa de referència: {_ft(estat.ritme_cursa)}")
         for avis in estat.avisos:
             linies.append(f"    ⚠ {avis['missatge']}")
+    if any(p.competicio.es_simulacio for e in estats for p in e.punts):
+        linies.append("")
+        linies.append("  [S] = simulació (contrarellotge en entrenament): no altera la planificació")
     if avisos_validacio:
         linies.append("")
         linies.append("  Dades pendents o incoherents:")

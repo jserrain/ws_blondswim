@@ -59,6 +59,16 @@ Sortides a `data/nedadors/<id>/`:
 #    SRSS, sèrie de control) i mostra alertes i recomanacions.
 ```
 
+Resultats de competició i progressió cap a l'objectiu A:
+
+```bash
+python scripts/registrar_resultat.py --nedador jep --competicio 2026-10-17_etapa-1 \
+    --prova "100m Lliure" --temps 1:18.40 --parcials 18.3,19.9,20.1,20.1 --font video
+python scripts/informe_progressio.py --nedador jep
+```
+
+Simulacions (contrarellotge en un entrenament): al calendari, `"tipus": "simulacio"`. Compten com a punt de control de la progressió però no alteren la planificació (sense mini-taper ni setmana post-competició). Poden apuntar a una competició del catàleg o definir-se amb `"data"` i `"piscina"`.
+
 Test CSS (400 + 200 m), per actualitzar les zones de ritme:
 
 ```bash

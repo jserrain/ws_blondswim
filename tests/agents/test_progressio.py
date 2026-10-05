@@ -174,3 +174,44 @@ def test_format_informe():
 
 def test_format_informe_sense_pic():
     assert format_informe(None, []) == ["Cap competició A pendent al calendari."]
+
+
+# --- Simulacions ------------------------------------------------------------------
+
+
+def _calendari_amb_simulacio():
+    calendari = calendari_jep()
+    calendari[0] = calendari[0].model_copy(
+        update={"tipus": "simulacio", "nom": "Simulació — barceloneta"}
+    )
+    return calendari
+
+
+def test_simulacio_compta_com_a_control_pero_no_fa_avisos():
+    resultats = [_res("barceloneta", "100m Lliure", 76.9),  # més ràpid que la millor marca
+                 _res("horta", "100m Lliure", 80.5)]
+    _, estats = avaluar_pic(nedador_jep(), _calendari_amb_simulacio(), resultats,
+                            date(2026, 11, 8))
+    lliure = _estat(estats, "100m Lliure")
+    assert lliure.punts[0].competicio.es_simulacio
+    assert lliure.punts[0].zona == "blava"
+    assert lliure.exigencia_realista is not None  # calibra amb la simulació
+    assert lliure.projeccio is not None and lliure.projeccio.n == 2
+    tipus = [a["tipus"] for a in lliure.avisos]
+    assert "nova_millor_marca" not in tipus  # una simulació no és marca oficial
+
+
+def test_dues_vermelles_amb_una_simulacio_no_fan_saltar_sense_millora():
+    resultats = [_res("barceloneta", "100m Lliure", 80.0), _res("horta", "100m Lliure", 80.5)]
+    _, estats = avaluar_pic(nedador_jep(), _calendari_amb_simulacio(), resultats,
+                            date(2026, 11, 8))
+    lliure = _estat(estats, "100m Lliure")
+    assert [p.zona for p in lliure.punts[:2]] == ["vermella", "vermella"]
+    assert "sense_millora" not in [a["tipus"] for a in lliure.avisos]
+
+
+def test_informe_marca_les_simulacions():
+    pic, estats = avaluar_pic(nedador_jep(), _calendari_amb_simulacio(), [], date(2026, 10, 4))
+    text = "\n".join(format_informe(pic, estats))
+    assert "[S] Simulació — barceloneta" in text
+    assert "[S] = simulació" in text

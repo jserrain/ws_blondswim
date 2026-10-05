@@ -50,6 +50,7 @@ from blondswim.agents.taper import generar_pla_taper_temporada
 from blondswim.export.mesocicle_excel import exportar_mesocicle_excel, exportar_setmana_excel
 from blondswim.export.registre_excel import exportar_registre_setmana
 from blondswim.ingestion.registre_setmana import carregar_registres
+from blondswim.models.calendari import competicions_planificacio
 from blondswim.rutes import (
     RutesNedador,
     carregar_competicions,
@@ -172,7 +173,7 @@ def main() -> int:
     try:
         rutes = RutesNedador(args.nedador, arrel_dades)
         nedador = carregar_nedador(rutes)
-        competicions = carregar_competicions(rutes)
+        totes_competicions = carregar_competicions(rutes)
         historial = carregar_historial(rutes)
     except FileNotFoundError as e:
         print(f"✗ {e}")
@@ -182,6 +183,9 @@ def main() -> int:
         disponibles = ", ".join(llistar_nedadors(arrel_dades)) or "cap"
         print(f"  Nedadors disponibles: {disponibles}")
         return 2
+    # Les simulacions (contrarellotges en entrenament) només serveixen per a la
+    # progressió: no alteren la planificació.
+    competicions = competicions_planificacio(totes_competicions)
     if not competicions:
         print(f"⚠ {rutes.calendari} buit o inexistent: temporada sense competicions")
 
@@ -195,6 +199,11 @@ def main() -> int:
     print(
         f"   ✓ Competicions: {len(competicions)} "
         f"({sum(1 for c in competicions if c.classe == 'A')} classe A)"
+        + (
+            f" + {len(totes_competicions) - len(competicions)} simulacions"
+            if len(totes_competicions) > len(competicions)
+            else ""
+        )
     )
     print(f"   ✓ Historial: {len(historial)} sessions")
     if usa_plantilla(nedador):
@@ -218,7 +227,7 @@ def main() -> int:
     _avaluar_recuperacio(registres_dir, dilluns_objectiu)
 
     print("\n   Progressió cap a l'objectiu A...")
-    _informe_progressio(rutes, nedador, competicions, data_referencia or avui())
+    _informe_progressio(rutes, nedador, totes_competicions, data_referencia or avui())
 
     print("\n2. Generant macrocicle...")
     macrocicle, avisos_macro = generar_macrocicle(

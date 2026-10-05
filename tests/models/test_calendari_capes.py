@@ -109,3 +109,53 @@ def test_fusionar_cataleg_afegeix_i_actualitza():
     fusionat = fusionar_cataleg(existent, nou)
     assert [c.id for c in fusionat] == ["barceloneta", "girona", "cat-hivern"]
     assert fusionat[1].nom == "Trofeu Girona (nou nom)"
+
+
+# --- Simulacions ------------------------------------------------------------------
+
+
+def test_simulacio_sobre_competicio_del_cataleg():
+    ins = InscripcioCompeticio(
+        competicio_id="barceloneta", classe="B", proves=["100m Lliure"], tipus="simulacio"
+    )
+    [c] = resoldre_calendari(_cataleg(), [ins])
+    assert c.es_simulacio and c.tipus == "simulacio"
+    assert c.data_inici == "2026-10-17" and c.piscina == "25m"
+    assert c.nom == "Simulació — Master Barceloneta"
+
+
+def test_simulacio_definida_al_calendari():
+    ins = InscripcioCompeticio(
+        competicio_id="tt-2026-10-21", classe="C", proves=["100m IM"], tipus="simulacio",
+        data="2026-10-21", piscina="25m", nom="Contrarellotge 100 IM",
+    )
+    [c] = resoldre_calendari(_cataleg(), [ins])
+    assert (c.id, c.nom, c.data_inici, c.data_fi, c.piscina) == (
+        "tt-2026-10-21", "Contrarellotge 100 IM", "2026-10-21", "2026-10-21", "25m"
+    )
+
+
+def test_simulacio_fora_del_cataleg_necessita_data_i_piscina():
+    ins = InscripcioCompeticio(competicio_id="tt", classe="C", tipus="simulacio")
+    with pytest.raises(ValueError, match="data i piscina"):
+        resoldre_calendari(_cataleg(), [ins])
+
+
+def test_simulacio_no_pot_ser_a_i_competicio_no_porta_data():
+    with pytest.raises(ValueError, match="classe A"):
+        InscripcioCompeticio(competicio_id="x", classe="A", tipus="simulacio")
+    with pytest.raises(ValueError, match="només es poden definir en una simulació"):
+        InscripcioCompeticio(competicio_id="x", classe="B", data="2026-10-21")
+
+
+def test_competicions_planificacio_exclou_simulacions():
+    from blondswim.models.calendari import competicions_planificacio
+
+    comps = resoldre_calendari(
+        _cataleg(),
+        [
+            InscripcioCompeticio(competicio_id="barceloneta", classe="B", tipus="simulacio"),
+            InscripcioCompeticio(competicio_id="girona", classe="C"),
+        ],
+    )
+    assert [c.id for c in competicions_planificacio(comps)] == ["girona"]
