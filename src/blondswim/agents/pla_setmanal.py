@@ -16,6 +16,7 @@ import math
 import re
 from datetime import date, timedelta
 
+from blondswim.agents import diccionari
 from blondswim.models.calendari import Competicio
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import Exercici, PartSessio, Sessio
@@ -424,31 +425,11 @@ def metres_papallona(sessio: Sessio) -> int:
     return total
 
 
-# Normes de l'entrenador que es poden comprovar pel text (no cal el jutge).
-# Arrossegar el polze o els dits a la recuperació de crol carrega l'espatlla.
-_RE_ARROSSEGAR = re.compile(
-    r"arrossega\w*\s+(?:el\s+|els\s+)?(?:polze|dits)|(?:polze|dits)\s+arrossega",
-    re.IGNORECASE,
-)
-# «Ei» no és un terme de natació (l'LLM el fa servir per DPS).
-_RE_TERMES_PROHIBITS = re.compile(r"\bEi\b")
-
-
 def problemes_normes(ex: Exercici) -> list[str]:
-    """Normes de l'entrenador comprovables pel text de l'exercici."""
+    """Normes de l'entrenador comprovables pel text (termes `prohibit` del diccionari)."""
     text = f"{ex.execucio} {ex.objectiu or ''}"
-    problemes = []
-    if _RE_ARROSSEGAR.search(text):
-        problemes.append(
-            f"'{ex.execucio}': no facis exercicis d'arrossegar el polze o els dits a la "
-            "recuperació (carreguen l'espatlla)"
-        )
-    if _RE_TERMES_PROHIBITS.search(text):
-        problemes.append(
-            f"'{ex.execucio}': «Ei» no és un terme de natació; per a la longitud de "
-            "braçada, escriu DPS o recompte de braçades"
-        )
-    return problemes
+    return [f"'{ex.execucio}': {motiu}" for patro, motiu in diccionari.normes()
+            if patro.search(text)]
 
 
 def problemes_contingut(sessio: Sessio) -> list[str]:

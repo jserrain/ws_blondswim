@@ -33,7 +33,13 @@ def _sessio(data: str, *series: SerieRealitzada, modalitat: str = "natacio"):
     ("Ps C/E", "Cames Crol i Esquena"),
     ("Papallona subaq 3 bats", "Papallona subaquàtic 3 batudes"),
     ("4N + 4Ps", "4 nedar + 4 Cames"),
-    ("Crol + 6) EP", "Crol + EP"),
+    ("Crol + 6) EP", "Crol + estil preferent"),
+    ("4EP + 2PEB", "4 estil preferent + 2 Papallona, Esquena i Braça"),
+    ("FRIM prog", "FRIM progressius"),
+    ("Tèc Braça (^)", "tècnica Braça ritme màxim"),
+    ("4x50 Esq/Br viratges F", "4x50 Esquena/Braça viratges fort"),
+    ("Crol Imp Ae1 + Par Ae2", "Crol senars A1 + parells A2"),
+    ("1er 25 resp + 2on pos", "1er 25 respiració + 2on posició"),
     ("Crol (75 r/3 + 125 r/4)", "Crol (75 respiració cada 3 + 125 respiració cada 4)"),
     ("Cames de crol amb taula", "Cames de crol amb taula"),
 ])
@@ -88,13 +94,13 @@ def test_referencies_historial_formats_parts_i_duplicats():
     refs = {r.text: r for r in R.referencies_historial(sessions)}
     assert set(refs) == {
         "200 m | 100 Crol + 100 Braça | intensitat: A1",
-        "200 m | Cames Crol taula | intensitat: A1",
+        "200 m | Cames Crol Taula | intensitat: A1",
         "4x100 m | Crol | intensitat: A3 | material: Aletes",
         "2x200 m | Crol respiració cada 3 | intensitat: A1",
         "100 m | Recuperació | intensitat: Recuperació",
     }  # el polze arrossegant (norma de l'entrenador) i el gimnàs, fora
     assert refs["200 m | 100 Crol + 100 Braça | intensitat: A1"].parts == {"escalfament"}
-    assert refs["200 m | Cames Crol taula | intensitat: A1"].parts == {"cames"}
+    assert refs["200 m | Cames Crol Taula | intensitat: A1"].parts == {"cames"}
     assert refs["100 m | Recuperació | intensitat: Recuperació"].parts == {"calma"}
     a3 = refs["4x100 m | Crol | intensitat: A3 | material: Aletes"]
     assert a3.vegades == 2 and a3.font == "historial:2026-09-28"

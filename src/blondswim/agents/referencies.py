@@ -9,12 +9,13 @@ Corpus (mateix format que `jutge.text_exercici`, amb font i veredicte):
 - biblioteca de tècnica (`tecnica/biblioteca_tecnica.json`), amb font citada;
 - historial del nedador (`SessioRealitzada.series`): sessions fetes, «correcte».
   No té part de sessió: s'infereix de l'objectiu, la intensitat i la posició.
-  Les abreviatures de l'entrenador (Ps, Ei, AL, r/4, A0...) es despleguen.
+  Les abreviatures de l'entrenador (Ps, PEB, AL, r/4, A0...) es despleguen amb
+  el diccionari (`agents/diccionari.py`).
 - referències extra en JSONL (veredictes del mode ombra, errors etiquetats).
 
 Cerca sense LLM: filtre pel tipus de part i BM25 sobre el text normalitzat.
 Si cap referència no comparteix cap paraula, l'exercici queda «sense
-referència» i es llisten les paraules que no surten enlloc del corpus (avís
+referència» i es llisten les paraules que no surten al corpus ni al diccionari (avís
 per detectar termes inventats; el jutge no rebutja mai només per això).
 """
 
@@ -26,7 +27,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from blondswim.agents import pla_setmanal
+from blondswim.agents import diccionari, pla_setmanal
 from blondswim.models.historial import SessioRealitzada
 from blondswim.models.sessio import Exercici
 
@@ -73,28 +74,8 @@ def tipus_part(nom_part: str) -> str:
 
 # --- Normalització -----------------------------------------------------------
 
-# Abreviatures de l'historial de l'entrenador -> termes del glossari del jutge.
-_ABREVIATURES_PARAULA = {
-    "ps": "Cames",
-    "ei": "Estils",
-    "pap": "Papallona",
-    "sub": "subaquàtic",
-    "subaq": "subaquàtic",
-    "bats": "batudes",
-    "prog": "progressius",
-    "hypox": "hipòxic",
-    "nado": "nedar",
-    "tabla": "taula",
-    "màx": "màxim",
-    "max": "màxim",
-    "esq": "Esquena",
-    "br": "Braça",
-    "progr": "progressius",
-    "vir": "viratge",
-}
+# Abreviatures d'una lletra (la resta, al diccionari).
 _ESTILS_LLETRA = {"C": "Crol", "B": "Braça", "E": "Esquena", "P": "Papallona", "N": "nedar"}
-_INTENSITATS = {"a0": "Recuperació", "vel": "Velocitat", "recuperacio": "Recuperació"}
-_MATERIAL = {"al": "Aletes", "tub": "Tub", "pull": "Pull", "palites": "Palites"}
 _BUIT = {"", "-", "–", "—", "none"}
 
 # Paraules que comparteixen massa exercicis per fer-los «semblants» per si soles.
@@ -117,23 +98,19 @@ def _sense_accents(text: str) -> str:
 
 
 def desplegar_abreviatures(execucio: str) -> str:
-    """Abreviatures de l'entrenador -> termes del glossari.
+    """Abreviatures de l'entrenador -> termes del diccionari.
 
     «Ps Crol r/4» -> «Cames Crol respiració cada 4»; «100C + 100B» -> «100 Crol + 100 Braça».
     """
-    text = re.sub(r"\br/(\d)", r"respiració cada \1", execucio)
+    text = re.sub(r"(^|\+\s*)\d+\)\s*", r"\1", execucio)  # «Crol + 6) EP»: numeració
+    text = re.sub(r"\br/(\d)", r"respiració cada \1", text)
     text = re.sub(r"\b([CBE])/([CBE])\b",
                   lambda m: f"{_ESTILS_LLETRA[m[1]]} i {_ESTILS_LLETRA[m[2]]}", text)
-    text = re.sub(r"(^|\+\s*)\d+\)\s*", r"\1", text)  # «Crol + 6) EP»: numeració
-    text = re.sub(r"(\d)(Ps|Ei|Pap|Esq|Br)\b", r"\1 \2", text)
     text = re.sub(r"(\d)\s?([CBEPN])\b", lambda m: f"{m[1]} {_ESTILS_LLETRA[m[2]]}", text)
     text = re.sub(r"(?<![\w/])([CBE])(?![\w/])", lambda m: _ESTILS_LLETRA[m[1]], text)
-    text = re.sub(r"\bAL\b", "aletes", text)
-
-    def paraula(m: re.Match) -> str:
-        return _ABREVIATURES_PARAULA.get(m[0].lower(), m[0])
-
-    text = re.sub(r"[^\W\d_]+", paraula, text)
+    # «4EP» -> «4 EP», però no els ordinals («1er», «2on», «4rt»)
+    text = re.sub(r"(\d)(?!(?:er|on|rt|a|n|r|t)\b)(?=[^\W\d_]{2,})", r"\1 ", text)
+    text = diccionari.desplegar(text)
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -141,14 +118,15 @@ def _intensitat(valor: str | None) -> str | None:
     if not valor or valor.strip().lower() in _BUIT:
         return None
     parts = [p.strip() for p in re.split(r"\s*\+\s*", valor.strip())]
-    return " + ".join(_INTENSITATS.get(_sense_accents(p.lower()), p) for p in parts)
+    return " + ".join(diccionari.terme_de(p, "intensitat") or p for p in parts)
 
 
 def _material(valor: str | None) -> str | None:
     if not valor or valor.strip().lower() in _BUIT:
         return None
     parts = [p.strip() for p in re.split(r"\s*[+/]\s*", valor.strip())]
-    return " + ".join(_MATERIAL.get(p.lower(), p) for p in parts if p.lower() not in _BUIT)
+    return " + ".join(diccionari.terme_de(p, "material") or p
+                      for p in parts if p.lower() not in _BUIT)
 
 
 def sense_descansos(text: str) -> str:
@@ -389,7 +367,7 @@ def construir_corpus(
     biblioteca: Path | None = BIBLIOTECA,
     extra: Path | None = None,
     excloure_textos: list[str] | None = None,
-    vocabulari_extra: str = "",
+    vocabulari_extra: str | None = None,
 ) -> tuple[Corpus, dict[str, int]]:
     """Corpus i recompte per font (inclou quants exercicis de prova s'han exclòs)."""
     fonts = {
@@ -402,4 +380,6 @@ def construir_corpus(
     if excloure_textos:
         refs, exclosos = excloure(refs, excloure_textos)
     resum = {nom: len(llista) for nom, llista in fonts.items()} | {"exclosos": exclosos}
+    if vocabulari_extra is None:
+        vocabulari_extra = diccionari.vocabulari()
     return Corpus(refs, vocabulari_extra=vocabulari_extra), resum

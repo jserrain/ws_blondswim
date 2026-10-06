@@ -150,3 +150,12 @@ def test_jutjar_envia_les_referencies():
         jutge.jutjar("http://x", _context(), ["a"], referencies=[[]])
     enviat = json.loads(urlopen.call_args.args[0].data)
     assert enviat["messages"][1]["content"].endswith("Semblants: cap")
+
+
+def test_prompt_porta_plantilla_regla_intensitat_i_glossari_del_diccionari():
+    from blondswim.agents import diccionari
+
+    sistema = jutge.construir_missatges(_context(), ["a"])[0]["content"]
+    assert jutge.PLANTILLA in sistema
+    assert "un IM a A1 és correcte" in sistema
+    assert diccionari.glossari() in sistema

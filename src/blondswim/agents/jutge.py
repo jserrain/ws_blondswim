@@ -16,7 +16,8 @@ quan el jutge els veia els jutjava igualment (malament). Cada exercici li
 arriba en format estructurat («8x100 m | Crol | intensitat: A2 | material:
 Pull») amb un glossari dels termes vàlids. Les normes de l'entrenador
 comprovables pel text (polze arrossegant, «Ei») també són al codi
-(`pla_setmanal.problemes_normes`).
+(`pla_setmanal.problemes_normes`). El glossari, les abreviatures i les normes
+surten del diccionari de l'entrenador (`agents/diccionari.py`).
 
 Proveïdor: qualsevol API compatible amb OpenAI amb `response_format`
 json_schema (llama-server de llama.cpp en local).
@@ -28,6 +29,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from blondswim.agents import diccionari
 from blondswim.models.sessio import Exercici
 
 if TYPE_CHECKING:
@@ -95,23 +97,23 @@ EXEMPLES_DEFECTE: list[dict] = [
 ]
 
 
-# Termes vàlids que el model no coneixia (proves del 06/10).
-GLOSSARI = """\
-- Estils: Crol (C, lliure), Esquena (E), Braça (B), Papallona (Pap), Estils o IM \
-(papallona, esquena, braça i crol); «ordre invers» és l'IM al revés. Combinar estils \
-en un exercici (p. ex. «crol i esquena») és normal.
-- Cames o Ps: només patada. Dofí: patada de papallona, també d'esquena o de costat.
-- Material: Pull (flotador entre les cames, només braços), Palites o Pales, Aletes \
-(AL), Taula, Tub (respirador frontal), Paracaigudes (resistència per a força i \
-velocitat).
-- Exercicis tècnics: un braç, punys tancats, doble braç (esquena simultània), \
-2 patades i 1 braçada (braça), lliscada, recompte de braçades, DPS.
-- Ritme: progressius (de menys a més), negatiu (segona meitat més ràpida), ritme de \
-cursa (velocitat de la prova objectiu), sortida de paret.
-- Respiració: bilateral (cada 3), cada 5 o 7 braçades (hipòxic moderat).
-- Intensitats: Recuperació i A1 suaus, A2 aeròbic mitjà, A3 llindar, AeM aeròbic \
-màxim, Velocitat (esforços curts màxims), MPLA (màxima producció de làctic), TOLA \
-(tolerància al làctic, sovint a ritme de cursa)."""
+# Termes vàlids, del diccionari de l'entrenador (`tecnica/diccionari.json`).
+GLOSSARI = diccionari.glossari()
+
+# Punt 1: què ha de contenir un exercici (que falti un opcional no és error).
+PLANTILLA = """\
+Cada exercici segueix aquesta plantilla: treball (repeticions x distància) | \
+execució (estil o exercici) | intensitat | material.
+- Obligatoris: treball, execució i intensitat.
+- Opcionals: material, focus, objectiu i ritme. Que en falti un no és error, i \
+l'execució no ha de repetir la intensitat."""
+
+# Punt 3: la intensitat és un nivell d'esforç, no un temps.
+REGLA_INTENSITAT = (
+    "La intensitat (Recuperació, A1, A2, A3...) és un nivell d'esforç vàlid per a "
+    "qualsevol estil, Estils (IM) inclosos: un IM a A1 és correcte. El temps de cada estil "
+    "el calcula el sistema amb l'índex de variació entre estils."
+)
 
 
 @dataclass
@@ -190,10 +192,9 @@ def construir_missatges(
         "sessió d'entrenament i detectes els que no tenen sentit.\n\n"
         f"Context: sessió de rol {context.rol}, fase {context.fase}, "
         f"part «{context.part}». Objectiu de la part: {context.objectiu_part}\n\n"
-        "Cada exercici és: repeticions x distància | execució | intensitat | material. "
-        "La intensitat és la del camp «intensitat»: no cal que l'execució la repeteixi. "
-        "El volum, els descansos, els ritmes i els límits de metres ja els ha comprovat "
-        "el sistema: no en parlis.\n\n"
+        f"{PLANTILLA}\n{REGLA_INTENSITAT}\n"
+        "El volum, els descansos, els ritmes, els límits de metres i les normes de "
+        "l'entrenador ja els ha comprovat el sistema: no en parlis.\n\n"
         f"Glossari (termes vàlids):\n{GLOSSARI}\n\n"
         f"Categories:\n{categories}\n\n"
         f"Exemples d'entrenador:\n{text_exemples}\n\n"
