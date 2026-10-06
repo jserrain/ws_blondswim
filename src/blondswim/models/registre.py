@@ -119,3 +119,32 @@ class RegistreSerieControl(BaseModel):
         if not self.bracades_llargada:
             return None
         return sum(self.bracades_llargada) / len(self.bracades_llargada)
+
+
+class RegistreSerieObjectiu(BaseModel):
+    """Temps de la sèrie de ritme objectiu d'una setmana (segons per repetició)."""
+
+    nedador_id: str
+    data: date
+    prova: str
+    objectiu: float  # segons per repetició prescrits aquella setmana
+    temps: list[float]
+    rpe: int | None = None
+
+    @field_validator("temps")
+    @classmethod
+    def _validar_temps(cls, v: list[float]) -> list[float]:
+        if not v:
+            raise ValueError("Cal com a mínim un temps de la sèrie objectiu")
+        if any(t <= 0 for t in v):
+            raise ValueError("Els temps de la sèrie objectiu han de ser positius")
+        return v
+
+    @field_validator("rpe")
+    @classmethod
+    def _validar_rpe(cls, v: int | None) -> int | None:
+        return validar_cr10(v)
+
+    @property
+    def temps_mitja(self) -> float:
+        return sum(self.temps) / len(self.temps)

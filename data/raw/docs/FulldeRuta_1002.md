@@ -96,6 +96,8 @@ Etapa 3b i validació de cicles, en un sol bloc de patches perquè comparteixen 
 
 **Sprint 2e (06/10, quarta W41: 13.600 m exactes):** el codi retalla les intensitats per sobre del pressupost (velocitat 400/300 al dimarts) i corregeix els descansos curts d'A1/Rec sense reintent; avís quan un reintent no retorna parts; estils i papallona com a franges al prompt; avisos d'estils de la setmana a la consola.
 
+**Sprint 3 (06/10): sèries de ritme objectiu.** Decisió de l'entrenador: una sèrie per prova P (100 L dimarts, 100 IM dijous) que va de l'estimació pessimista a l'objectiu realista del pic (sense taper), amb la forma per fase (ritme, densitat, volum) i la progressió condicionada als temps registrats (dins → +1, molt per sota → +2, per sobre → es manté; 2 per sobre → −1). Part fixa a la sessió, pestanya nova al registre (també s'afegeix als fulls ja creats), resum a la consola. Mòdul `agents/ritme_objectiu.py`.
+
 **Fet quan:** la W42 té `Temps (min)` ple, cap cicle impossible, cap sessió supera els 105 min i l'estructura correspon a una setmana de competició B.
 
 ---

@@ -8,6 +8,8 @@ Tres pestanyes:
 - "Benestar (SRSS)": un registre per dia d'entrenament, abans de la primera
   sessió (8 ítems de 0 a 6).
 - "Sèrie de control": temps de cada 100, braçades per llargada i esforç.
+- "Sèries objectiu": temps de cada repetició de les sèries de ritme objectiu
+  (amb l'objectiu prescrit aquella setmana, que fa servir la progressió).
 
 L'sRPE es pot registrar fins i tot al vespre (és robust d'1 minut a 14 dies
 després de la sessió).
@@ -18,6 +20,7 @@ from pathlib import Path
 
 import openpyxl
 from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from blondswim.agents.pla_setmanal import DIA_SERIE_CONTROL, ETIQUETA_ROL
@@ -35,6 +38,8 @@ from blondswim.utils.dates import parsejar_rang_dates
 FULL_SESSIONS = "Sessions"
 FULL_SRSS = "Benestar (SRSS)"
 FULL_CONTROL = "Sèrie de control"
+FULL_OBJECTIU = "Sèries objectiu"
+MAX_REPETICIONS_OBJECTIU = 8
 
 # Capçaleres (també les fa servir la ingestió; no canviar sense revisar-la).
 COLUMNES_SESSIONS = [
@@ -45,6 +50,11 @@ COLUMNES_SRSS = ["Data", "Dia", *ITEMS_SRSS_RECUPERACIO, *ITEMS_SRSS_ESTRES]
 COLUMNES_CONTROL = [
     "Data", "100 #1", "100 #2", "100 #3", "100 #4",
     "Braçades/llargada", "RPE (0-10)", "Notes",
+]
+COLUMNES_OBJECTIU = [
+    "Data", "Prova", "Sèrie", "Objectiu (s)",
+    *[f"#{i}" for i in range(1, MAX_REPETICIONS_OBJECTIU + 1)],
+    "RPE (0-10)", "Notes",
 ]
 FILA_CAPCALERA = 3  # fila 1: títol, fila 2: nedador_id i instruccions
 
@@ -89,6 +99,7 @@ def exportar_registre_setmana(
     microcicle: Microcicle,
     sessions: list[Sessio],
     output_path: Path,
+    series_objectiu: list | None = None,
 ) -> Path:
     """Crea el full de registre en blanc d'una setmana."""
     dilluns, _ = parsejar_rang_dates(microcicle.dates)
@@ -168,6 +179,8 @@ def exportar_registre_setmana(
             ws[f"{col}{row}"].number_format = "@"  # text: Excel no ho converteix a hora
     _validacio_enter(ws, 0, 10, f"G{FILA_CAPCALERA + 1}:G{FILA_CAPCALERA + 2}")
 
+    _full_objectiu(wb, nedador, dilluns, series_objectiu or [])
+
     for full in wb.worksheets:
         for col in full.columns:
             amplada = max((len(str(c.value)) for c in col[2:] if c.value), default=8)
@@ -175,3 +188,50 @@ def exportar_registre_setmana(
 
     wb.save(output_path)
     return output_path
+
+def _full_objectiu(wb, nedador: Nedador, dilluns, series_objectiu: list) -> None:
+    """Pestanya «Sèries objectiu» amb una fila per sèrie prescrita."""
+    ws = wb.create_sheet(FULL_OBJECTIU)
+    _capcalera(
+        ws,
+        "Sèries de ritme objectiu",
+        nedador,
+        "Temps de cada repetició en segons (39.8 o 0:39.8). Si l'objectiu avança "
+        "depèn d'aquests temps: deixa la fila buida si no l'has feta.",
+        COLUMNES_OBJECTIU,
+    )
+    for i, presc in enumerate(series_objectiu):
+        fila = FILA_CAPCALERA + 1 + i
+        data = dilluns + timedelta(days=_DIES_ORDRE[presc.dia])
+        valors = [
+            data.isoformat(), presc.prova,
+            f"{presc.series}x{presc.distancia} {presc.descans}", presc.objectiu,
+        ]
+        for col, valor in enumerate(valors, start=1):
+            ws.cell(row=fila, column=col, value=valor)
+        for col in range(5, 5 + MAX_REPETICIONS_OBJECTIU):
+            ws.cell(row=fila, column=col).number_format = "@"
+    if series_objectiu:
+        columna_rpe = get_column_letter(5 + MAX_REPETICIONS_OBJECTIU)
+        _validacio_enter(
+            ws, 0, 10,
+            f"{columna_rpe}{FILA_CAPCALERA + 1}:{columna_rpe}"
+            f"{FILA_CAPCALERA + len(series_objectiu)}",
+        )
+
+
+def afegir_full_objectiu(
+    path: Path, nedador: Nedador, microcicle: Microcicle, series_objectiu: list
+) -> bool:
+    """
+    Afegeix la pestanya «Sèries objectiu» a un full de registre que ja existeix i
+    no la té (p. ex. el de la W41, creat abans de les sèries). No toca res més.
+    Retorna True si l'ha afegida.
+    """
+    wb = openpyxl.load_workbook(path)
+    if FULL_OBJECTIU in wb.sheetnames or not series_objectiu:
+        return False
+    dilluns, _ = parsejar_rang_dates(microcicle.dates)
+    _full_objectiu(wb, nedador, dilluns, series_objectiu)
+    wb.save(path)
+    return True

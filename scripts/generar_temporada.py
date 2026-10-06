@@ -35,7 +35,7 @@ from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from blondswim.agents import carrega, pla_setmanal, recuperacio
+from blondswim.agents import carrega, pla_setmanal, recuperacio, ritme_objectiu
 from blondswim.agents.context_competicio import validar_espaiat_pics_a
 from blondswim.agents.generar_macrocicle import generar_macrocicle, generar_mesocicle
 from blondswim.agents.generar_microcicle import (
@@ -45,10 +45,10 @@ from blondswim.agents.generar_microcicle import (
 from blondswim.agents.periodificacio import _dilluns_de, avui, periodificar_temporada
 from blondswim.agents.pla_setmanal import DIES_PLANTILLA, usa_plantilla
 from blondswim.agents.progressio import avaluar_pic, format_informe
-from blondswim.agents.proves import validar_objectius
+from blondswim.agents.proves import pic_actiu, pics_temporada, validar_objectius
 from blondswim.agents.taper import generar_pla_taper_temporada
 from blondswim.export.mesocicle_excel import exportar_mesocicle_excel, exportar_setmana_excel
-from blondswim.export.registre_excel import exportar_registre_setmana
+from blondswim.export.registre_excel import afegir_full_objectiu, exportar_registre_setmana
 from blondswim.ingestion.registre_setmana import carregar_registres
 from blondswim.models.calendari import competicions_planificacio
 from blondswim.rutes import (
@@ -80,6 +80,49 @@ def _imprimir_taula_periodificacio(plans) -> None:
 
 
 TIPUS_AVIS_FRANGES = {"separacio_insuficient", "gimnas_dia_no_recomanat"}
+
+
+def _series_objectiu(
+    rutes: RutesNedador,
+    nedador,
+    competicions: list,
+    dilluns: date,
+) -> list:
+    """Prescripcions de les sèries de ritme objectiu de la setmana (i les imprimeix)."""
+    pics = pics_temporada(competicions)
+    pic = pic_actiu(pics, dilluns)
+    if pic is None:
+        print("   · Sèries objectiu: cap pic actiu")
+        return []
+    anteriors = [p for p in pics if p.data_fi < pic.data_inici]
+    des_de = anteriors[-1].data_fi if anteriors else None
+    registres = (
+        carregar_registres(rutes.registres_dir).objectius
+        if rutes.registres_dir.exists() else []
+    )
+    try:
+        resultats = carregar_resultats(rutes)
+    except (FileNotFoundError, ValueError):
+        resultats = []
+    plans, _ = periodificar_temporada(
+        competicions,
+        _dilluns_de(date.fromisoformat(TEMPORADA_DATA_INICI)),
+        date.fromisoformat(TEMPORADA_DATA_FI),
+    )
+    prescripcions = []
+    for serie in ritme_objectiu.series_del_nedador(nedador):
+        presc = ritme_objectiu.prescriure(
+            nedador, serie, pic, plans, dilluns, registres, resultats, des_de
+        )
+        if presc is None:
+            print(f"   · Sèrie objectiu {serie.prova}: no toca aquesta setmana "
+                  "(sense objectiu del pic, nivell actual o fase de transició)")
+            continue
+        print(f"   ✓ Sèrie objectiu {presc.resum}")
+        for avis in presc.avisos:
+            print(f"     ⚠ {avis}")
+        prescripcions.append(presc)
+    return prescripcions
 
 
 def _avaluar_recuperacio(registres_dir: Path, dilluns_objectiu: date) -> None:
@@ -319,6 +362,7 @@ def main() -> int:
         print(f"   ✓ Excel exportat a {output_path}")
     else:
         print(f"\n5. Generant contingut LLM de la setmana del {dilluns_objectiu:%d/%m/%Y}...")
+        series_objectiu = _series_objectiu(rutes, nedador, competicions, dilluns_objectiu)
         print("   (Una petició real a l'API de Claude per sessió)")
         try:
             _meso, microcicle, sessions, avisos_validacio = generar_contingut_setmana(
@@ -329,6 +373,7 @@ def main() -> int:
                 pla_taper=pla_taper,
                 avisos_pics_a=avisos_pics_a,
                 historial=historial,
+                series_objectiu=series_objectiu,
             )
         except (anthropic.APIError, ValidationError, ValueError) as e:
             print(f"   ✗ Error generant contingut: {e}")
@@ -374,8 +419,12 @@ def main() -> int:
         registre_path = rutes.registre_xlsx(dilluns_objectiu)
         if registre_path.exists():
             print(f"   · El full de registre ja existeix, no es toca: {registre_path}")
+            if afegir_full_objectiu(registre_path, nedador, microcicle, series_objectiu):
+                print("   ✓ Afegida la pestanya «Sèries objectiu» al full de registre")
         else:
-            exportar_registre_setmana(nedador, microcicle, sessions, registre_path)
+            exportar_registre_setmana(
+                nedador, microcicle, sessions, registre_path, series_objectiu
+            )
             print(f"   ✓ Full de registre (en blanc) a {registre_path}")
 
     print("\n" + "=" * 80)

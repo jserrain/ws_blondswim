@@ -17,16 +17,23 @@ import openpyxl
 
 from blondswim.export.registre_excel import (
     COLUMNES_CONTROL,
+    COLUMNES_OBJECTIU,
     COLUMNES_SESSIONS,
     COLUMNES_SRSS,
     FILA_CAPCALERA,
     FULL_CONTROL,
+    FULL_OBJECTIU,
     FULL_SESSIONS,
     FULL_SRSS,
+    MAX_REPETICIONS_OBJECTIU,
 )
 from blondswim.models.franja import ETIQUETA_FRANJA, ETIQUETA_MODALITAT
 from blondswim.models.historial import SessioRealitzada
-from blondswim.models.registre import RegistreSerieControl, RegistreSRSS
+from blondswim.models.registre import (
+    RegistreSerieControl,
+    RegistreSerieObjectiu,
+    RegistreSRSS,
+)
 
 _FRANJA_PER_ETIQUETA = {v: k for k, v in ETIQUETA_FRANJA.items()}
 _MODALITAT_PER_ETIQUETA = {v: k for k, v in ETIQUETA_MODALITAT.items()}
@@ -39,11 +46,13 @@ class RegistreSetmana:
     sessions: list[SessioRealitzada] = field(default_factory=list)
     srss: list[RegistreSRSS] = field(default_factory=list)
     controls: list[RegistreSerieControl] = field(default_factory=list)
+    objectius: list[RegistreSerieObjectiu] = field(default_factory=list)
 
     def afegir(self, altre: "RegistreSetmana") -> None:
         self.sessions.extend(altre.sessions)
         self.srss.extend(altre.srss)
         self.controls.extend(altre.controls)
+        self.objectius.extend(altre.objectius)
 
 
 def _buit(valor) -> bool:
@@ -195,6 +204,25 @@ def _controls(ws, nedador_id: str) -> list[RegistreSerieControl]:
     return registres
 
 
+def _objectius(ws, nedador_id: str) -> list[RegistreSerieObjectiu]:
+    registres = []
+    for fila, v in _files(ws, COLUMNES_OBJECTIU):
+        temps = [v[f"#{i}"] for i in range(1, MAX_REPETICIONS_OBJECTIU + 1)]
+        if _buit(v["Data"]) or all(_buit(t) for t in temps):
+            continue
+        registres.append(
+            RegistreSerieObjectiu(
+                nedador_id=nedador_id,
+                data=_data(v["Data"]),
+                prova=str(v["Prova"]),
+                objectiu=_numero(v["Objectiu (s)"], fila, "Objectiu"),
+                temps=[parsejar_temps_100(t, fila) for t in temps if not _buit(t)],
+                rpe=None if _buit(v["RPE (0-10)"]) else _enter(v["RPE (0-10)"], fila, "RPE"),
+            )
+        )
+    return registres
+
+
 def convertir_registre_setmana(path: Path) -> RegistreSetmana:
     """Llegeix un full de registre setmanal omplert."""
     wb = openpyxl.load_workbook(path, data_only=True)
@@ -203,6 +231,11 @@ def convertir_registre_setmana(path: Path) -> RegistreSetmana:
         sessions=_sessions(wb[FULL_SESSIONS]),
         srss=_srss(wb[FULL_SRSS], nedador_id),
         controls=_controls(wb[FULL_CONTROL], nedador_id),
+        # Els fulls anteriors al 06/10 no tenen aquesta pestanya.
+        objectius=(
+            _objectius(wb[FULL_OBJECTIU], nedador_id) if FULL_OBJECTIU in wb.sheetnames
+            else []
+        ),
     )
 
 

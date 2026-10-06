@@ -14,6 +14,7 @@ from blondswim.agents import (
     cicles,
     context_competicio,
     pla_setmanal,
+    ritme_objectiu,
     seleccio_model,
     taper,
     tecnica,
@@ -491,9 +492,13 @@ def generar_i_validar_microcicle(
     pla_taper: list[dict],
     avisos_pics_a: list[dict],
     historial: list[SessioRealitzada] | None = None,
+    series_objectiu: list | None = None,
 ) -> tuple[list[Sessio], list[dict]]:
     """
     Genera contingut per a un microcicle específic i valida el macrocicle complet.
+
+    `series_objectiu` (ritme_objectiu.Prescripcio): s'insereixen com a parts
+    fixes abans de generar el contingut.
 
     Busca el microcicle corresponent a la setmana indicada, genera l'esquelet de
     sessions, omple el contingut amb LLM i valida el macrocicle sencer.
@@ -521,6 +526,9 @@ def generar_i_validar_microcicle(
 
     # 2. Generar esquelet i contingut
     sessions = generar_esquelet_sessions(nedador, microcicle_trobat)
+    avisos_series = ritme_objectiu.afegir_series_objectiu(sessions, series_objectiu or [])
+    for avis in avisos_series:
+        logger.warning(avis)
     sessions = generar_microcicle(nedador, sessions, metodologia, historial)
 
     # 3. Validar el macrocicle complet
@@ -548,6 +556,7 @@ def generar_contingut_setmana(
     avisos_pics_a: list[dict],
     historial: list[SessioRealitzada] | None = None,
     metodologia: DecisioMetodologia | None = None,
+    series_objectiu: list | None = None,
 ) -> tuple[Mesocicle, Microcicle, list[Sessio], list[dict]]:
     """
     Genera el contingut LLM d'UNA sola setmana (G1): la que comença en `dilluns`.
@@ -587,6 +596,7 @@ def generar_contingut_setmana(
         pla_taper=pla_taper,
         avisos_pics_a=avisos_pics_a,
         historial=historial,
+        series_objectiu=series_objectiu,
     )
     return mesocicle, microcicle, sessions, avisos
 
@@ -1355,9 +1365,15 @@ def generar_microcicle(
             for part, etiqueta in zip(sessio.estructura.parts, etiquetes, strict=True):
                 if part.fixa:
                     volum_fix = sum(ex.volum_m for ex in part.exercicis)
+                    contingut = "; ".join(
+                        f"{ex.series}x{ex.distancia_m} {ex.intensitat or ''} {ex.descans or ''}"
+                        .replace("  ", " ").strip()
+                        for ex in part.exercicis
+                    )
                     estructura_sessions_text += (
-                        f"  - {part.nom}: JA FIXADA pel sistema ({volum_fix}m) -- "
-                        f"no la generis ni la incloguis a la resposta\n"
+                        f"  - {part.nom}: JA FIXADA pel sistema ({volum_fix}m: {contingut}) -- "
+                        f"no la generis ni la incloguis a la resposta; no hi afegeixis més "
+                        f"treball del mateix tipus\n"
                     )
                     continue
                 bloc = f" — bloc: {etiqueta}" if part.bloc and etiqueta != part.nom else ""

@@ -1894,7 +1894,7 @@ def test_part_fixa_no_es_demana_ni_es_sobreescriu(metodologia_test):
         generar_microcicle(nedador, [dilluns], metodologia_test)
 
     prompt = mock_client.messages.create.call_args_list[0].kwargs["messages"][0]["content"]
-    assert "Sèrie de control: JA FIXADA pel sistema (400m)" in prompt
+    assert "Sèrie de control: JA FIXADA pel sistema (400m: 4x100 A2" in prompt
     control = next(p for p in dilluns.estructura.parts if p.fixa)
     assert [(e.series, e.distancia_m, e.intensitat) for e in control.exercicis] == [
         (4, 100, "A2")

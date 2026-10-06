@@ -76,6 +76,17 @@ class FactorsTemps(BaseModel):
     aletes: float = 0.92
 
 
+class SerieObjectiu(BaseModel):
+    """
+    Sèrie de ritme objectiu: una sèrie fixa de la setmana (p. ex. 8x50 a ritme
+    del 100 lliure) que progressa des de l'estimació pessimista fins a
+    l'objectiu realista del pic, condicionada als temps registrats.
+    """
+    prova: str
+    dia: Literal["dilluns", "dimarts", "dimecres", "dijous", "divendres", "dissabte", "diumenge"]
+    distancia: int = 50
+
+
 class RitmeCursaObjectiu(BaseModel):
     """
     Ritme objectiu per a una prova específica (independent de zones fisiològiques).
@@ -177,6 +188,9 @@ class Nedador(BaseModel):
     ritmes_css: RitmesCSS | None = None
     parametres_ritme: ParametresRitme = ParametresRitme()
     factors_temps: FactorsTemps = FactorsTemps()
+    # Sèries de ritme objectiu. None: una per prova principal (P), la primera el
+    # dimarts i la segona el dijous (vegeu ritme_objectiu.series_del_nedador).
+    series_objectiu: list[SerieObjectiu] | None = None
     ritmes_cursa_objectiu: list[RitmeCursaObjectiu] = []
     dies_disponibles: list[str] = ["dilluns", "dimarts", "dimecres", "dijous"]
     dia_opcional: str | None = None

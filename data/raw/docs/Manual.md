@@ -133,7 +133,7 @@ o, sense competició del catàleg:
 | Quan | Què | Comanda |
 |---|---|---|
 | Diumenge / dilluns | Generar la setmana | `make setmana NEDADOR=jep [DILLUNS=2026-10-12]` |
-| Durant la setmana | Omplir el full de registre (minuts i RPE de cada sessió, SRSS cada dia, sèrie de control del dimecres) | Excel `registres/registre_jep_<YYYY>-W<ww>.xlsx` |
+| Durant la setmana | Omplir el full de registre (minuts i RPE de cada sessió, SRSS cada dia, sèrie de control del dimecres, temps de les sèries objectiu) | Excel `registres/registre_jep_<YYYY>-W<ww>.xlsx` |
 | Després de cada competició o simulació | Registrar el resultat | `python scripts/registrar_resultat.py ...` (secció 6) |
 | Quan vulguis | Veure la progressió | `python scripts/informe_progressio.py --nedador jep` |
 
@@ -180,6 +180,30 @@ make setmana NEDADOR=jep DILLUNS=2027-06-28 PISCINA=50
 ```
 
 Amb 50 m, les repeticions i els volums de sessió són múltiples de 50 (50, 100, 150, 200…), i els exercicis curts de la biblioteca es fan dins d'un 50 (p. ex. «25 exercici + 25 nedar»).
+
+### 5.3 Sèries de ritme objectiu
+
+Una sèrie fixa per prova principal que es repeteix cada setmana i acosta el ritme al de l'objectiu del pic. Per defecte: 100 lliure el dimarts (8x50 crol) i 100 IM el dijous (4-6x50 alternant papallona-esquena i braça-crol). Va com a part fixa «Sèrie objectiu», després de la tècnica; l'LLM no la toca.
+
+- **Inici**: l'estimació pessimista de la fitxa (100 L 1:20 → 40,0 s per 50).
+- **Final**: l'objectiu realista del pic sense el guany del taper (1:15 × 1,02 → 38,25 s per 50); al Peak i a la setmana de cursa, ritme de cursa (37,5 s). Si l'objectiu és el nivell actual (100 IM 1:38), la sèrie consolida el ritme.
+- **Passos**: les setmanes de Base i Build sense descàrrega fins al Peak; l'objectiu de cada pas s'interpola.
+- **Forma**: Base 6 → 8 repeticions d/1:00; Build1 8, d/1:00 i després d/0:45; Build2 8 d/0:45; descàrrega 4; Peak i Cursa 4 d/1:30 (estils: 4 → 6).
+- **Registre** (pestanya «Sèries objectiu»): el temps de cada repetició (39.8 o 0:39.8). La progressió depèn d'aquests temps:
+  - mitjana dins de l'objectiu (+1%) → avança un pas;
+  - molt per sota (2,5% més ràpid) → avança dos passos;
+  - per sobre → es repeteix; dues setmanes seguides per sobre → retrocedeix un pas i avisa;
+  - sense registre → es repeteix i avisa.
+- La consola mostra cada setmana la sèrie, l'objectiu, el pas i el darrer resultat.
+
+Per canviar-les, a la fitxa:
+
+```json
+"series_objectiu": [
+  {"prova": "100m Lliure", "dia": "dimarts", "distancia": 50},
+  {"prova": "100m IM", "dia": "divendres", "distancia": 50}
+]
+```
 
 ## 6. Resultats de competició
 
