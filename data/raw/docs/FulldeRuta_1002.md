@@ -148,7 +148,19 @@ G3, continuïtat al prompt.
 
 - G4 — previsualització de la setmana N+1 com a esborrany.
 - Dues sessions de natació el mateix dia o franja «vespre».
-- Model «judge» configurable (`BLONDSWIM_LLM_PROVIDER`).
+- Model «judge» configurable (`BLONDSWIM_LLM_PROVIDER`). Vegeu «Jutge LLM» a sota.
+
+## Jutge LLM (verificació semàntica, en curs)
+
+El codi valida les regles dures (volum, pressupost, papallona, cicles i descansos); el jutge només fa el judici semàntic: natació real, segur, part correcta, intensitat coherent, terminologia real, sense farciment. Rep els fets ja calculats pel codi («descans real 7 s») i els temps sense cometes («1:45», «15 s»), que trencaven el JSON.
+
+Proves manuals amb Qwen3-30B-A3B local (06/10): sense context falla; amb rúbrica encerta «surar» i el descans, però s'inventa que l'IM no pot ser A1 i el veredicte canvia amb petits canvis de prompt. Conclusió: mesurar sobre un joc de casos i ensenyar el criteri amb exemples.
+
+- [x] **J.1** `agents/jutge.py` (prompt amb rúbrica i few-shot, esquema amb un veredicte i una categoria per exercici, crida a una API compatible amb OpenAI) i `scripts/avaluar_jutge.py`.
+- [x] **J.2** Joc de prova `data/raw/jutge/casos.jsonl`: 39 exercicis en 7 parts, 13 errors plantats.
+- [ ] **J.3 Coach**: revisar els veredictes esperats del joc (sobretot els marcats `dubtos`).
+- [ ] **J.4** Avaluar Qwen3 sense raonar, Qwen3 raonant i Gemma 3 27B; també sense exemples (`--sense-exemples`) per mesurar què aporten.
+- [ ] **J.5** Decisió: detecció ≥ 85% i falsos positius ≤ 10% → primer filtre local amb el núvol de reserva; si no, mode ombra (registra, no rebutja).
 - Contingut de gimnàs generat.
 
 ---
