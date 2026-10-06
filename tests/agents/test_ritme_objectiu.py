@@ -152,3 +152,16 @@ def test_afegir_series_objectiu_com_a_part_fixa():
     assert recuperacio.nom == ro.NOM_RECUPERACIO and recuperacio.fixa
     assert recuperacio.exercicis[0].volum_m == 200
     assert sum(p.metres_objectiu for p in variables) == dimarts.volum_total - 300 - 200
+
+
+def test_fase_de_la_generacio_i_passos_des_de_l_inici_de_la_serie():
+    """W41: la periodificació des de l'agost la marcava de descàrrega (4x50), però
+    la generació (finestra des del 05/10) la fa de càrrega: mana la de la generació."""
+    n = _nedador()
+    lliure = ro.series_del_nedador(n)[0]
+    actuals = _plans(FASES)                       # W41 = Base, càrrega
+    temporada = _plans([("Base", True)] + FASES, inici=date(2026, 9, 28))
+    p = ro.prescriure(n, lliure, PIC, actuals, date(2026, 10, 5), [],
+                      plans_des_de=lambda _d: temporada)
+    assert p.series == 6  # Base, no descàrrega
+    assert p.passos == 8

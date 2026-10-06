@@ -87,6 +87,7 @@ def _series_objectiu(
     nedador,
     competicions: list,
     dilluns: date,
+    plans: list,
 ) -> list:
     """Prescripcions de les sèries de ritme objectiu de la setmana (i les imprimeix)."""
     pics = pics_temporada(competicions)
@@ -104,15 +105,19 @@ def _series_objectiu(
         resultats = carregar_resultats(rutes)
     except (FileNotFoundError, ValueError):
         resultats = []
-    plans, _ = periodificar_temporada(
-        competicions,
-        _dilluns_de(date.fromisoformat(TEMPORADA_DATA_INICI)),
-        date.fromisoformat(TEMPORADA_DATA_FI),
-    )
+    # La fase i la descàrrega de la setmana surten de la mateixa periodificació
+    # que la generació (la de la taula); els passos, de la periodificació des de
+    # l'inici de la sèrie (W41: la temporada sencera la marcava de descàrrega).
+    fi = date.fromisoformat(TEMPORADA_DATA_FI)
+
+    def plans_des_de(data: date) -> list:
+        inici = max(_dilluns_de(date.fromisoformat(TEMPORADA_DATA_INICI)), data)
+        return periodificar_temporada(competicions, inici, fi)[0]
+
     prescripcions = []
     for serie in ritme_objectiu.series_del_nedador(nedador):
         presc = ritme_objectiu.prescriure(
-            nedador, serie, pic, plans, dilluns, registres, resultats, des_de
+            nedador, serie, pic, plans, dilluns, registres, resultats, des_de, plans_des_de
         )
         if presc is None:
             print(f"   · Sèrie objectiu {serie.prova}: no toca aquesta setmana "
@@ -362,7 +367,9 @@ def main() -> int:
         print(f"   ✓ Excel exportat a {output_path}")
     else:
         print(f"\n5. Generant contingut LLM de la setmana del {dilluns_objectiu:%d/%m/%Y}...")
-        series_objectiu = _series_objectiu(rutes, nedador, competicions, dilluns_objectiu)
+        series_objectiu = _series_objectiu(
+            rutes, nedador, competicions, dilluns_objectiu, plans
+        )
         print("   (Una petició real a l'API de Claude per sessió)")
         try:
             _meso, microcicle, sessions, avisos_validacio = generar_contingut_setmana(

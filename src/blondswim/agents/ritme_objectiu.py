@@ -31,6 +31,7 @@ Forma de la sèrie per fase (palanques: ritme, densitat i volum):
 | Peak i Cursa | 4 | d/1:30, a ritme de cursa |
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
@@ -204,10 +205,16 @@ def prescriure(
     registres: list[RegistreSerieObjectiu],
     resultats: list[ResultatCompeticio] | None = None,
     des_de: date | None = None,
+    plans_des_de: Callable[[date], list[SetmanaPlan]] | None = None,
 ) -> Prescripcio | None:
     """Sèrie de ritme objectiu de la setmana de `dilluns`, o None si no toca.
 
-    `des_de`: final del pic anterior; els registres d'abans no compten.
+    - `plans`: periodificació de la generació actual (la de la taula de la
+      consola); en surt la fase i si la setmana és de descàrrega.
+    - `des_de`: final del pic anterior; els registres d'abans no compten.
+    - `plans_des_de(data)`: periodificació a partir d'una data, per comptar els
+      passos des de l'inici de la sèrie sempre igual (la periodificació depèn de
+      la data d'inici). Si és None, es compten sobre `plans`.
     """
     prova: ProvaObjectiu | None = nedador.prova_objectiu(serie.prova)
     plan = next((p for p in plans if p.dilluns == dilluns), None)
@@ -225,7 +232,8 @@ def prescriure(
     ]
     inici_serie = min((r.data for r in propis), default=dilluns)
     inici_serie -= timedelta(days=inici_serie.weekday())
-    passos = passos_fins_al_pic(plans, inici_serie)
+    plans_serie = plans_des_de(inici_serie) if plans_des_de else plans
+    passos = passos_fins_al_pic(plans_serie, inici_serie)
     marge = nedador.parametres_progressio.marge
     estat = reproduir(propis, marge, passos)
     setmanes_sense = [
