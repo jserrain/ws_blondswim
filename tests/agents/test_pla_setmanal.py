@@ -414,3 +414,68 @@ def test_esquelet_piscina_50_volums_multiples_de_50(nedador_plantilla):
     for s in sessions:
         assert s.volum_total % 50 == 0 and s.volum_min % 50 == 0 and s.volum_max % 50 == 0
     assert abs(sum(s.volum_total for s in sessions) - 13600) <= 150
+
+
+@pytest.mark.parametrize(
+    ("execucio", "metres"),
+    [
+        # W41: comptats de més abans del 2b
+        ("Estils (Crol + Esquena + Braça + cames de dofí en lloc de papallona)", 0),
+        ("Estils (25 Pap cames dofí substituint braçada + 25 Esquena + 25 Braça + 25 Crol)", 0),
+        ("IM complet (25 cames dofí substituint papallona + 25 Esquena + 25 Braça + 25 Crol)", 0),
+        ("Cames de papallona (dofí) amb braços estirats, ondulació de tot el cos", 0),
+        ("Cames de dofí amb braços estirats, treball de papallona sense braçada", 0),
+        # Continuen comptant
+        ("IM complet, transicions suaus entre estils", 50),
+        ("Pap 1 braç", 200),
+        ("Papallona completa amb aletes", 200),
+    ],
+)
+def test_comptador_de_papallona_casos_w41(execucio, metres):
+    from blondswim.models.sessio import Exercici
+
+    n = 2 if "IM" in execucio or "Estils" in execucio else 4
+    d = 100 if n == 2 else 50
+    sessio = _sessio_pap("aerobica", Exercici(series=n, distancia_m=d, execucio=execucio))
+    assert pla_setmanal.metres_papallona(sessio) == metres
+
+
+# --- Conveni de metres: sessió i parts a 100 m, l'última part fa la resta --------
+
+
+def _sessio_parts(volum_total, pcts, fix=0):
+    parts = [PartSessio(nom=f"P{i}", percentatge_carrega=p, percentatge_qualitat=p,
+                        percentatge_descarrega=p) for i, p in enumerate(pcts)]
+    if fix:
+        parts.insert(1, PartSessio(
+            nom="Sèrie de control", percentatge_carrega=0, percentatge_qualitat=0,
+            percentatge_descarrega=0, fixa=True,
+            exercicis=[Exercici(series=fix // 100, distancia_m=100, execucio="Crol")]))
+    return Sessio(id="s", microcicle_setmana=41, dia="dilluns", tipus_sessio="carrega",
+                  volum_total=volum_total, estructura=EstructuraSessio(parts=parts))
+
+
+def test_metres_parts_exemple_de_l_entrenador():
+    # 2.800 m: 15/15/48/12/10% -> 400/400/1.400/300 i la resta (300)
+    sessio = _sessio_parts(2800, [15, 15, 48, 12, 10])
+    pla_setmanal.assignar_metres_parts(sessio)
+    assert [p.metres_objectiu for p in sessio.estructura.parts] == [400, 400, 1400, 300, 300]
+
+
+def test_metres_parts_sense_les_parts_fixes():
+    sessio = _sessio_parts(1900, [15, 45, 15, 15, 10], fix=400)
+    pla_setmanal.assignar_metres_parts(sessio)
+    variables = [p for p in sessio.estructura.parts if not p.fixa]
+    assert sum(p.metres_objectiu for p in variables) == 1500
+    assert all(p.metres_objectiu % 100 == 0 for p in variables)
+    assert sessio.estructura.parts[1].metres_objectiu is None
+
+
+def test_esquelet_volums_a_100_i_parts_assignades(nedador_plantilla):
+    sessions = generar_esquelet_sessions(nedador_plantilla, _microcicle())
+    for s in sessions:
+        assert s.volum_total % 100 == 0 and s.volum_min % 100 == 0 and s.volum_max % 100 == 0
+        fix = sum(e.volum_m for p in s.estructura.parts if p.fixa for e in p.exercicis)
+        assert sum(p.metres_objectiu for p in s.estructura.parts if not p.fixa) == (
+            s.volum_total - fix
+        )

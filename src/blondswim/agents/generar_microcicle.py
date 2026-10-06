@@ -748,6 +748,13 @@ def _construir_tools_sessio(
                             "type": "object",
                             "properties": {
                                 "nom": nom_schema,
+                                "metres_part": {
+                                    "type": "integer",
+                                    "description": (
+                                        "Suma de series x distancia_m dels exercicis "
+                                        "d'aquesta part (ha de ser la indicada)"
+                                    ),
+                                },
                                 "exercicis": {
                                     "type": "array",
                                     "items": {
@@ -786,7 +793,7 @@ def _construir_tools_sessio(
                                     },
                                 },
                             },
-                            "required": ["nom", "exercicis"],
+                            "required": ["nom", "metres_part", "exercicis"],
                         },
                     },
                 },
@@ -889,7 +896,9 @@ def _extreure_parts(sessio_data: dict) -> list[dict]:
 
 
 # Textos de farciment que l'LLM fa servir per quadrar metres: l'exercici es descarta.
-TEXTOS_FARCIMENT = {"", "-", "placeholder", "n.a.", "n.a", "na", "n/a", "tbd", "...", "x"}
+TEXTOS_FARCIMENT = {
+    "", "-", "placeholder", "n.a.", "n.a", "na", "n/a", "tbd", "...", "x", "skip",
+}
 
 _RE_PREFIX_BLOC = re.compile(r"^\s*bloc principal(\s+\d+)?\s*[—–-]\s*", re.IGNORECASE)
 
@@ -919,7 +928,7 @@ def _trobar_part(sessio: Sessio, nom_part: str | None) -> PartSessio | None:
 
 # Variants: «placeholder_removed», «Placeholder (eliminat)», «Nota: …», «[buit]».
 _RE_FARCIMENT = re.compile(
-    r"^\s*(placeholder|nota\s*:|n\.?\s*a\.?\s*$|tbd\b|\[?buit\]?\s*$|omès|eliminat)",
+    r"^\s*(placeholder|skip|nota\s*:|n\.?\s*a\.?\s*$|tbd\b|\[?buit\]?\s*$|omès|eliminat)",
     re.IGNORECASE,
 )
 
@@ -1026,11 +1035,13 @@ def _problemes_sessio(sessio: Sessio, nedador: Nedador | None = None) -> list[st
         volum_sessio < sessio.volum_min * (1 - MARGE_VOLUM)
         or volum_sessio > sessio.volum_max * (1 + MARGE_VOLUM)
     ):
+        detall = desviacions_parts(sessio)
         problemes.append(
             f"volum generat {volum_sessio}m fora del rang "
             f"[{sessio.volum_min}, {sessio.volum_max}]m. "
             f"El volum ha estat {volum_sessio} m; ha d'estar "
             f"entre {sessio.volum_min} i {sessio.volum_max} m."
+            + (f" Parts desviades: {'; '.join(detall)}." if detall else "")
         )
     problemes.extend(pla_setmanal.problemes_contingut(sessio))
 
@@ -1062,7 +1073,113 @@ def _aplicar_i_corregir(
     problemes = _aplicar_contingut_sessio(sessio, sessio_data, setmana, nedador.piscina_m)
     for correccio in cicles.corregir_cicles(sessio, nedador):
         logger.info(f"Setmana {setmana}, sessió '{sessio.id}': cicle corregit: {correccio}")
+    for ajust in ajustar_volum(sessio, nedador.piscina_m):
+        logger.info(f"Setmana {setmana}, sessió '{sessio.id}': volum ajustat: {ajust}")
     return problemes
+
+
+_ZONES_SUAUS = {None, "Recuperació", "A1", "A2"}
+
+
+def _metres_llm(sessio: Sessio) -> int:
+    """Metres que ha de generar l'LLM: el total menys les parts fixes."""
+    fix = sum(ex.volum_m for p in sessio.estructura.parts if p.fixa for ex in p.exercicis)
+    return sessio.volum_total - fix
+
+
+def desviacions_parts(sessio: Sessio) -> list[str]:
+    """Parts que s'allunyen més de 100 m dels seus metres («Escalfament: 600 m de 400»)."""
+    linies = []
+    for part in sessio.estructura.parts:
+        if part.fixa or part.metres_objectiu is None:
+            continue
+        fets = sum(ex.volum_m for ex in part.exercicis)
+        if abs(fets - part.metres_objectiu) > 100:
+            linies.append(f"{part.nom}: {fets} m (en tocaven {part.metres_objectiu})")
+    return linies
+
+
+def ajustar_volum(sessio: Sessio, piscina_m: int = 25) -> list[str]:
+    """
+    Porta el volum de la sessió dins del seu rang [volum_min, volum_max] canviant
+    el nombre de sèries (l'LLM no quadra bé els metres: W41 +21%).
+
+    - Per sobre: treu sèries de l'exercici amb més volum, primer del bloc
+      principal; si cap exercici té més d'una sèrie, escurça el més llarg a la
+      distància vàlida anterior.
+    - Per sota: afegeix sèries a l'exercici suau (Rec/A1/A2) amb més volum del
+      bloc principal.
+    No toca les parts fixes ni els exercicis de la biblioteca de tècnica.
+    Retorna els canvis fets.
+    """
+    if sessio.volum_min is None or sessio.volum_max is None:
+        return []
+    candidats = [
+        (part.bloc == "Bloc principal", ex)
+        for part in sessio.estructura.parts if not part.fixa
+        for ex in part.exercicis if ex.id_biblioteca is None
+    ]
+    if not candidats:
+        return []
+
+    def total() -> int:
+        return sum(ex.volum_m for p in sessio.estructura.parts for ex in p.exercicis)
+
+    # Desviació de cada part respecte als seus metres (conveni de l'entrenador):
+    # es retalla primer on sobra més i s'afegeix on en falten més.
+    part_de = {
+        id(ex): part for part in sessio.estructura.parts if not part.fixa
+        for ex in part.exercicis
+    }
+
+    def desviacio(ex) -> int:
+        part = part_de[id(ex)]
+        if part.metres_objectiu is None:
+            return 0
+        return sum(e.volum_m for e in part.exercicis) - part.metres_objectiu
+
+    canvis: list[str] = []
+    valides = distancies_valides(piscina_m)
+    for _ in range(200):
+        volum = total()
+        if volum > sessio.volum_max:
+            ordre = sorted(
+                candidats, key=lambda c: (-desviacio(c[1]), not c[0], -c[1].volum_m)
+            )
+            ex = next((e for _p, e in ordre
+                       if e.series > 1 and volum - e.distancia_m >= sessio.volum_min), None)
+            if ex is not None:
+                ex.series -= 1
+                canvis.append(f"'{ex.execucio}' -> {ex.series}x{ex.distancia_m}")
+                continue
+            def _escurcada(e, volum: int = volum) -> int | None:
+                if e.series != 1:
+                    return None
+                menors = [d for d in valides if d < e.distancia_m]
+                nova = max(menors) if menors else None
+                if nova is None or volum - e.distancia_m + nova < sessio.volum_min:
+                    return None
+                return nova
+
+            ex = next((e for _p, e in ordre if _escurcada(e) is not None), None)
+            if ex is None:
+                break
+            nova = _escurcada(ex)
+            canvis.append(f"'{ex.execucio}' {ex.distancia_m} -> {nova} m")
+            ex.distancia_m = nova
+        elif volum < sessio.volum_min:
+            ordre = sorted(
+                (c for c in candidats if c[1].intensitat in _ZONES_SUAUS and c[1].series > 1),
+                key=lambda c: (desviacio(c[1]), not c[0], -c[1].volum_m),
+            )
+            ex = next((e for _p, e in ordre if volum + e.distancia_m <= sessio.volum_max), None)
+            if ex is None:
+                break
+            ex.series += 1
+            canvis.append(f"'{ex.execucio}' -> {ex.series}x{ex.distancia_m}")
+        else:
+            break
+    return canvis
 
 
 def _copia_parts(sessio: Sessio) -> list[list[Exercici]]:
@@ -1138,10 +1255,13 @@ def generar_microcicle(
                 [p.nom for p in sessio.estructura.parts if not p.fixa], nedador.piscina_m
             )
             # Estructura de parts d'aquesta sessió
+            metres_llm = _metres_llm(sessio)
             estructura_sessions_text = (
                 f"\n**Sessió: {sessio.dia.capitalize()} "
-                f"(tipus: {sessio.tipus_sessio}, volum: {sessio.volum_total}m)**\n"
+                f"(tipus: {sessio.tipus_sessio}, volum total: {sessio.volum_total} m; "
+                f"els teus exercicis: {metres_llm} m)**\n"
             )
+            variables = [p for p in sessio.estructura.parts if not p.fixa]
             etiquetes = pla_setmanal.etiquetes_parts(
                 [(p.nom, p.bloc) for p in sessio.estructura.parts]
             )
@@ -1153,6 +1273,15 @@ def generar_microcicle(
                         f"no la generis ni la incloguis a la resposta\n"
                     )
                     continue
+                bloc = f" — bloc: {etiqueta}" if part.bloc and etiqueta != part.nom else ""
+                if part.metres_objectiu is not None:
+                    resta = (
+                        f" (la resta fins a {metres_llm} m)" if part is variables[-1] else ""
+                    )
+                    estructura_sessions_text += (
+                        f"  - nom: \"{part.nom}\"{bloc}: {part.metres_objectiu} m{resta}\n"
+                    )
+                    continue
                 if sessio.tipus_sessio == "carrega":
                     perc = part.percentatge_carrega
                 elif sessio.tipus_sessio == "qualitat":
@@ -1160,7 +1289,6 @@ def generar_microcicle(
                 else:  # descarrega, taper, transicio
                     perc = part.percentatge_descarrega
                 volum_part = int(sessio.volum_total * perc / 100)
-                bloc = f" — bloc: {etiqueta}" if part.bloc and etiqueta != part.nom else ""
                 estructura_sessions_text += (
                     f"  - nom: \"{part.nom}\"{bloc}: {perc}% ({volum_part}m)\n"
                 )
@@ -1200,6 +1328,7 @@ def generar_microcicle(
                 rol=sessio.rol,
                 volum_min=sessio.volum_min,
                 volum_max=sessio.volum_max,
+                metres_llm=metres_llm,
                 descripcio_rol=pla_setmanal.descripcio_rol(sessio),
                 pressupost_sessio=pla_setmanal.text_pressupost(sessio),
                 context_setmana=_context_sessio(sessio, sessions),

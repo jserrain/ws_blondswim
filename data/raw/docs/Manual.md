@@ -162,8 +162,10 @@ Revisa sempre els avisos ⚠ de la consola abans d'anar a la piscina.
 Validació automàtica:
 - Només es validen els descansos quan el ritme és conegut: nedar l'estil complet, sense material o amb pull o pales. Cames, aletes, paracaigudes i exercicis de la biblioteca de tècnica tenen només temps aproximat.
 - Un cicle impossible (més curt que el temps de nedar) passa sol a `d/`: `c/0:15` en uns 50 → `d/0:15`.
-- Un descans per sota del mínim de la zona (A1 5 s, A2 10 s, A3 15 s, AeM 20 s per cada 100 m; velocitat 45 s per cada 25 m), una sessió fora del seu rang de volum (±5%), massa papallona o una distància que no és de la piscina tornen la sessió a l'LLM amb la llista concreta de problemes (fins a 2 vegades); es queda la versió amb menys problemes.
-- La papallona tècnica de la setmana va a la sessió de tècnica (màxim 350 m); a la resta, com a màxim 50 m (un 100 IM en té 25).
+- **Metres de sessió i de part (conveni):** el volum de cada sessió i els límits del seu rang són múltiples de 100 (p. ex. 2.900 m, rang 2.800-3.100). Cada part rep els seus metres en múltiples de 100 segons el percentatge, i l'última completa la resta: 2.800 m amb 15/15/48/12/10% → 400/400/1.400/300/300. La sèrie de control (400 m) va a part. L'LLM rep els metres exactes de cada part i ha d'escriure'n la suma.
+- El volum el quadra el codi: si una sessió surt del seu rang, treu sèries de la part que més se'n passa dels seus metres o n'afegeix a la que més en falta (primer al bloc principal, mai als exercicis de la biblioteca) i ho anota a la consola («volum ajustat»).
+- Un descans per sota del mínim de la zona (A1 5 s, A2 10 s, A3 15 s, AeM 20 s per cada 100 m; velocitat 45 s per cada 25 m), massa papallona o una distància que no és de la piscina tornen la sessió a l'LLM amb la llista concreta de problemes (fins a 2 vegades); es queda la versió amb menys problemes.
+- La papallona tècnica de la setmana va a la sessió de tècnica (màxim 350 m); a la resta, com a màxim 50 m (un 100 IM en té 25; si la papallona dels estils es fa de cames de dofí, no compta).
 
 ### 5.2 Piscina de 25 o de 50 m
 

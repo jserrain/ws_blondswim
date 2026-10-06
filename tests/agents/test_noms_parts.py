@@ -124,3 +124,104 @@ def test_aplicar_normalitza_el_descans_i_retorna_distancies_no_valides():
     assert len(problemes) == 1 and "24 m no és una distància vàlida" in problemes[0]
     problemes50 = _aplicar_contingut_sessio(sessio, dades, 41, piscina_m=50)
     assert len(problemes50) == 1  # 100 val; 24 no
+
+
+# --- Ajust de volum determinista (W41: +21%) --------------------------------------
+
+
+def _sessio_volum(*exercicis, rang=(2775, 3075)):
+    from blondswim.models.sessio import Exercici  # noqa: F401
+
+    parts = [
+        PartSessio(nom="Escalfament", bloc="Escalfament", percentatge_carrega=10,
+                   percentatge_qualitat=10, percentatge_descarrega=10,
+                   exercicis=[exercicis[0]]),
+        PartSessio(nom="Aeròbic", bloc="Bloc principal", percentatge_carrega=90,
+                   percentatge_qualitat=90, percentatge_descarrega=90,
+                   exercicis=list(exercicis[1:])),
+    ]
+    return Sessio(id="s", microcicle_setmana=41, dia="dilluns", tipus_sessio="carrega",
+                  volum_total=sum(rang) // 2, estructura=EstructuraSessio(parts=parts),
+                  rol="aerobica", volum_min=rang[0], volum_max=rang[1])
+
+
+def _volum(sessio):
+    return sum(ex.volum_m for p in sessio.estructura.parts for ex in p.exercicis)
+
+
+def test_ajustar_volum_treu_series_del_bloc_principal():
+    from blondswim.agents.generar_microcicle import ajustar_volum
+    from blondswim.models.sessio import Exercici
+
+    escalfament = Exercici(series=1, distancia_m=400, execucio="Crol suau")
+    principal = Exercici(series=10, distancia_m=200, execucio="Crol A2", intensitat="A2")
+    tecnica = Exercici(series=8, distancia_m=50, execucio="Un braç", id_biblioteca="x")
+    sessio = _sessio_volum(escalfament, principal, tecnica)  # 400 + 2000 + 400 = 2800 ok
+    principal.series = 14  # 3600
+    canvis = ajustar_volum(sessio)
+    assert 2775 <= _volum(sessio) <= 3075
+    assert principal.series == 11 and tecnica.series == 8 and escalfament.distancia_m == 400
+    assert canvis and "11x200" in canvis[-1]
+
+
+def test_ajustar_volum_afegeix_series_suaus():
+    from blondswim.agents.generar_microcicle import ajustar_volum
+    from blondswim.models.sessio import Exercici
+
+    a3 = Exercici(series=4, distancia_m=100, execucio="Crol A3", intensitat="A3")
+    a1 = Exercici(series=6, distancia_m=200, execucio="Crol A1", intensitat="A1")
+    sessio = _sessio_volum(Exercici(series=1, distancia_m=400, execucio="Suau"), a3, a1)
+    ajustar_volum(sessio)  # 400 + 400 + 1200 = 2000 -> cal pujar
+    assert 2775 <= _volum(sessio) <= 3075
+    assert a3.series == 4 and a1.series > 6
+
+
+def test_ajustar_volum_dins_del_rang_no_toca_res():
+    from blondswim.agents.generar_microcicle import ajustar_volum
+    from blondswim.models.sessio import Exercici
+
+    sessio = _sessio_volum(Exercici(series=1, distancia_m=400, execucio="Suau"),
+                           Exercici(series=12, distancia_m=200, execucio="Crol"))
+    assert ajustar_volum(sessio) == []
+
+
+def test_ajustar_volum_retalla_la_part_que_mes_se_n_passa():
+    from blondswim.agents.generar_microcicle import ajustar_volum, desviacions_parts
+    from blondswim.models.sessio import Exercici
+
+    escalfament = Exercici(series=6, distancia_m=100, execucio="Crol suau")  # 600 de 400
+    principal = Exercici(series=7, distancia_m=200, execucio="Crol A2", intensitat="A2")
+    sessio = _sessio_volum(escalfament, principal, rang=(1700, 1900))  # 2000
+    sessio.estructura.parts[0].metres_objectiu = 400
+    sessio.estructura.parts[1].metres_objectiu = 1400
+    assert desviacions_parts(sessio) == ["Escalfament: 600 m (en tocaven 400)"]
+    ajustar_volum(sessio)
+    assert escalfament.series == 5 and principal.series == 7
+
+
+def test_prompt_porta_els_metres_de_cada_part():
+    from unittest.mock import MagicMock, patch
+
+    from blondswim.agents.generar_microcicle import generar_microcicle
+    from blondswim.models.decisio import DecisioMetodologia
+    from blondswim.models.nedador import Nedador
+
+    sessio = _sessio()
+    for part, m in zip(sessio.estructura.parts, [400, 400, 1400, 300, 400], strict=True):
+        part.metres_objectiu = m
+    sessio.volum_total = 2900
+    nedador = Nedador(id="x", nom="X", categoria="master", proves_objectiu=["100m Lliure"],
+                      mode_ritme="rpe")
+    met = DecisioMetodologia(prova="100m lliure", categoria="master",
+                             metodologia_principal="Polaritzat", metodologies_complementaries=[],
+                             forca_evidencia="forta", justificacio="j", avisos=[])
+    client = MagicMock()
+    client.messages.create.side_effect = RuntimeError("prou")
+    with patch("blondswim.agents.generar_microcicle.get_llm_client", return_value=client), \
+            pytest.raises(Exception, match="prou"):
+        generar_microcicle(nedador, [sessio], met)
+    prompt = client.messages.create.call_args.kwargs["messages"][0]["content"]
+    assert 'nom: "Escalfament": 400 m' in prompt
+    assert 'nom: "Tornada a la calma": 400 m (la resta fins a 2900 m)' in prompt
+    assert "els teus exercicis han de sumar 2900 m" in prompt
+    assert "No cal quadrar" not in prompt

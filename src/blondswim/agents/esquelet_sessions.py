@@ -45,8 +45,12 @@ def _midpoint(rol: str) -> float:
 
 
 def _arrodonir_25(valor: float, pas: int = 25) -> int:
-    """Arrodoneix a múltiple de la piscina (25 m per defecte; mínim una llargada)."""
-    return max(pas, round(valor / pas) * pas)
+    """
+    Volum de sessió: per conveni, múltiple de 100 m (2.775 -> 2.800), que també
+    ho és de la piscina de 25 o de 50 m. `pas` es manté per compatibilitat.
+    """
+    del pas
+    return pla_setmanal.arrodonir_100(valor)
 
 
 def _assignar_rols(dies_actius: list[str]) -> dict[str, str]:
@@ -148,6 +152,8 @@ def generar_esquelet_sessions(
         sessions = _esquelet_plantilla(nedador, microcicle)
     else:
         sessions = _esquelet_dies(nedador, microcicle)
+    for sessio in sessions:
+        pla_setmanal.assignar_metres_parts(sessio)
     return _afegir_franges_i_altres_sessions(nedador, microcicle, sessions)
 
 

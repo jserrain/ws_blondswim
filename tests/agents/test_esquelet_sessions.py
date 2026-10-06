@@ -210,8 +210,10 @@ def test_volum_total_es_punt_mig_del_rang(nedador_base):
         assert sessio.volum_min is not None
         assert sessio.volum_max is not None
         assert sessio.volum_min <= sessio.volum_total <= sessio.volum_max
-        mig = round((sessio.volum_min + sessio.volum_max) / 2 / 25) * 25
-        assert sessio.volum_total == mig
+        # Punt mig arrodonit a 100 m (conveni de l'entrenador)
+        mig = (sessio.volum_min + sessio.volum_max) / 2
+        assert abs(sessio.volum_total - mig) <= 50
+        assert sessio.volum_total % 100 == 0
 
 
 def test_rangs_clampats_en_carrega(nedador_base):

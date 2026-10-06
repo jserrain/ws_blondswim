@@ -57,6 +57,9 @@ class PartSessio(BaseModel):
     # Bloc de l'estructura de la sessió (escalfament, tècnica, bloc principal,
     # tornada a la calma o sèrie de control). None en sessions antigues.
     bloc: BlocSessio | None = None
+    # Metres que ha de fer la part (múltiple de 100; l'última part, la resta
+    # fins al total de la sessió). None en sessions antigues.
+    metres_objectiu: int | None = None
 
 class EstructuraSessio(BaseModel):
     """

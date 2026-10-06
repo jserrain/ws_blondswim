@@ -1417,19 +1417,38 @@ def test_rol_i_rang_al_prompt(nedador_test, metodologia_test, sessions_test):
     assert f"volum_max: {sessio.volum_max}m" in primer_prompt
 
 
-def test_volum_fora_rang_reintenta_un_cop(
+def test_volum_fora_rang_s_ajusta_sense_reintent(
     nedador_test, metodologia_test, sessions_test, caplog
 ):
-    """Si el volum queda fora del rang, es reintenta una vegada amb el missatge."""
+    """El codi quadra el volum canviant sèries (W41: l'LLM se'n passava un 21%)."""
     sessions = sessions_test[:1]
     sessio = sessions[0]
-
-    # Primera resposta amb volum=1000m, lluny del rang [2800, 3200]
     mock_client = MagicMock()
-    mock_client.messages.create.side_effect = [
-        _tool_use_sessio(sessio, volum=1000),
-        _tool_use_sessio(sessio),
-    ]
+    mock_client.messages.create.side_effect = [_tool_use_sessio(sessio, volum=1000)]
+    with caplog.at_level(logging.INFO), patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        generar_microcicle(nedador_test, sessions, metodologia_test)
+
+    assert mock_client.messages.create.call_count == 1
+    volum = sum(ex.volum_m for p in sessio.estructura.parts for ex in p.exercicis)
+    assert sessio.volum_min <= volum <= sessio.volum_max
+    assert any("volum ajustat" in r.message for r in caplog.records)
+
+
+def test_volum_no_ajustable_reintenta_amb_el_missatge(
+    nedador_test, metodologia_test, sessions_test, caplog
+):
+    """Si el codi no pot quadrar el volum (només A3), es reintenta amb el missatge."""
+    sessions = sessions_test[:1]
+    sessio = sessions[0]
+    primera = _tool_use_sessio(sessio, volum=1000)
+    for part in primera.content[0].input["parts"]:
+        for ex in part["exercicis"]:
+            ex["intensitat"] = "A3"
+            ex["distancia_m"], ex["series"] = 50, max(ex["series"] // 2, 1)
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [primera, _tool_use_sessio(sessio)]
 
     with caplog.at_level(logging.WARNING), patch(
         "blondswim.agents.generar_microcicle.get_llm_client",
@@ -1439,7 +1458,7 @@ def test_volum_fora_rang_reintenta_un_cop(
 
     assert mock_client.messages.create.call_count == 2
     segon_prompt = mock_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
-    assert "El volum ha estat 1000 m" in segon_prompt
+    assert re.search(r"El volum ha estat \d+ m", segon_prompt)
     assert f"entre {sessio.volum_min} i {sessio.volum_max} m" in segon_prompt
     assert any("fora del rang" in r.message for r in caplog.records)
 
@@ -1489,8 +1508,8 @@ def test_parts_com_string_json_es_parseja(nedador_test, metodologia_test, sessio
     ):
         resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
 
-    # 1 crida inicial + 2 reintents dirigits per volum fora de rang
-    assert mock_client.messages.create.call_count == 3
+    # El volum (4x50 per part) el quadra el codi: cap reintent
+    assert mock_client.messages.create.call_count == 1
     for part in resultat[0].estructura.parts:
         assert len(part.exercicis) == 1
 

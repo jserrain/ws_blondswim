@@ -72,9 +72,7 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 
 3. **MAI ESCRIGUIS UN NÚMERO DE RITME O DE VOLUM DINS DE `execucio` NI DE CAP CAMP DE TEXT.** El volum es calcula automàticament (series x distancia_m) i el ritme real es mostra a partir del camp `intensitat`. Si escrius un número decimal de ritme (ex: "92.50") o una distància que no sigui de la llista, l'exercici serà descartat.
 
-4. **COHERÈNCIA AMB EL VOLUM OBJECTIU DE CADA PART:**
-   - Tries combinacions de `series` x `distancia_m` (múltiples de 25) que sumin aproximadament el volum indicat per a cada part
-   - No cal quadrar exactament -- el sistema ja valida el resultat després
+4. **METRES DE CADA PART (OBLIGATORI):** cada part ha de sumar EXACTAMENT els metres indicats a l'estructura (múltiples de 100); l'última part completa la resta. Tria `series` x `distancia_m` que hi sumin i escriu el total al camp `metres_part`. Els exercicis de la biblioteca i el seu nedar complet compten dins dels metres de la seva part: si la dosi orientativa no hi cap, redueix-la (p. ex. 2x(25 exercici + 25 nedar)). Abans de respondre, comprova cada suma.
 
 5. **SEGUIR L'ESTIL DEL FEW-SHOT:** utilitza el mateix vocabulari i nivell de detall dels exemples reals, però sempre repartit en els camps estructurats, no com a frase única.
 
@@ -89,7 +87,7 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 
    **SENSE FARCIMENT:** cada exercici ha de tenir contingut real. Mai escriguis exercicis com "placeholder", "N.A." o similars per quadrar metres.
 
-   **VOLUM FLEXIBLE:** la sessió ha de fer entre {volum_min} i {volum_max} m (piscina {piscina_m} m). La suma de `series × distancia_m` de tots els exercicis ha d'estar dins d'aquest rang: ni més ni menys. Ajusta el nombre de `series` o la `distancia_m` (de la llista) fins a quedar-hi dins.
+   **VOLUM:** els teus exercicis han de sumar {metres_llm} m (piscina {piscina_m} m). Les parts fixades pel sistema (p. ex. la sèrie de control) ja hi són a part i NO compten en aquests metres. Si la suma no quadra, el sistema retalla o afegeix sèries del bloc principal.
 
    **ROL DE LA SESSIÓ ({rol}):** {descripcio_rol}
 
@@ -97,7 +95,7 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 {pressupost_sessio}
    La resta del volum ha de ser Recuperació, A1 o A2. El sistema ho comprova i rebutja la sessió si se supera.
 
-   **EXERCICIS DE TÈCNICA OBLIGATORIS (biblioteca):** inclou-los TOTS, a la part de Tècnica o de Cames, amb el camp `id_biblioteca` exactament igual. Ajusta la dosi al volum de la part. Cada exercici va seguit de nedar l'estil complet amb el mateix focus (p.ex. 4x(25 exercici + 25 nedar)); posa també l'`id_biblioteca` a la repetició de nedar.
+   **EXERCICIS DE TÈCNICA OBLIGATORIS (biblioteca):** inclou-los TOTS, a la part de Tècnica o de Cames, amb el camp `id_biblioteca` exactament igual. Ajusta la dosi als metres de la part (hi compten l'exercici i el nedar complet). Cada exercici va seguit de nedar l'estil complet amb el mateix focus (p.ex. 4x(25 exercici + 25 nedar)); posa també l'`id_biblioteca` a la repetició de nedar.
 {exercicis_tecnica}
 
    **REGLES DE NATACIÓ (OBLIGATÒRIES):**

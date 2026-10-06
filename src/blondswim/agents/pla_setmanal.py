@@ -307,6 +307,58 @@ def context_setmana(dia_competicio: str | None, post_competicio: bool) -> str:
     return ". ".join(parts) if parts else "Setmana sense competició"
 
 
+# --- Metres de cada part (conveni de l'entrenador) ---
+
+# Els volums de sessió i de part s'arrodoneixen a 100 m (2.775 -> 2.800).
+ARRODONIMENT_VOLUM = 100
+
+
+def arrodonir_100(valor: float) -> int:
+    """Al múltiple de 100 més proper (meitats amunt), mínim 100."""
+    return max(ARRODONIMENT_VOLUM, int(valor / ARRODONIMENT_VOLUM + 0.5) * ARRODONIMENT_VOLUM)
+
+
+def _percentatge(part: PartSessio, tipus_sessio: str) -> float:
+    if tipus_sessio == "carrega":
+        return part.percentatge_carrega
+    if tipus_sessio == "qualitat":
+        return part.percentatge_qualitat
+    return part.percentatge_descarrega
+
+
+def assignar_metres_parts(sessio: Sessio) -> None:
+    """
+    Metres de cada part variable, en múltiples de 100, que sumen exactament els
+    metres no fixos de la sessió (mètode del residu més gran: cada part rep la
+    centena sencera del seu percentatge i les centenes que falten van a les
+    parts amb més residu). Ex.: 2.800 m amb 15/15/48/12/10% ->
+    400/400/1.400/300/300 (l'última part completa la resta).
+    """
+    fix = sum(ex.volum_m for p in sessio.estructura.parts if p.fixa for ex in p.exercicis)
+    variables = [p for p in sessio.estructura.parts if not p.fixa]
+    disponible = sessio.volum_total - fix
+    if not variables or disponible <= 0:
+        return
+    unitat = ARRODONIMENT_VOLUM
+    pesos = [_percentatge(p, sessio.tipus_sessio) for p in variables]
+    suma = sum(pesos) or 1
+    exactes = [disponible * w / suma / unitat for w in pesos]
+    unitats = [int(x) for x in exactes]
+    falten = disponible // unitat - sum(unitats)
+    per_residu = sorted(range(len(exactes)), key=lambda i: -(exactes[i] - unitats[i]))
+    for i in per_residu[:falten]:
+        unitats[i] += 1
+    # Cap part sense metres: es treu una centena de la més gran.
+    for i, u in enumerate(unitats):
+        if u == 0 and max(unitats) > 1:
+            unitats[unitats.index(max(unitats))] -= 1
+            unitats[i] = 1
+    metres = [u * unitat for u in unitats]
+    metres[-1] += disponible - sum(metres)  # resta (si el disponible no és múltiple de 100)
+    for part, m in zip(variables, metres, strict=True):
+        part.metres_objectiu = m
+
+
 # --- Sèrie de control ---
 
 
@@ -354,7 +406,8 @@ def pressupost_sessio(sessio: Sessio) -> dict[str, int]:
     else:
         base = _PRESSUPOST_ROL.get(rol, _PRESSUPOST_ROL["aerobica"])
     resultat = {
-        "a3": int(round(base["a3"] * sessio.volum_total / 25) * 25),
+        # Arrodonit a 100 amunt: les sèries d'A3 són de 50-200 m (4x50 = 200).
+        "a3": int(math.ceil(base["a3"] * sessio.volum_total / 100) * 100),
         "velocitat": int(base["velocitat"]),
         "lactic": int(base["lactic"]),
     }
@@ -406,6 +459,18 @@ _RE_PAPALLONA = re.compile(r"\bpap(allona)?\b", re.IGNORECASE)
 _RE_CAMES = re.compile(r"\b(ps|peus|cames|dof[ií]|batud\w*|ondulaci[oó])\b", re.IGNORECASE)
 _RE_BRACOS = re.compile(r"\b(bra[cç]\w*|completa?|nedar)\b", re.IGNORECASE)
 _RE_ESTILS = re.compile(r"\bIM\b|\bestils\b", re.IGNORECASE)
+# «Braços estirats» o «sense braçada» descriuen un exercici de cames, no de braços.
+_RE_BRACOS_NEGAT = re.compile(
+    r"bra[cç]os\s+(estirats|al davant|a l'esquena)|sense\s+bra[cç]\w*", re.IGNORECASE
+)
+# Estils amb la papallona feta només de cames: «Pap cames dofí», «cames de dofí en
+# lloc de papallona», «25 cames dofí substituint papallona».
+_RE_PAP_DOFI = re.compile(
+    r"cames(\s+de)?\s+dof[ií]\w*\s+(en\s+lloc|substitu)"
+    r"|pap\w*\s+(\(?\s*cames(\s+de)?\s+)?dof[ií]"
+    r"|dof[ií]\w*\s+(en\s+lloc\s+de|substituint)\s+(la\s+)?(pap|bra[cç]ada)",
+    re.IGNORECASE,
+)
 
 
 def papallona_per_exercici(sessio: Sessio) -> list[tuple[Exercici, int]]:
@@ -416,10 +481,14 @@ def papallona_per_exercici(sessio: Sessio) -> list[tuple[Exercici, int]]:
     """
     resultat = []
     for ex in _exercicis_variables(sessio):
-        es_cames = _RE_CAMES.search(ex.execucio) and not _RE_BRACOS.search(ex.execucio)
+        text = _RE_BRACOS_NEGAT.sub(" ", ex.execucio)
+        es_cames = _RE_CAMES.search(text) and not _RE_BRACOS.search(text)
         if es_cames:
             continue
-        if _RE_ESTILS.search(ex.execucio):
+        if _RE_ESTILS.search(text):
+            if _RE_PAP_DOFI.search(text):
+                continue  # la papallona dels estils es fa de cames
+
             resultat.append((ex, ex.volum_m // 4))
         elif _RE_PAPALLONA.search(ex.execucio):
             resultat.append((ex, ex.volum_m))
