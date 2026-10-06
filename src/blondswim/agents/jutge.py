@@ -26,8 +26,12 @@ import json
 import time
 import urllib.request
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from blondswim.models.sessio import Exercici
+
+if TYPE_CHECKING:
+    from blondswim.agents.referencies import Referencia
 
 CATEGORIES = [
     "correcte",
@@ -142,12 +146,39 @@ def text_exercici(ex: Exercici) -> str:
     return " | ".join(parts)
 
 
+INSTRUCCIONS_REFERENCIES = (
+    "Sota cada exercici hi ha exercicis semblants de referència (biblioteca de tècnica "
+    "i sessions reals de l'entrenador) amb el seu veredicte. Són d'altres sessions: "
+    "confirmen que un exercici o un terme existeix i és segur, però la coherència amb "
+    "el rol i la part d'AQUESTA sessió la decideixes tu. Si s'assembla a una referència "
+    "correcta, no el rebutgis per terminologia ni per no_natacio. Si s'assembla a un "
+    "error de referència, aplica'n la categoria. «Semblants: cap» vol dir que no s'ha "
+    "trobat res al corpus: decideix tu i no el rebutgis només per això."
+)
+
+
+def _text_referencies(refs: "list[Referencia]") -> str:
+    if not refs:
+        return "   Semblants: cap"
+    linies = []
+    for r in refs:
+        font = r.font.split(":")[0]
+        veredicte = r.veredicte if r.veredicte == "correcte" or not r.motiu else (
+            f"{r.veredicte} ({r.motiu})")
+        linies.append(f"   - {r.text} -> {veredicte} [{font}]")
+    return "   Semblants:\n" + "\n".join(linies)
+
+
 def construir_missatges(
     context: ContextJutge,
     exercicis: list[str],
     exemples: list[dict] | None = None,
+    referencies: "list[list[Referencia]] | None" = None,
 ) -> list[dict]:
-    """Missatges (sistema + usuari) per jutjar els exercicis d'una part."""
+    """Missatges (sistema + usuari) per jutjar els exercicis d'una part.
+
+    `referencies`: una llista (potser buida) per exercici, del mòdul `referencies`.
+    """
     exemples = EXEMPLES_DEFECTE if exemples is None else exemples
     categories = "\n".join(f"- {c}: {DESCRIPCIO_CATEGORIES[c]}" for c in CATEGORIES)
     text_exemples = "\n".join(
@@ -173,7 +204,16 @@ def construir_missatges(
         "(una frase), després la categoria i després decideix (valid = true només si la "
         "categoria és correcte). Respon en català."
     )
-    usuari = "Exercicis:\n" + "\n".join(f"{i}) {t}" for i, t in enumerate(exercicis, 1))
+    if referencies is None:
+        usuari = "Exercicis:\n" + "\n".join(f"{i}) {t}" for i, t in enumerate(exercicis, 1))
+    else:
+        if len(referencies) != len(exercicis):
+            raise ValueError("Cal una llista de referències per exercici")
+        sistema += "\n\n" + INSTRUCCIONS_REFERENCIES
+        usuari = "Exercicis:\n" + "\n".join(
+            f"{i}) {t}\n{_text_referencies(refs)}"
+            for i, (t, refs) in enumerate(zip(exercicis, referencies, strict=True), 1)
+        )
     return [{"role": "system", "content": sistema}, {"role": "user", "content": usuari}]
 
 
@@ -241,6 +281,7 @@ def jutjar(
     model: str | None = None,
     raonar: bool | None = False,
     exemples: list[dict] | None = None,
+    referencies: "list[list[Referencia]] | None" = None,
     timeout: float = 600,
 ) -> RespostaJutge:
     """Crida el jutge (API compatible amb OpenAI) i retorna els veredictes.
@@ -250,7 +291,7 @@ def jutjar(
     """
     cos: dict = {
         "temperature": 0,
-        "messages": construir_missatges(context, exercicis, exemples),
+        "messages": construir_missatges(context, exercicis, exemples, referencies),
         "response_format": {
             "type": "json_schema",
             "json_schema": {"name": "veredictes", "schema": esquema(len(exercicis))},

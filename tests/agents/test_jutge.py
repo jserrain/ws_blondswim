@@ -117,3 +117,36 @@ def test_joc_de_casos_ben_format():
     exemples = " ".join(ex["exercici"] for ex in jutge.EXEMPLES_DEFECTE)
     assert not [e["execucio"] for e in exercicis if len(e["execucio"]) > 12
                 and e["execucio"] in exemples]
+
+
+def test_construir_missatges_amb_referencies():
+    from blondswim.agents.referencies import Referencia
+
+    refs = [
+        [Referencia("4x50 m | Cames de crol amb taula | intensitat: A1", frozenset({"cames"}),
+                    "correcte", "biblioteca:cam_crol_taula"),
+         Referencia("4x50 m | Crol amb llast | intensitat: A1", frozenset({"cames"}),
+                    "insegur", "ombra:W41", motiu="carrega l'espatlla")],
+        [],
+    ]
+    sistema, usuari = jutge.construir_missatges(_context(), ["a", "b"], referencies=refs)
+    assert jutge.INSTRUCCIONS_REFERENCIES in sistema["content"]
+    assert usuari["content"] == (
+        "Exercicis:\n1) a\n   Semblants:\n"
+        "   - 4x50 m | Cames de crol amb taula | intensitat: A1 -> correcte [biblioteca]\n"
+        "   - 4x50 m | Crol amb llast | intensitat: A1 -> insegur (carrega l'espatlla) [ombra]\n"
+        "2) b\n   Semblants: cap"
+    )
+    sense = jutge.construir_missatges(_context(), ["a"])[0]["content"]
+    assert jutge.INSTRUCCIONS_REFERENCIES not in sense
+    with pytest.raises(ValueError, match="per exercici"):
+        jutge.construir_missatges(_context(), ["a", "b"], referencies=[[]])
+
+
+def test_jutjar_envia_les_referencies():
+    cos = {"choices": [{"message": {"content": _contingut(True)}}]}
+    with patch("urllib.request.urlopen",
+               return_value=_Resposta(json.dumps(cos).encode())) as urlopen:
+        jutge.jutjar("http://x", _context(), ["a"], referencies=[[]])
+    enviat = json.loads(urlopen.call_args.args[0].data)
+    assert enviat["messages"][1]["content"].endswith("Semblants: cap")
