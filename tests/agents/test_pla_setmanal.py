@@ -403,9 +403,9 @@ def test_un_100_im_compta_25_m_de_papallona():
 
 def test_nota_papallona_per_rol():
     aerobica = pla_setmanal.nota_papallona(_sessio_pap("aerobica"), "dimecres")
-    assert "sessió de tècnica (el dimecres)" in aerobica and "Màxim 150 m" in aerobica
+    assert "sessió de tècnica (el dimecres)" in aerobica and "Entre 100 i 150 m" in aerobica
     tecnica = pla_setmanal.nota_papallona(_sessio_pap("tecnica"), "dimecres")
-    assert "Aquesta és la sessió de la papallona tècnica" in tecnica and "màxim 300 m" in tecnica
+    assert "Aquesta és la sessió de la papallona tècnica" in tecnica and "entre 200 i 300 m" in tecnica
 
 
 def test_esquelet_piscina_50_volums_multiples_de_50(nedador_plantilla):
@@ -545,3 +545,21 @@ def test_metres_per_estil_de_la_setmana():
     assert pla_setmanal.metres_per_estil([sessio]) == {
         "crol": 900, "esquena": 300, "braca": 100, "papallona": 100, "cames": 300
     }
+
+
+# --- Sprint 2e ------------------------------------------------------------------
+
+
+def test_franges_al_prompt():
+    text = pla_setmanal.text_estils(_sessio_pap("aerobica"), 2900)
+    assert "esquena 300-450 m" in text and "papallona 100-150 m" in text
+    assert pla_setmanal.papallona_minima(_sessio_pap("tecnica")) == 200
+    assert pla_setmanal.papallona_minima(_sessio_pap("recuperacio")) == 0
+
+
+def test_avisos_estils_setmana():
+    poca = _sessio_pap("aerobica", Exercici(series=28, distancia_m=100, execucio="Crol"))
+    poca.volum_total = 2800
+    avisos = pla_setmanal.avisos_estils_setmana([poca])
+    assert any(a.startswith("Esquena de la setmana 0m") for a in avisos)
+    assert any("Papallona de la setmana 0m: per sota" in a for a in avisos)

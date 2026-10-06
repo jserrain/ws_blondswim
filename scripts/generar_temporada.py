@@ -360,9 +360,8 @@ def main() -> int:
             f"braça {estils['braca']}m, papallona {estils['papallona']}m, "
             f"cames {estils['cames']}m"
         )
-        _pap_min, pap_max = pla_setmanal.PAPALLONA_SETMANA
-        if estils["papallona"] > pap_max:
-            print(f"   ⚠ Papallona de la setmana {estils['papallona']}m: màxim {pap_max}m")
+        for avis in pla_setmanal.avisos_estils_setmana(natacio):
+            print(f"   ⚠ {avis}")
         for avis in avisos_validacio:
             if avis.get("tipus") in TIPUS_AVIS_FRANGES:
                 print(f"   ⚠ {avis['missatge']}")

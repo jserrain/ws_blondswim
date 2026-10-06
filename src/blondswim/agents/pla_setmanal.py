@@ -458,6 +458,11 @@ def _exercicis_variables(sessio: Sessio) -> list[Exercici]:
     return [ex for part in sessio.estructura.parts if not part.fixa for ex in part.exercicis]
 
 
+def grup_zona(intensitat: str | None) -> str:
+    """Grup de pressupost d'una intensitat (baixa, a2, a3, velocitat, lactic)."""
+    return _GRUP_ZONA.get(intensitat or "A1", "baixa")
+
+
 def metres_per_grup(sessio: Sessio) -> dict[str, int]:
     """Metres per grup d'intensitat, sense les parts fixes."""
     total: dict[str, int] = {"baixa": 0, "a2": 0, "a3": 0, "velocitat": 0, "lactic": 0}
@@ -536,12 +541,15 @@ def nota_papallona(sessio: Sessio, dia_tecnica: str | None) -> str:
         return "Sense papallona en aquesta sessió (els estils, només si són suaus i curts)."
     if sessio.rol == "tecnica":
         return (
-            f"Aquesta és la sessió de la papallona tècnica de la setmana: màxim {maxim} m, "
+            f"Aquesta és la sessió de la papallona tècnica de la setmana: entre "
+            f"{papallona_minima(sessio)} i {maxim} m, "
             f"exercicis de coordinació i ondulació seguits de nedar complet; {forma}."
         )
     on = f" (el {dia_tecnica})" if dia_tecnica else ""
+    minim = papallona_minima(sessio)
+    quant = f"Entre {minim} i {maxim} m" if minim else f"Fins a {maxim} m"
     return (
-        f"Màxim {maxim} m de papallona, dins dels estils o en sèries curtes; {forma}. "
+        f"{quant} de papallona, dins dels estils o en sèries curtes; {forma}. "
         f"La tècnica de papallona va a la sessió de tècnica{on}."
     )
 
@@ -578,13 +586,54 @@ def metres_per_estil(sessions: list[Sessio]) -> dict[str, int]:
     return total
 
 
+def avisos_estils_setmana(sessions: list[Sessio]) -> list[str]:
+    """Estils de la setmana per sota de la meitat del seu objectiu orientatiu, o
+    papallona fora de PAPALLONA_SETMANA."""
+    reals = metres_per_estil(sessions)
+    objectiu = {"esquena": 0, "braca": 0}
+    for s in sessions:
+        fix = sum(ex.volum_m for p in s.estructura.parts if p.fixa for ex in p.exercicis)
+        m = metres_estils_objectiu(s, s.volum_total - fix)
+        for estil in objectiu:
+            objectiu[estil] += m[estil]
+    noms = {"esquena": "Esquena", "braca": "Braça"}
+    avisos = [
+        f"{noms[e]} de la setmana {reals[e]}m: menys de la meitat de l'orientatiu "
+        f"({objectiu[e]}m)"
+        for e in objectiu if objectiu[e] and reals[e] < objectiu[e] / 2
+    ]
+    pap_min, pap_max = PAPALLONA_SETMANA
+    if reals["papallona"] > pap_max:
+        avisos.append(f"Papallona de la setmana {reals['papallona']}m: màxim {pap_max}m")
+    elif reals["papallona"] < pap_min:
+        avisos.append(
+            f"Papallona de la setmana {reals['papallona']}m: per sota de l'orientatiu "
+            f"({pap_min}-{pap_max}m)"
+        )
+    return avisos
+
+
+def _franja(objectiu: int) -> str:
+    """450 -> «350-450»: el model llegeix un sol número com a màxim."""
+    minim = int(objectiu * 0.75 / 50) * 50
+    return f"{minim}-{objectiu}" if minim < objectiu else f"{objectiu}"
+
+
+def papallona_minima(sessio: Sessio) -> int:
+    """Mínim orientatiu de papallona: 2/3 del màxim (150 -> 100, 300 -> 200)."""
+    maxim = PAPALLONA_MAX_ROL.get(sessio.rol or "aerobica", 50)
+    return int(maxim * 2 / 3 / 50) * 50 if maxim >= 150 else 0
+
+
 def text_estils(sessio: Sessio, metres: int) -> str:
-    """«crol ~1.900 m, esquena ~450 m, braça ~450 m, papallona ≤150 m» per al prompt."""
+    """«crol ~1.850 m, esquena 300-450 m, braça 300-450 m, papallona 100-150 m»."""
     m = metres_estils_objectiu(sessio, metres)
+    pap_min = papallona_minima(sessio)
+    pap = f"{pap_min}-{m['papallona']}" if pap_min else f"fins a {m['papallona']}"
     return (
-        f"crol ~{m['crol']} m, esquena ~{m['esquena']} m, braça ~{m['braca']} m, "
-        f"papallona ≤{m['papallona']} m (els estils compten un 25% per a cada estil; "
-        "les cames compten a l'estil de la patada)"
+        f"crol ~{m['crol']} m, esquena {_franja(m['esquena'])} m, braça "
+        f"{_franja(m['braca'])} m, papallona {pap} m (els estils compten un 25% per a "
+        "cada estil; les cames compten a l'estil de la patada)"
     )
 
 

@@ -328,3 +328,12 @@ def test_factors_de_la_fitxa():
     assert temps_nedat(cames_aletes, jep) == pytest.approx(104 * 1.00)
     calibrat = jep.model_copy(update={"factors_temps": FactorsTemps(cames=1.45)})
     assert temps_nedat(cames, calibrat) == pytest.approx(104 * 1.45)
+
+
+def test_a1_amb_descans_curt_es_corregeix_sense_problema():
+    # W41: 4x50 IM A1 c/1:00 deixava ~4 s (mínim 5): abans era un reintent.
+    ex = _ex(4, 50, "Estils complet", "A1", "c/1:00")
+    sessio = _sessio(ex)
+    correccions = corregir_cicles(sessio, _jep())
+    assert ex.descans == "d/0:05" and correccions
+    assert problemes_cicles(sessio, _jep()) == []

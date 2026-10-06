@@ -167,6 +167,8 @@ Validació automàtica:
 - Un descans per sota del mínim de la zona (A1 5 s, A2 10 s, A3 15 s, AeM 20 s per cada 100 m; velocitat 45 s per cada 25 m), massa papallona o una distància que no és de la piscina tornen la sessió a l'LLM amb la llista concreta de problemes (fins a 2 vegades); es queda la versió amb menys problemes.
 - **Estils (orientatiu):** esquena i braça un 15% cadascun (20% el dia de tècnica), papallona fins al límit i la resta crol. El prompt de cada sessió porta els metres per estil i la consola en mostra el resum de la setmana.
 - **Papallona (opció intermèdia, 06/10):** ~600-900 m a la setmana; fins a 150 m per sessió i 300 m el dia de tècnica; sempre en repeticions de 25-50 m (els estils de 100/200 hi compten un 25%), mai a la tornada a la calma. Les cames de dofí i els estils sense papallona no compten. Si la setmana passa de 900 m, la consola avisa.
+- Si una intensitat passa del pressupost del rol (velocitat, A3, làctic), el codi en retalla sèries i completa el volum amb sèries suaus («pressupost ajustat»). Si el pressupost és 0 (p. ex. làctic a la Base), no retalla: l'LLM ho ha de refer.
+- A Recuperació i A1, un descans curt el corregeix el codi (`d/` amb el mínim de la zona) sense reintent.
 - Si l'LLM deixa fora un exercici obligatori de la biblioteca, el codi l'afegeix amb la dosi mínima a la part de tècnica o de cames.
 
 ### 5.2 Piscina de 25 o de 50 m

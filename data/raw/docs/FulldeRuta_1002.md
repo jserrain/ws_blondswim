@@ -94,6 +94,8 @@ Etapa 3b i validació de cicles, en un sol bloc de patches perquè comparteixen 
 
 **Sprint 2d (06/10, tercera W41: 13.800 m, +1,5%):** papallona amb l'opció intermèdia de l'entrenador (≤150 m/sessió, 300 m el dia de tècnica, 600-900 m/setmana, repeticions de 25-50 m, mai a la calma); repartiment orientatiu per estils al prompt (esquena i braça 15%, 20% a tècnica) i resum per estils a la consola; estils sense papallona no compten; l'ajust de volum no baixa de 2 sèries ni de la meitat i no toca les rotacions d'estils; els exercicis obligatoris de la biblioteca que falten els afegeix el codi.
 
+**Sprint 2e (06/10, quarta W41: 13.600 m exactes):** el codi retalla les intensitats per sobre del pressupost (velocitat 400/300 al dimarts) i corregeix els descansos curts d'A1/Rec sense reintent; avís quan un reintent no retorna parts; estils i papallona com a franges al prompt; avisos d'estils de la setmana a la consola.
+
 **Fet quan:** la W42 té `Temps (min)` ple, cap cicle impossible, cap sessió supera els 105 min i l'estructura correspon a una setmana de competició B.
 
 ---

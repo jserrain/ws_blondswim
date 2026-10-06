@@ -184,6 +184,8 @@ DESCANS_MIN_100 = {
 }
 # Velocitat: recuperació completa, d/45" per cada 25 m.
 DESCANS_VELOCITAT_25 = 45
+# Zones suaus: el descans curt el corregeix el codi (sense reintent).
+ZONES_SUAUS = {"Recuperació", "A1"}
 # Zones on un exercici de diverses repeticions ha de portar descans explícit.
 ZONES_DESCANS_OBLIGATORI = {"A2", "A3", "AeM", "Velocitat", "MPLA", "TOLA"}
 # Tolerància de l'estimació del temps nedat (els ritmes són aproximats).
@@ -262,10 +264,25 @@ def corregir_cicles(sessio: Sessio, nedador: Nedador) -> list[str]:
             continue
         for ex in part.exercicis:
             descans = parsejar_descans(ex.descans)
-            if descans is None or descans.tipus != "cicle" or not ritme_conegut(ex):
+            if descans is None or not ritme_conegut(ex):
                 continue
             nedat = temps_nedat(ex, nedador)
-            if nedat is None or descans.segons > nedat:
+            if nedat is None:
+                continue
+            real = descans.segons - nedat if descans.tipus == "cicle" else descans.segons
+            if ex.intensitat in ZONES_SUAUS and ex.series > 1 and real > 0:
+                # Rec/A1: un descans curt no mereix un reintent (el temps és una
+                # estimació): es posa el mínim de la zona com a d/.
+                minim = descans_minim(ex, nedat)
+                if real < minim * TOLERANCIA:
+                    nou = formatar_descans(Descans("descans", _arrodonir_5(max(minim, 5))))
+                    correccions.append(
+                        f"{ex.series}x{ex.distancia_m} {ex.intensitat} '{ex.execucio}': "
+                        f"{ex.descans} deixa ~{real:.0f} s -> {nou}"
+                    )
+                    ex.descans = nou
+                continue
+            if descans.tipus != "cicle" or descans.segons > nedat:
                 continue
             minim = descans_minim(ex, nedat)
             if descans.segons <= MAX_CICLE_COM_DESCANS:

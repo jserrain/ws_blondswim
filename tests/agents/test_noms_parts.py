@@ -239,3 +239,25 @@ def test_ajustar_volum_no_desfa_exercicis():
     assert rotacio.series == 8  # rotació d'estils: no es toca
     assert recompte.series >= 2 and principal.series >= 5
     assert 1700 <= _volum(sessio) <= 1900
+
+
+def test_ajustar_pressupost_retalla_la_velocitat():
+    from blondswim.agents.generar_microcicle import ajustar_pressupost
+    from blondswim.models.sessio import Exercici
+
+    vel = Exercici(series=8, distancia_m=50, execucio="Crol màxim", intensitat="Velocitat")
+    a1 = Exercici(series=10, distancia_m=200, execucio="Crol", intensitat="A1")
+    sessio = _sessio_volum(Exercici(series=1, distancia_m=400, execucio="Suau"), vel, a1)
+    sessio.rol = "llarga"  # velocitat màxim 200 m
+    canvis = ajustar_pressupost(sessio)
+    assert vel.series == 4 and canvis
+    assert a1.series == 10
+
+
+def test_ajustar_pressupost_no_retalla_si_el_maxim_es_zero():
+    from blondswim.agents.generar_microcicle import ajustar_pressupost
+    from blondswim.models.sessio import Exercici
+
+    lactic = Exercici(series=4, distancia_m=50, execucio="Crol", intensitat="MPLA")
+    sessio = _sessio_volum(Exercici(series=1, distancia_m=400, execucio="Suau"), lactic)
+    assert ajustar_pressupost(sessio) == [] and lactic.series == 4

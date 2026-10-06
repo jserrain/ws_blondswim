@@ -1078,6 +1078,8 @@ def _aplicar_i_corregir(
         logger.info(
             f"Setmana {setmana}, sessió '{sessio.id}': exercici de biblioteca afegit: {id_ex}"
         )
+    for ajust in ajustar_pressupost(sessio):
+        logger.info(f"Setmana {setmana}, sessió '{sessio.id}': pressupost ajustat: {ajust}")
     for ajust in ajustar_volum(sessio, nedador.piscina_m):
         logger.info(f"Setmana {setmana}, sessió '{sessio.id}': volum ajustat: {ajust}")
     return problemes
@@ -1088,6 +1090,36 @@ _ZONES_SUAUS = {None, "Recuperació", "A1", "A2"}
 # les sèries van de 4 en 4 i no es retallen.
 _RE_ROTACIO_ESTILS = re.compile(r"per\s+estils|de\s+cada|rotant", re.IGNORECASE)
 _RE_DOSI = re.compile(r"(\d+)(?:-\d+)?x(\d+)")
+
+
+def ajustar_pressupost(sessio: Sessio) -> list[str]:
+    """
+    Retalla sèries de les intensitats que passen del pressupost del rol (A2 si
+    està limitat, A3/AeM, velocitat, làctic), començant per l'exercici amb més
+    volum (W41: velocitat 400 m de 300 en tres intents). Si el pressupost és 0,
+    no es retalla: el contingut és equivocat i l'ha de refer l'LLM. Després,
+    `ajustar_volum` completa els metres amb sèries suaus.
+    """
+    pressupost = pla_setmanal.pressupost_sessio(sessio)
+    canvis: list[str] = []
+    for grup, maxim in pressupost.items():
+        if maxim <= 0:
+            continue
+        exercicis = [
+            ex for part in sessio.estructura.parts if not part.fixa
+            for ex in part.exercicis
+            if pla_setmanal.grup_zona(ex.intensitat) == grup and ex.id_biblioteca is None
+        ]
+        total = sum(ex.volum_m for ex in exercicis)
+        while total > maxim:
+            ex = max((e for e in exercicis if e.series > 1), key=lambda e: e.volum_m,
+                     default=None)
+            if ex is None:
+                break
+            ex.series -= 1
+            total -= ex.distancia_m
+            canvis.append(f"'{ex.execucio}' ({ex.intensitat}) -> {ex.series}x{ex.distancia_m}")
+    return canvis
 
 
 def afegir_exercicis_biblioteca(sessio: Sessio, piscina_m: int = 25) -> list[str]:
@@ -1479,6 +1511,13 @@ def generar_microcicle(
                 response = _cridar_api_sessio(client, prompt_correccio, tools)
                 sessio_data = _extreure_tool_use_sessio(response)
                 if not sessio_data or not _extreure_parts(sessio_data):
+                    logger.warning(
+                        f"Setmana {setmana}, sessió '{sessio.id}': el reintent {intent} no "
+                        f"ha retornat parts llegibles (stop_reason="
+                        f"{getattr(response, 'stop_reason', None)}, claus="
+                        f"{list(sessio_data) if sessio_data else None}); es manté la "
+                        "versió anterior"
+                    )
                     continue
                 aplicacio = _aplicar_i_corregir(sessio, sessio_data, setmana, nedador)
                 problemes = aplicacio + _problemes_sessio(sessio, nedador)
