@@ -62,29 +62,31 @@ Objectiu: que la W41 surti sense soroll i que les dades comencin a acumular-se d
 
 Etapa 3b i validació de cicles, en un sol bloc de patches perquè comparteixen el parser.
 
-- [ ] **2.1 Parser de descans** (`utils/descans.py` o similar):
+- [x] **2.1 Parser de descans** (`utils/descans.py` o similar):
   - `c/1'40"` és un cicle (temps total de la repetició).
   - `d/15"` és un descans després de nedar.
   - Accepta formats com `1'40"`, `1:40`, `40"` i `15 s`.
   - Si no el sap llegir, retorna `None` i un avís (mai falla).
-- [ ] **2.2 Temps de nedar per repetició**: ritme de la zona (`ritmes_css`) × distància / 100. Per a zones sense ritme (MPLA, TOLA, cames, tècnica), usar un factor configurable sobre A1 o la Recuperació.
-- [ ] **2.3 Temps per exercici**:
+- [x] **2.2 Temps de nedar per repetició**: ritme de la zona (`ritmes_css`) × distància / 100. Per a zones sense ritme (MPLA, TOLA, cames, tècnica), usar un factor configurable sobre A1 o la Recuperació.
+- [x] **2.3 Temps per exercici**:
   - Amb cicle: `series × cicle`.
   - Amb descans: `series × (nedar + descans)`.
   - El temps de la sessió és la suma de tots els exercicis.
-- [ ] **2.4 Validació de cicles** a `_problemes_sessio()`:
+- [x] **2.4 Validació de cicles** a `_problemes_sessio()`:
   - Si el cicle és més curt que el temps de nedar més un marge mínim, és un problema (p.ex. `4x100 A2 c/15"`).
   - Si el cicle és massa llarg per a la zona (A3 o velocitat sense recuperació completa), és un avís.
   - Els problemes entren al reintent únic.
-- [ ] **2.5 Excel**: omplir la columna `Temps (min)` per exercici i el total de la sessió.
-- [ ] **2.6 Prompt**: afegir la regla «`c/` = cicle total, `d/` = descans», amb un exemple per zona.
-- [ ] **2.7 Tests**:
+- [x] **2.5 Excel**: omplir la columna `Temps (min)` per exercici i el total de la sessió.
+- [x] **2.6 Prompt**: afegir la regla «`c/` = cicle total, `d/` = descans», amb un exemple per zona.
+- [x] **2.7 Tests**:
   - Parser: tots els formats i els casos invàlids.
   - Càlcul de temps.
   - Cicle impossible, que provoca el reintent.
   - Excel amb la columna `Temps` plena.
 - [ ] **2.8 Prova real contra l'API**: generar la W42 i revisar els cicles i els temps. **La W42 és setmana de competició** (Barceloneta, B, dissabte 17/10): s'espera activació el divendres (sense aeròbica llarga), qualitat el dimarts i volum × 0,8 (taper B). Comprovar també que no surt rutina d'espatlla el dissabte.
 - [ ] **2.9 F7 — cota per temps**: substituir el límit `minuts_max_sessio × 40 m/min` pel temps calculat. Si la sessió supera `minuts_max_sessio`, és un problema i entra al reintent.
+
+**Fet (codi, 06/10):** `agents/cicles.py` (parser `c/`/`d/`, temps per exercici i sessió amb factor d'estil, correcció automàtica dels `c/` impossibles a `d/`, descans mínim per zona, durada màxima), taula de cicles al prompt, `Temps (min)` a l'Excel, farciment ampliat («placeholder_removed», «Nota: …») i fins a 2 reintents dirigits quedant-se la millor versió. Decisions: un `c/` impossible no fa reintentar, es converteix; un descans insuficient sí. Pendent: 2.8 (prova real) i, de la 2.9, treure la cota aproximada de 40 m/min de l'esquelet (la durada ja es valida amb el temps calculat).
 
 **Fet quan:** la W42 té `Temps (min)` ple, cap cicle impossible, cap sessió supera els 105 min i l'estructura correspon a una setmana de competició B.
 

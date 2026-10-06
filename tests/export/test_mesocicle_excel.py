@@ -447,3 +447,34 @@ def test_columna_part_amb_el_bloc_de_cada_exercici(tmp_path):
     assert files["Qualitat a"] == "Bloc principal 1 — Qualitat"
     assert files["Aeròbic a"] == "Bloc principal 2 — Aeròbic"
     assert files["Tornada a la calma a"] == "Tornada a la calma"
+
+
+def test_columna_temps_per_exercici_i_total(
+    nedador_test, mesocicle_test, estructura_test, tmp_path
+):
+    """Temps (min): nedar + descansos per exercici, i total del dia en minuts."""
+    estructura_test.parts[0].exercicis[1].descans = "c/50\""
+    path = exportar_setmana_excel(
+        nedador_test, mesocicle_test, mesocicle_test.microcicles[1],
+        [_sessio(2, "dilluns", estructura_test)], tmp_path / "setmana.xlsx",
+    )
+    valors = _valors(path)
+    exercicis = [f for f in valors if f[2] in ("N suau", "Crol tècnica")]
+    # 200 Recuperació a 1'30"/100 = 3,0 min; 4x50 c/50" = 3,3 min
+    assert [f[7] for f in exercicis] == [3.0, 3.3]
+    [total] = [f for f in valors if f[1] == "Total"]
+    assert total[7] == 6
+
+
+def test_columna_temps_buida_sense_zones(mesocicle_test, estructura_test, tmp_path):
+    sense_zones = Nedador(
+        id="x", nom="X", categoria="master", proves_objectiu=["100m lliure"],
+        mode_ritme="rpe",
+    )
+    path = exportar_setmana_excel(
+        sense_zones, mesocicle_test, mesocicle_test.microcicles[1],
+        [_sessio(2, "dilluns", estructura_test)], tmp_path / "setmana.xlsx",
+    )
+    valors = _valors(path)
+    assert all(f[7] is None for f in valors if f[2] in ("N suau", "Crol tècnica"))
+    assert all(f[7] is None for f in valors if f[1] == "Total")

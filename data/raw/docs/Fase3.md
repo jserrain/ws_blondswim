@@ -110,7 +110,7 @@ def generar_mesocicle(
 - `exportar_mesocicle_excel(nedador, mesocicle, resultats, output_path)` — tot el mesocicle en una pestanya.
 - `exportar_setmana_excel(nedador, mesocicle, microcicle, sessions, output_path)` (**G6, fet**) — una pestanya "Setmana N"; és el full per a la piscina. Tots dos comparteixen `_escriure_setmana()` (refactor verificat: cel·les, fonts i amplades idèntiques).
 - Capçalera de setmana: `"<Mes(os)> <Any> — Setmana <ISO> (<dates>) — <mesocicle>, Fase <tipus>"`. Capçalera de dia: `"Dilluns 5 — <franja> — <rol>"` (franja només si el nedador té `setmana_tipus`; rol només amb la plantilla setmanal). Sessions de gimnàs: una línia `"Dilluns 5 — tarda — Gimnàs (60 min, informatiu)"`.
-- Columnes: `Part, Treball, Execució, Descans, Material, Intensitat, Objectiu, Temps (min), Volum (m)`. La columna **Part** (abans `Dia`, sempre buida) porta l'etiqueta del bloc a la primera fila de cada part (vegeu «Estructura de la sessió»). Una fila per `Exercici`; fila `Total`; `Temps (min)` en blanc (Etapa 3b).
+- Columnes: `Part, Treball, Execució, Descans, Material, Intensitat, Objectiu, Temps (min), Volum (m)`. La columna **Part** (abans `Dia`, sempre buida) porta l'etiqueta del bloc a la primera fila de cada part (vegeu «Estructura de la sessió»). Una fila per `Exercici`; fila `Total`; `Temps (min)` = durada estimada (nedar + descansos, `agents/cicles.py`) per exercici i total del dia.
 - **Rutina d'espatlla**: si `Nedador.rutina_espatlla_dia` és un dia de descans de la setmana, bloc "Descans a l'aigua. Rutina d'espatlla (opcional, 15 min)" en ordre cronològic. Jep: dissabte (H2).
 
 ## Script `scripts/generar_temporada.py --nedador <id>`
@@ -415,7 +415,7 @@ Temps com `6:52.3`, `6'52.3` o segons. Calcula CSS/100 = (T400 − T200) / 2 i l
 - **F4** Taper exponencial alineat amb Bosquet sobre el volum mitjà de Build2. Pendent.
 - **F5** Avís de salt agut de volum a `validacio.py`. Pendent.
 - **F6** Distribució d'intensitat: **avançada per la Fase H a nivell de sessió** (pressupost per rol). Pendent: control agregat per mesocicle.
-- **F7** Cota de volum per temps de sessió: aproximada a la Fase H (40 m/min); l'exacta depèn de l'Etapa 3b.
+- **F7** Cota de volum per temps de sessió: aproximada a la Fase H (40 m/min); amb l'Etapa 3b la durada calculada ja és un problema de validació (>110% de `minuts_max_sessio`); falta treure la cota de 40 m/min de l'esquelet.
 
 ---
 
@@ -447,8 +447,8 @@ Estructura de temporada sencera (determinista), contingut LLM setmana a setmana:
 - Confirmar l'ordre de l'aeròbica llarga (velocitat alàctica al principi).
 
 **Qualitat dels fulls (prioritat)**
-1. **Etapa 3b — temps per exercici**: ritme per zona + parseig de `descans`; omple `Temps (min)`. Prerequisit de F7.
-2. **Validació de cicles**: detectar cicles impossibles (p.ex. `4x100 A2 c/15"`, que hauria de ser `d/15"`, o un cicle més curt que el temps de nedar) i reintentar.
+1. ✅ **Etapa 3b — temps per exercici** (Sprint 2): ritme per zona × factor d'estil + parseig de `descans`; omple `Temps (min)`.
+2. ✅ **Validació de cicles** (Sprint 2): els `c/` impossibles passen a `d/`; descans per sota del mínim de la zona o sessió massa llarga → fins a 2 reintents dirigits.
 3. **G3 — continuïtat al prompt**: setmana anterior, posició dins el mesocicle i dades reals (RPE, SRSS).
 
 **Ajustos petits**

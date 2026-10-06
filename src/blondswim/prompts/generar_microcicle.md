@@ -63,7 +63,7 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
    - `series`: nombre enter de repeticions (ex: 4, 8, 1)
    - `distancia_m`: distància en metres, SEMPRE múltiple de 25 (25, 50, 75, 100, 150, 200...). MAI un valor com 15, 48, 52, 194 o 598. Els esforços més curts de 25m (p.ex. 15m subaquàtic) van DINS del camp `execucio` d'un exercici de 25m (ex: `"execucio": "15m subaquàtic + 10 suau"`, `"distancia_m": 25`).
    - `execucio`: descripció textual de l'exercici (estil, focus tècnic) -- SENSE xifres de volum ni de ritme
-   - `descans`: notació `c/X'Y''` per descans combinat (ex: "c/1'15\"") o `d/Ns` per descans simple entre repeticions (ex: "d/20\"")
+   - `descans`: `c/X` (**cicle**: cada repetició SURT cada X, nedar inclòs; ex: "c/1'50\"") o `d/X` (**descans**: X de pausa després de cada repetició; ex: "d/20\""). Vegeu la taula de cicles.
    - `material`: quan calgui (ex: "Pull", "Palites", "AL")
    - `intensitat`: NOMÉS un dels valors vàlids llistats (Recuperació/A1/A2/A3/Velocitat/MPLA/TOLA/AeM) -- MAI un número
    - `objectiu`: propòsit breu de l'exercici (ex: "Tècnica captura Crol", "Aeròbic Crol")
@@ -102,7 +102,11 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
    - Uns estils complets (IM) són de 100 o 200 m, mai 125 o 150 m. Els estils "per estils" en repeticions de 25 m són vàlids.
    - A3 només en repeticions de 50 m o més: en 25 m no s'arriba al llindar.
    - Velocitat i ritme de cursa amb recuperació completa (d/45" o més per cada 25 m).
-   - Els descansos han de ser coherents amb el ritme de la zona: el cicle ha de deixar com a mínim 10" de descans a A3 i 15" a A2.
+   - **CICLES I DESCANSOS.** `c/X` és el temps entre sortides (nedar + descans), MAI el descans: "c/15\"" en un 50 és impossible; si vols 15" de pausa escriu "d/15\"". Un cicle ha de ser el temps nedat de la repetició MÉS el descans mínim de la zona. Per a altres estils, suma al temps de crol: esquena +10%, braça +17%, papallona +5%, estils +8%, cames +30%. Velocitat i làctic (MPLA/TOLA), sempre amb `d/`. Les sèries d'A2 o més intensitat porten sempre `descans`. El sistema calcula el descans real i rebutja els que no arriben al mínim.
+
+     Taula de referència d'aquest nedador (crol, piscina de 25 m):
+
+{taula_cicles}
    - No afegeixis metres de farciment (p.ex. un 25 m solt) per quadrar el volum: ajusta les sèries principals.
    - Fes servir només termes de natació reals. Si una expressió no és estàndard, descriu l'acció.
    - Mai exercicis d'arrossegar el polze o els dits per l'aigua a la recuperació de crol (carreguen l'espatlla).

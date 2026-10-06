@@ -148,6 +148,14 @@ o, sense competició del catàleg:
 
 Revisa sempre els avisos ⚠ de la consola abans d'anar a la piscina.
 
+### 5.1 Llegir el full: cicles, descansos i temps
+
+- `c/1'50"` és un **cicle**: cada repetició surt cada 1'50" (nedar + descans). Amb un 100 a 1'38", queden 12" de descans.
+- `d/15"` és un **descans**: 15" de pausa després de cada repetició.
+- **Temps (min)** és la durada estimada de cada exercici (nedar + descansos) i, a la fila Total, de la sessió. Surt de les zones CSS i d'un factor per estil sobre el crol: esquena +10%, braça +17%, papallona +5%, estils +8%, cames +30%. Si el nedador no té zones, la columna queda en blanc.
+
+El sistema corregeix sol els cicles impossibles (més curts que el temps de nedar): `c/15"` en uns 50 passa a `d/15"`. Si el descans no arriba al mínim de la zona (A1 5", A2 10", A3 15", AeM 20" per cada 100 m; velocitat 45" per cada 25 m) o la sessió supera la durada màxima, torna a demanar la sessió a l'LLM amb la llista de problemes (fins a 2 vegades) i es queda la versió amb menys problemes. Els problemes que quedin surten com a avís a la consola.
+
 ## 6. Resultats de competició
 
 ```bash
@@ -217,6 +225,9 @@ Protocol: escalfament 15-20 min; 400 m al màxim amb ritme regular (cap 100 més
 | `l'objectiu realista demana un X%` | Objectiu exigent respecte al nivell | Revisar l'objectiu o confirmar-lo |
 | `falta el resultat de …` | Competició B/C passada sense resultat | `registrar_resultat.py` |
 | `el 100 IM no es neda en piscina de 50 m` | Prova impossible al calendari | Corregir les proves |
+| `cicle corregit: … -> d/…` | Un `c/` era més curt que el temps de nedar | Cap: ja s'ha corregit. Comprova-ho al full |
+| `deixa ~X" de descans; a A2 cal com a mínim …` (després dels reintents) | Descans insuficient que l'LLM no ha corregit | Ajustar el cicle a mà al full (la taula del prompt dona el cicle mínim) |
+| `Durada estimada … min, per sobre del màxim` | La sessió no hi cap a `minuts_max_sessio` | Treure sèries o reduir descansos al full |
 | `nova millor marca` | Resultat de competició més ràpid que la millor marca | Actualitzar `millor_marca` a la fitxa |
 
 ## 10. Problemes freqüents (git i terminal)

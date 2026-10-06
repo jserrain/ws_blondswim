@@ -7,6 +7,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.styles import Font
 
+from blondswim.agents.cicles import temps_exercici
 from blondswim.agents.pla_setmanal import ETIQUETA_ROL, etiquetes_parts
 from blondswim.models.franja import ETIQUETA_FRANJA, ETIQUETA_MODALITAT, ORDRE_FRANJA
 from blondswim.models.macrocicle import Mesocicle, Microcicle
@@ -151,6 +152,7 @@ def _escriure_setmana(
         row_idx += 1
 
         volum_total_dia = 0
+        temps_total_dia: float | None = 0.0
         etiquetes = etiquetes_parts([(p.nom, p.bloc or p.nom) for p in sessio.estructura.parts])
         for part, etiqueta in zip(sessio.estructura.parts, etiquetes, strict=True):
             for i_ex, exercici in enumerate(part.exercicis):
@@ -168,11 +170,22 @@ def _escriure_setmana(
                 ws.cell(row=row_idx, column=5, value=exercici.material)
                 ws.cell(row=row_idx, column=6, value=exercici.intensitat)
                 ws.cell(row=row_idx, column=7, value=exercici.objectiu)
+                temps = temps_exercici(exercici, nedador) if nedador else None
+                if temps is not None:
+                    ws.cell(row=row_idx, column=8, value=round(temps / 60, 1))
+                temps_total_dia = (
+                    None if temps is None or temps_total_dia is None
+                    else temps_total_dia + temps
+                )
                 ws.cell(row=row_idx, column=9, value=exercici.volum_m)
                 volum_total_dia += exercici.volum_m
                 row_idx += 1
 
         ws.cell(row=row_idx, column=2, value="Total").font = Font(bold=True)
+        if temps_total_dia:
+            ws.cell(row=row_idx, column=8, value=round(temps_total_dia / 60)).font = Font(
+                bold=True
+            )
         ws.cell(row=row_idx, column=9, value=volum_total_dia).font = Font(bold=True)
         row_idx += 1
 
@@ -229,7 +242,8 @@ def exportar_mesocicle_excel(
       (<dates>) — <mesocicle.nom>, Fase <tipus>" (setmana ISO de l'any).
     - Per cada dia amb sessió (dilluns..diumenge): capçalera "<Dia> <núm>",
       capçaleres de columna en cursiva, una fila per Exercici i fila "Total"
-      amb el volum del dia. "Temps (min)" en blanc (Etapa 3b pendent).
+      amb el volum del dia. "Temps (min)": durada estimada (nedar + descansos)
+      a partir de les zones CSS; en blanc si el nedador no té zones.
 
     Les setmanes que no apareguin a `resultats` no generen files.
 

@@ -1488,8 +1488,8 @@ def test_parts_com_string_json_es_parseja(nedador_test, metodologia_test, sessio
     ):
         resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
 
-    # 1 crida inicial + 1 reintent per volum fora de rang
-    assert mock_client.messages.create.call_count == 2
+    # 1 crida inicial + 2 reintents dirigits per volum fora de rang
+    assert mock_client.messages.create.call_count == 3
     for part in resultat[0].estructura.parts:
         assert len(part.exercicis) == 1
 
@@ -1922,3 +1922,100 @@ def test_exercicis_de_biblioteca_obligatoris(metodologia_test):
         ex.id_biblioteca for p in sessio.estructura.parts for ex in p.exercicis
     }
     assert set(ids) <= presents
+
+
+# --- Sprint 2: cicles, descansos i reintents dirigits ---------------------------------
+
+
+def _sessio_aerobica() -> tuple[Nedador, Sessio]:
+    nedador = _nedador_plantilla()
+    microcicle = Microcicle(
+        setmana=41, dates="05-11/10/2026", mesocicle_id="meso_1", tipus_base="carrega",
+        volum_objectiu=13600, dies_qualitat=False, test_css=False,
+    )
+    sessio = next(
+        s for s in generar_esquelet_sessions(nedador, microcicle)
+        if s.rol in ("aerobica", "llarga", "mitjana")
+    )
+    sessio.exercicis_tecnica = []
+    return nedador, sessio
+
+
+def _exercicis_amb(sessio: Sessio, execucio: str) -> list:
+    return [
+        ex for p in sessio.estructura.parts for ex in p.exercicis if ex.execucio == execucio
+    ]
+
+
+def test_cicle_impossible_es_corregeix_sense_reintent(metodologia_test):
+    """«c/15"» en uns 50 és un descans: passa a «d/15"» sense tornar a cridar l'LLM."""
+    nedador, sessio = _sessio_aerobica()
+    extra = {"series": 4, "distancia_m": 50, "execucio": "Crol progressiu",
+             "intensitat": "A1", "descans": "c/15\""}
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _resposta_parts(
+        _parts_valides(sessio, extra=extra)
+    )
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        generar_microcicle(nedador, [sessio], metodologia_test)
+
+    assert mock_client.messages.create.call_count == 1
+    [ex] = _exercicis_amb(sessio, "Crol progressiu")
+    assert ex.descans == "d/15\""
+
+
+def test_descans_insuficient_reintenta_amb_el_problema(metodologia_test):
+    """A2 a c/1'30" amb A2 a 1'22" (8" de descans) -> reintent dirigit."""
+    nedador, sessio = _sessio_aerobica()
+    curt = {"series": 4, "distancia_m": 100, "execucio": "Crol A2",
+            "intensitat": "A2", "descans": "c/1'25\""}
+    bo = {**curt, "descans": "c/1'35\""}
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        _resposta_parts(_parts_valides(sessio, extra=curt)),
+        _resposta_parts(_parts_valides(sessio, extra=bo)),
+    ]
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        generar_microcicle(nedador, [sessio], metodologia_test)
+
+    assert mock_client.messages.create.call_count == 2
+    primer = mock_client.messages.create.call_args_list[0].kwargs["messages"][0]["content"]
+    segon = mock_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
+    assert "Taula de referència" in primer and "| A2 | 100 | 1'22\" |" in primer
+    assert "c/1'25\" deixa ~3\" de descans; a A2 cal com a mínim 10\"" in segon
+    [ex] = _exercicis_amb(sessio, "Crol A2")
+    assert ex.descans == "c/1'35\""
+
+
+def test_reintents_es_queda_la_millor_versio(metodologia_test):
+    """Dos reintents que empitjoren: es restaura la versió amb menys problemes."""
+    nedador, sessio = _sessio_aerobica()
+
+    def a2(execucio: str, descans: str) -> dict:
+        return {"series": 2, "distancia_m": 100, "execucio": execucio,
+                "intensitat": "A2", "descans": descans}
+
+    def parts(*extres: dict) -> list[dict]:
+        base = _parts_valides(sessio, extra={"series": 2 * len(extres), "distancia_m": 100})
+        base[0]["exercicis"][1:] = list(extres)
+        return base
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        _resposta_parts(parts(a2("Crol u", "c/1'25\""))),
+        _resposta_parts(parts(a2("Crol u", "c/1'25\""), a2("Crol dos", "c/1'25\""),
+                              a2("Crol tres", "c/1'25\""))),
+        _resposta_parts(parts(a2("Crol u", "c/1'25\""), a2("Crol dos", "c/1'25\""))),
+    ]
+    with patch(
+        "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
+    ):
+        generar_microcicle(nedador, [sessio], metodologia_test)
+
+    assert mock_client.messages.create.call_count == 3
+    assert len(_exercicis_amb(sessio, "Crol u")) == 1
+    assert _exercicis_amb(sessio, "Crol dos") == []

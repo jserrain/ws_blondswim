@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import ValidationError
 
 from blondswim.agents import (
+    cicles,
     context_competicio,
     pla_setmanal,
     seleccio_model,
@@ -33,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 # Límit de tokens de sortida per a cada crida de generació d'UNA sessió.
 MAX_TOKENS_SESSIO = 4096
+# Reintents dirigits (amb la llista de problemes) quan la sessió no valida.
+MAX_REINTENTS_CORRECCIO = 2
 
 
 class GeneracioMicrocicleError(Exception):
@@ -906,11 +909,23 @@ def _trobar_part(sessio: Sessio, nom_part: str | None) -> PartSessio | None:
     return next((p for p in parts if _normalitzar_nom_part(p.nom) == clau), None)
 
 
+# Variants: «placeholder_removed», «Placeholder (eliminat)», «Nota: …», «[buit]».
+_RE_FARCIMENT = re.compile(
+    r"^\s*(placeholder|nota\s*:|n\.?\s*a\.?\s*$|tbd\b|\[?buit\]?\s*$|omès|eliminat)",
+    re.IGNORECASE,
+)
+
+
 def _es_farciment(ex_data: dict) -> bool:
-    """Exercici sense contingut real («placeholder», «N.A.»...)."""
+    """Exercici sense contingut real («placeholder», «N.A.», «Nota: …»...)."""
     execucio = str(ex_data.get("execucio") or "").strip().casefold()
     objectiu = str(ex_data.get("objectiu") or "").strip().casefold()
-    return execucio in TEXTOS_FARCIMENT or objectiu in {"placeholder", "n.a.", "n/a"}
+    return (
+        execucio in TEXTOS_FARCIMENT
+        or bool(_RE_FARCIMENT.match(execucio))
+        or objectiu in {"placeholder", "n.a.", "n/a"}
+        or objectiu.startswith("placeholder")
+    )
 
 
 def _aplicar_contingut_sessio(sessio: Sessio, sessio_data: dict, setmana: int) -> None:
@@ -971,11 +986,12 @@ def _fmt_ritme(valor: float | None) -> str:
     return f"{valor:.2f}" if valor is not None else "N/A"
 
 
-def _problemes_sessio(sessio: Sessio) -> list[str]:
+def _problemes_sessio(sessio: Sessio, nedador: Nedador | None = None) -> list[str]:
     """
     Problemes d'una sessió generada: volum fora del rang flexible (marge del
-    10%), pressupost d'intensitat/papallona del rol i regles de natació
-    (vegeu pla_setmanal.problemes_contingut).
+    10%), pressupost d'intensitat/papallona del rol, regles de natació
+    (vegeu pla_setmanal.problemes_contingut) i, amb el nedador, descansos
+    insuficients per a la zona i durada excessiva (vegeu cicles).
     """
     problemes: list[str] = []
     volum_sessio = sum(
@@ -1001,7 +1017,31 @@ def _problemes_sessio(sessio: Sessio) -> list[str]:
             "Falten exercicis obligatoris de la biblioteca (posa'ls amb el seu "
             f"id_biblioteca): {', '.join(falten)}"
         )
+    if nedador is not None:
+        problemes.extend(
+            cicles.problemes_cicles(
+                sessio, nedador, sessio.durada_min or nedador.minuts_max_sessio
+            )
+        )
     return problemes
+
+
+def _aplicar_i_corregir(
+    sessio: Sessio, sessio_data: dict, setmana: int, nedador: Nedador
+) -> None:
+    """Aplica el contingut de l'LLM i converteix els c/ impossibles en d/."""
+    _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+    for correccio in cicles.corregir_cicles(sessio, nedador):
+        logger.info(f"Setmana {setmana}, sessió '{sessio.id}': cicle corregit: {correccio}")
+
+
+def _copia_parts(sessio: Sessio) -> list[list[Exercici]]:
+    return [[ex.model_copy() for ex in part.exercicis] for part in sessio.estructura.parts]
+
+
+def _restaurar_parts(sessio: Sessio, copia: list[list[Exercici]]) -> None:
+    for part, exercicis in zip(sessio.estructura.parts, copia, strict=True):
+        part.exercicis = exercicis
 
 
 def generar_microcicle(
@@ -1132,6 +1172,7 @@ def generar_microcicle(
                 descripcio_rol=pla_setmanal.descripcio_rol(sessio),
                 pressupost_sessio=pla_setmanal.text_pressupost(sessio),
                 context_setmana=_context_sessio(sessio, sessions),
+                taula_cicles=cicles.taula_cicles(nedador),
                 exercicis_tecnica=tecnica.text_exercicis(
                     [e for e in map(tecnica.per_id, sessio.exercicis_tecnica) if e]
                 ),
@@ -1194,33 +1235,44 @@ def generar_microcicle(
                     )
                     continue
 
-            _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+            _aplicar_i_corregir(sessio, sessio_data, setmana, nedador)
 
-            # Validar volum, pressupost d'intensitat i regles; UN reintent amb
-            # la llista de problemes si cal.
-            problemes = _problemes_sessio(sessio)
-            if problemes:
+            # Validar volum, pressupost d'intensitat, regles i descansos. Fins a
+            # MAX_REINTENTS_CORRECCIO reintents dirigits amb la llista de
+            # problemes; es queda la versió amb menys problemes.
+            problemes = _problemes_sessio(sessio, nedador)
+            millor = (len(problemes), _copia_parts(sessio))
+            intent = 0
+            while problemes and intent < MAX_REINTENTS_CORRECCIO:
+                intent += 1
                 logger.warning(
                     f"Setmana {setmana}, sessió '{sessio.id}': "
                     + "; ".join(problemes)
-                    + ". Reintentant."
+                    + f". Reintent {intent}/{MAX_REINTENTS_CORRECCIO}."
                 )
                 prompt_correccio = (
                     prompt
                     + "\n\nLa proposta anterior tenia aquests problemes. "
-                    + "Corregeix-los:\n"
+                    + "Torna a generar TOTA la sessió corregint-los i mantenint "
+                    + "la resta:\n"
                     + "\n".join(f"- {p}" for p in problemes)
                 )
                 response = _cridar_api_sessio(client, prompt_correccio, tools)
                 sessio_data = _extreure_tool_use_sessio(response)
-                if sessio_data and _extreure_parts(sessio_data):
-                    _aplicar_contingut_sessio(sessio, sessio_data, setmana)
-                problemes_finals = _problemes_sessio(sessio)
-                if problemes_finals:
-                    logger.warning(
-                        f"Setmana {setmana}, sessió '{sessio.id}': encara amb "
-                        f"problemes després del reintent: " + "; ".join(problemes_finals)
-                    )
+                if not sessio_data or not _extreure_parts(sessio_data):
+                    continue
+                _aplicar_i_corregir(sessio, sessio_data, setmana, nedador)
+                problemes = _problemes_sessio(sessio, nedador)
+                if len(problemes) < millor[0]:
+                    millor = (len(problemes), _copia_parts(sessio))
+            if problemes:
+                if len(problemes) > millor[0]:
+                    _restaurar_parts(sessio, millor[1])
+                    problemes = _problemes_sessio(sessio, nedador)
+                logger.warning(
+                    f"Setmana {setmana}, sessió '{sessio.id}': encara amb "
+                    f"problemes després dels reintents: " + "; ".join(problemes)
+                )
 
         # Verificar que totes les parts tenen contingut (advertir si no)
         for sessio in sessions_natacio:
