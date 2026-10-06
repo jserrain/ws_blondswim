@@ -344,3 +344,23 @@ def test_esquelet_assigna_bloc_a_cada_part(nedador_plantilla):
         assert all(p.bloc is not None for p in sessio.estructura.parts)
     dimecres = next(s for s in sessions if s.dia == "dimecres")
     assert [p.bloc for p in dimecres.estructura.parts][:2] == ["Escalfament", "Sèrie de control"]
+
+
+# --- Normes de l'entrenador comprovables pel text ---------------------------------
+
+
+@pytest.mark.parametrize(
+    ("execucio", "n"),
+    [
+        ("Crol arrossegant el polze per l'aigua a la recuperació", 1),
+        ("Crol amb els dits arrossegant per l'aigua", 1),
+        ("Crol amb Ei", 1),
+        ("Crol, focus en la captura", 0),
+        ("Eix del cos estable", 0),
+    ],
+)
+def test_problemes_normes(execucio, n):
+    from blondswim.agents.pla_setmanal import problemes_normes
+    from blondswim.models.sessio import Exercici
+
+    assert len(problemes_normes(Exercici(series=4, distancia_m=50, execucio=execucio))) == n

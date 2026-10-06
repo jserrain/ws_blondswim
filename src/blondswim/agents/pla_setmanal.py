@@ -424,6 +424,33 @@ def metres_papallona(sessio: Sessio) -> int:
     return total
 
 
+# Normes de l'entrenador que es poden comprovar pel text (no cal el jutge).
+# Arrossegar el polze o els dits a la recuperació de crol carrega l'espatlla.
+_RE_ARROSSEGAR = re.compile(
+    r"arrossega\w*\s+(?:el\s+|els\s+)?(?:polze|dits)|(?:polze|dits)\s+arrossega",
+    re.IGNORECASE,
+)
+# «Ei» no és un terme de natació (l'LLM el fa servir per DPS).
+_RE_TERMES_PROHIBITS = re.compile(r"\bEi\b")
+
+
+def problemes_normes(ex: Exercici) -> list[str]:
+    """Normes de l'entrenador comprovables pel text de l'exercici."""
+    text = f"{ex.execucio} {ex.objectiu or ''}"
+    problemes = []
+    if _RE_ARROSSEGAR.search(text):
+        problemes.append(
+            f"'{ex.execucio}': no facis exercicis d'arrossegar el polze o els dits a la "
+            "recuperació (carreguen l'espatlla)"
+        )
+    if _RE_TERMES_PROHIBITS.search(text):
+        problemes.append(
+            f"'{ex.execucio}': «Ei» no és un terme de natació; per a la longitud de "
+            "braçada, escriu DPS o recompte de braçades"
+        )
+    return problemes
+
+
 def problemes_contingut(sessio: Sessio) -> list[str]:
     """
     Problemes de pressupost i de regles de natació d'una sessió generada.
@@ -458,6 +485,7 @@ def problemes_contingut(sessio: Sessio) -> list[str]:
                 f"'{ex.execucio}': uns estils complets han de ser de 100 o 200 m, "
                 f"no de {ex.distancia_m} m"
             )
+        problemes.extend(problemes_normes(ex))
         if ex.intensitat == "A3" and ex.distancia_m < 50:
             problemes.append(
                 f"'{ex.execucio}': A3 en repeticions de {ex.distancia_m} m no arriba "

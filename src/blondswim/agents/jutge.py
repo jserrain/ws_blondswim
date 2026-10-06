@@ -11,9 +11,12 @@ només fa el judici semàntic que el codi no pot fer:
 - fa servir terminologia real (no «crol amb Ei»)?
 - és contingut real i no farciment per quadrar metres?
 
-Els fets numèrics (descans real) els calcula el codi i van al prompt ja fets:
-el jutge no ha de calcular res. Els temps s'escriuen com «1:50» i «15 s»,
-mai amb cometes, perquè no trenquin el JSON de sortida.
+El jutge no veu descansos, cicles ni ritmes: tot això ho valida el codi, i
+quan el jutge els veia els jutjava igualment (malament). Cada exercici li
+arriba en format estructurat («8x100 m | Crol | intensitat: A2 | material:
+Pull») amb un glossari dels termes vàlids. Les normes de l'entrenador
+comprovables pel text (polze arrossegant, «Ei») també són al codi
+(`pla_setmanal.problemes_normes`).
 
 Proveïdor: qualsevol API compatible amb OpenAI amb `response_format`
 json_schema (llama-server de llama.cpp en local).
@@ -22,10 +25,8 @@ json_schema (llama-server de llama.cpp en local).
 import json
 import time
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from blondswim.agents.cicles import descans_real, parsejar_descans
-from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import Exercici
 
 CATEGORIES = [
@@ -53,41 +54,60 @@ DESCRIPCIO_CATEGORIES = {
 EXEMPLES_DEFECTE: list[dict] = [
     {
         "part": "Bloc principal — Aeròbic",
-        "exercici": "6x100 Estils A1 d/15 s (descans real 15 s)",
+        "exercici": "6x100 m | Estils | intensitat: A1",
         "categoria": "correcte",
         "motiu": "Estils suaus a A1 són treball aeròbic vàlid i varien l'estímul.",
     },
     {
         "part": "Bloc principal — Aeròbic",
-        "exercici": "4x50 Caminar per la piscina poc profunda A1 d/10 s (descans real 10 s)",
+        "exercici": "4x50 m | Caminar per la piscina poc profunda | intensitat: A1",
         "categoria": "no_natacio",
         "motiu": "Caminar no és nedar.",
     },
     {
         "part": "Escalfament",
-        "exercici": "6x100 Crol A3 c/1:55 (descans real 21 s)",
+        "exercici": "6x100 m | Crol | intensitat: A3",
         "categoria": "part_incorrecta",
         "motiu": "L'escalfament prepara: llindar (A3) és treball principal.",
     },
     {
         "part": "Tècnica",
-        "exercici": "8x25 Crol un braç, l'altre estirat al davant A1 d/15 s (descans real 15 s)",
+        "exercici": "8x25 m | Crol un braç, l'altre estirat al davant | intensitat: A1",
         "categoria": "correcte",
         "motiu": "Exercici tècnic real de crol, suau.",
     },
     {
         "part": "Bloc principal — Aeròbic",
-        "exercici": "4x50 Subaquàtic sense respirar A2 d/20 s (descans real 20 s)",
+        "exercici": "4x50 m | Subaquàtic sense respirar | intensitat: A2",
         "categoria": "insegur",
         "motiu": "50 m d'apnea repetits: risc de pèrdua de consciència.",
     },
     {
         "part": "Tornada a la calma",
-        "exercici": "1x100 Lliure per completar volum A1",
+        "exercici": "100 m | Lliure per completar volum | intensitat: A1",
         "categoria": "farciment",
         "motiu": "No té cap objectiu: només quadra metres.",
     },
 ]
+
+
+# Termes vàlids que el model no coneixia (proves del 06/10).
+GLOSSARI = """\
+- Estils: Crol (C, lliure), Esquena (E), Braça (B), Papallona (Pap), Estils o IM \
+(papallona, esquena, braça i crol); «ordre invers» és l'IM al revés. Combinar estils \
+en un exercici (p. ex. «crol i esquena») és normal.
+- Cames o Ps: només patada. Dofí: patada de papallona, també d'esquena o de costat.
+- Material: Pull (flotador entre les cames, només braços), Palites o Pales, Aletes \
+(AL), Taula, Tub (respirador frontal), Paracaigudes (resistència per a força i \
+velocitat).
+- Exercicis tècnics: un braç, punys tancats, doble braç (esquena simultània), \
+2 patades i 1 braçada (braça), lliscada, recompte de braçades, DPS.
+- Ritme: progressius (de menys a més), negatiu (segona meitat més ràpida), ritme de \
+cursa (velocitat de la prova objectiu), sortida de paret.
+- Respiració: bilateral (cada 3), cada 5 o 7 braçades (hipòxic moderat).
+- Intensitats: Recuperació i A1 suaus, A2 aeròbic mitjà, A3 llindar, AeM aeròbic \
+màxim, Velocitat (esforços curts màxims), MPLA (màxima producció de làctic), TOLA \
+(tolerància al làctic, sovint a ritme de cursa)."""
 
 
 @dataclass
@@ -98,7 +118,6 @@ class ContextJutge:
     fase: str
     part: str
     objectiu_part: str
-    zones: dict[str, float] = field(default_factory=dict)  # zona -> s/100 m
 
 
 @dataclass
@@ -109,38 +128,18 @@ class Veredicte:
     motiu: str
 
 
-def format_mmss(segons: float) -> str:
-    """98 -> «1:38»; 45 -> «45 s» (sense cometes, per al JSON del jutge)."""
-    s = round(segons)
-    if s < 60:
-        return f"{s} s"
-    return f"{s // 60}:{s % 60:02d}"
+def text_exercici(ex: Exercici) -> str:
+    """«8x100 m | Crol | intensitat: A2 | material: Pull».
 
-
-def _descans_text(descans: str | None) -> str:
-    d = parsejar_descans(descans)
-    if d is None:
-        return ""
-    return ("c/" if d.tipus == "cicle" else "d/") + format_mmss(d.segons)
-
-
-def text_exercici(ex: Exercici, nedador: Nedador | None = None) -> str:
-    """«8x100 Crol A2 c/1:50 amb Pull (descans real 12 s)» amb els fets calculats."""
-    treball = f"{ex.distancia_m}" if ex.series == 1 else f"{ex.series}x{ex.distancia_m}"
+    Sense descans ni cicle: els valida el codi i el jutge no els ha de veure.
+    """
+    treball = f"{ex.distancia_m} m" if ex.series == 1 else f"{ex.series}x{ex.distancia_m} m"
     parts = [treball, ex.execucio]
     if ex.intensitat:
-        parts.append(ex.intensitat)
-    descans = _descans_text(ex.descans)
-    if descans:
-        parts.append(descans)
+        parts.append(f"intensitat: {ex.intensitat}")
     if ex.material:
-        parts.append(f"amb {ex.material}")
-    text = " ".join(parts)
-    if nedador is not None and ex.series > 1:
-        real = descans_real(ex, nedador)
-        if real is not None:
-            text += f" (descans real {format_mmss(max(real, 0))})"
-    return text
+        parts.append(f"material: {ex.material}")
+    return " | ".join(parts)
 
 
 def construir_missatges(
@@ -150,7 +149,6 @@ def construir_missatges(
 ) -> list[dict]:
     """Missatges (sistema + usuari) per jutjar els exercicis d'una part."""
     exemples = EXEMPLES_DEFECTE if exemples is None else exemples
-    zones = ", ".join(f"{z} {format_mmss(v)}" for z, v in context.zones.items() if v)
     categories = "\n".join(f"- {c}: {DESCRIPCIO_CATEGORIES[c]}" for c in CATEGORIES)
     text_exemples = "\n".join(
         f"- Part «{e['part']}»: {e['exercici']} -> {e['categoria']} ({e['motiu']})"
@@ -160,21 +158,20 @@ def construir_missatges(
         "Ets un entrenador de natació expert. Revises els exercicis d'una part d'una "
         "sessió d'entrenament i detectes els que no tenen sentit.\n\n"
         f"Context: sessió de rol {context.rol}, fase {context.fase}, "
-        f"part «{context.part}». Objectiu de la part: {context.objectiu_part}\n"
-        + (f"Zones del nedador (ritme de crol per 100 m): {zones}.\n" if zones else "")
-        + "\nNotació: c/X és el cicle (cada repetició surt cada X, nedar inclòs; no és el "
-        "ritme de nedar); d/X és la pausa després de cada repetició. Zones: Recuperació i "
-        "A1 suaus, A2 aeròbic mitjà, A3 llindar, AeM aeròbic màxim, Velocitat, MPLA i "
-        "TOLA làctic.\n"
-        "El volum, els descansos i els límits de metres ja els ha comprovat el sistema: "
-        "no els jutgis ni recalculis res.\n\n"
+        f"part «{context.part}». Objectiu de la part: {context.objectiu_part}\n\n"
+        "Cada exercici és: repeticions x distància | execució | intensitat | material. "
+        "La intensitat és la del camp «intensitat»: no cal que l'execució la repeteixi. "
+        "El volum, els descansos, els ritmes i els límits de metres ja els ha comprovat "
+        "el sistema: no en parlis.\n\n"
+        f"Glossari (termes vàlids):\n{GLOSSARI}\n\n"
         f"Categories:\n{categories}\n\n"
         f"Exemples d'entrenador:\n{text_exemples}\n\n"
-        "Només marca un exercici com a invàlid si encaixa clarament en una categoria "
-        "d'error. No inventis regles. Al motiu, escriu els temps com 1:45 o 15 s, mai "
-        "amb cometes. Per a CADA exercici, escriu primer el motiu, després la categoria "
-        "i després decideix (valid = true només si la categoria és correcte). Respon en "
-        "català."
+        "Presumpció de validesa: un exercici és correcte llevat que encaixi CLARAMENT en "
+        "una categoria d'error. Que falti informació (objectiu, ritme, focus) no és un "
+        "error. Un terme del glossari no és mai un error de terminologia. No inventis "
+        "regles. En cas de dubte, correcte. Per a CADA exercici, escriu primer el motiu "
+        "(una frase), després la categoria i després decideix (valid = true només si la "
+        "categoria és correcte). Respon en català."
     )
     usuari = "Exercicis:\n" + "\n".join(f"{i}) {t}" for i, t in enumerate(exercicis, 1))
     return [{"role": "system", "content": sistema}, {"role": "user", "content": usuari}]

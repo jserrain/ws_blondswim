@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from blondswim.agents import cicles, jutge
+from blondswim.agents import cicles, jutge, pla_setmanal
 from blondswim.models.nedador import Nedador, RitmesCSS
 from blondswim.models.sessio import EstructuraSessio, Exercici, PartSessio, Sessio
 from blondswim.rutes import RutesNedador, carregar_nedador
@@ -59,20 +59,14 @@ def _exercici(dades: dict) -> Exercici:
     return Exercici(**{k: dades[k] for k in camps if k in dades})
 
 
-def _avisos_cicles(cas: dict, exercicis: list[Exercici], nedador: Nedador) -> list[str]:
-    """Problemes de descans del cas: són feina del codi, no del jutge."""
+def _avisos_codi(cas: dict, exercicis: list[Exercici], nedador: Nedador) -> list[str]:
+    """Problemes que ja detecta el codi (descansos, normes): no són feina del jutge."""
     part = PartSessio(nom=cas["part"], percentatge_carrega=100, percentatge_qualitat=100,
                       percentatge_descarrega=100, exercicis=exercicis)
     sessio = Sessio(id=cas["id"], microcicle_setmana=1, dia="dilluns", tipus_sessio="carrega",
                     volum_total=0, estructura=EstructuraSessio(parts=[part]))
-    return cicles.problemes_cicles(sessio, nedador)
-
-
-def _zones(nedador: Nedador) -> dict[str, float]:
-    r = nedador.ritmes_css
-    if r is None:
-        return {}
-    return {"A1": r.a1, "A2": r.a2, "A3": r.a3}
+    normes = [p for ex in exercicis for p in pla_setmanal.problemes_normes(ex)]
+    return cicles.problemes_cicles(sessio, nedador) + normes
 
 
 def _pct(a: int, b: int) -> str:
@@ -87,7 +81,8 @@ def main() -> int:
     parser.add_argument("--raonar", choices=["si", "no", "cap"], default="no",
                         help="enable_thinking true/false, o cap (no s'envia; Gemma)")
     parser.add_argument("--casos", default=str(ARREL / "data/raw/jutge/casos.jsonl"))
-    parser.add_argument("--nedador", help="Agafa les zones de la fitxa d'aquest nedador")
+    parser.add_argument("--nedador",
+                        help="Zones d'aquest nedador per comprovar els descansos del joc")
     parser.add_argument("--sense-exemples", action="store_true",
                         help="Sense few-shot (per mesurar què aporten)")
     parser.add_argument("--incloure-dubtosos", action="store_true")
@@ -102,12 +97,12 @@ def main() -> int:
     errors_resposta = 0
     for cas in casos:
         exercicis = [_exercici(e) for e in cas["exercicis"]]
-        for avis in _avisos_cicles(cas, exercicis, nedador):
+        for avis in _avisos_codi(cas, exercicis, nedador):
             print(f"⚠ {cas['id']}: {avis} (el codi ho rebutjaria abans del jutge)")
-        textos = [jutge.text_exercici(ex, nedador) for ex in exercicis]
+        textos = [jutge.text_exercici(ex) for ex in exercicis]
         context = jutge.ContextJutge(
             rol=cas["rol"], fase=cas["fase"], part=cas["part"],
-            objectiu_part=cas["objectiu_part"], zones=_zones(nedador),
+            objectiu_part=cas["objectiu_part"],
         )
         try:
             resposta = jutge.jutjar(

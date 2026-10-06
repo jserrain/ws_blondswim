@@ -8,56 +8,36 @@ from unittest.mock import patch
 import pytest
 
 from blondswim.agents import jutge
-from blondswim.models.nedador import Nedador, RitmesCSS
 from blondswim.models.sessio import Exercici
 
 CASOS = Path(__file__).parents[2] / "data/raw/jutge/casos.jsonl"
 
 
-def _nedador() -> Nedador:
-    return Nedador(
-        id="x", nom="X", categoria="master", proves_objectiu=["100m Lliure"],
-        mode_ritme="temps",
-        ritmes_css=RitmesCSS(recuperacio=110, a1=104, a2=98, a3=94, velocitat=83.3),
-    )
-
-
 def _context() -> jutge.ContextJutge:
     return jutge.ContextJutge(
         rol="aerobica", fase="Base", part="Bloc principal — Aeròbic",
-        objectiu_part="treball aeròbic.", zones={"A1": 104, "A2": 98, "A3": 94},
+        objectiu_part="treball aeròbic.",
     )
 
 
-@pytest.mark.parametrize(("segons", "text"), [(98, "1:38"), (45, "45 s"), (120, "2:00")])
-def test_format_mmss(segons, text):
-    assert jutge.format_mmss(segons) == text
-
-
-def test_text_exercici_amb_descans_real_i_sense_cometes():
+def test_text_exercici_estructurat_sense_descans():
     ex = Exercici(series=4, distancia_m=100, execucio="Crol", intensitat="A2",
                   descans="c/1'45\"", material="Pull")
-    text = jutge.text_exercici(ex, _nedador())
-    assert text == "4x100 Crol A2 c/1:45 amb Pull (descans real 7 s)"
-    assert '"' not in text
-
-
-def test_text_exercici_sense_series_ni_nedador():
-    ex = Exercici(series=1, distancia_m=400, execucio="Crol suau", intensitat="A1")
-    assert jutge.text_exercici(ex, _nedador()) == "400 Crol suau A1"
-    ex2 = Exercici(series=8, distancia_m=50, execucio="Crol", descans="d/15\"")
-    assert jutge.text_exercici(ex2) == "8x50 Crol d/15 s"
+    assert jutge.text_exercici(ex) == "4x100 m | Crol | intensitat: A2 | material: Pull"
+    sol = Exercici(series=1, distancia_m=400, execucio="Crol suau")
+    assert jutge.text_exercici(sol) == "400 m | Crol suau"
 
 
 def test_construir_missatges():
     sistema, usuari = jutge.construir_missatges(_context(), ["8x100 Crol A2", "4x50 Surar"])
     assert "part «Bloc principal — Aeròbic»" in sistema["content"]
-    assert "A2 1:38" in sistema["content"]
-    assert "c/X és el cicle" in sistema["content"]
-    assert "Estils A1" in sistema["content"]  # few-shot per defecte
+    assert "Paracaigudes" in sistema["content"]  # glossari
+    assert "Presumpció de validesa" in sistema["content"]
+    assert "c/" not in sistema["content"]
+    assert "| Estils | intensitat: A1" in sistema["content"]  # few-shot per defecte
     assert usuari["content"] == "Exercicis:\n1) 8x100 Crol A2\n2) 4x50 Surar"
     sense = jutge.construir_missatges(_context(), ["x"], exemples=[])[0]["content"]
-    assert "Estils A1" not in sense
+    assert "| Estils | intensitat: A1" not in sense
 
 
 def test_esquema_exigeix_un_veredicte_per_exercici_i_motiu_abans():

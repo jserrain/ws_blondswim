@@ -158,6 +158,16 @@ Proves manuals amb Qwen3-30B-A3B local (06/10): sense context falla; amb rúbric
 
 - [x] **J.1** `agents/jutge.py` (prompt amb rúbrica i few-shot, esquema amb un veredicte i una categoria per exercici, crida a una API compatible amb OpenAI) i `scripts/avaluar_jutge.py`.
 - [x] **J.2** Joc de prova `data/raw/jutge/casos.jsonl`: 39 exercicis en 7 parts, 13 errors plantats.
+Primera avaluació (06/10, Qwen3-30B-A3B, 38 exercicis):
+
+| Configuració | Encert | Detecció | Falsos positius | s/crida |
+|---|---|---|---|---|
+| sense raonar, amb exemples | 58% | 85% | 56% | 5,5 |
+| raonant, amb exemples | 74% | 92% | 36% | 17,5 |
+| sense raonar, sense exemples | 66% | 77% | 40% | 5,4 |
+
+Detecta bé, però rebutja massa: jutjava els descansos tot i dir-li que no, no coneixia termes reals (TOLA, ritme de cursa, paracaigudes, pull, negatiu, doble braç) i marcava com a error que faltés informació. Canvis (v2): el jutge ja no veu descansos ni ritmes, format estructurat, glossari, presumpció de validesa; les normes de l'entrenador comprovables pel text (polze arrossegant, «Ei») passen al codi (`pla_setmanal.problemes_normes`), i al joc de prova se substitueixen per un insegur (llast al canell) i un terme inventat.
+
 - [ ] **J.3 Coach**: revisar els veredictes esperats del joc (sobretot els marcats `dubtos`).
 - [ ] **J.4** Avaluar Qwen3 sense raonar, Qwen3 raonant i Gemma 3 27B; també sense exemples (`--sense-exemples`) per mesurar què aporten.
 - [ ] **J.5** Decisió: detecció ≥ 85% i falsos positius ≤ 10% → primer filtre local amb el núvol de reserva; si no, mode ombra (registra, no rebutja).
