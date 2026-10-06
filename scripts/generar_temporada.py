@@ -152,6 +152,13 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--piscina",
+        type=int,
+        choices=[25, 50],
+        default=None,
+        help="Piscina dels entrenaments (m). Per defecte, la de la fitxa (25).",
+    )
+    parser.add_argument(
         "--mesocicle-sencer",
         action="store_true",
         help="Genera el contingut de tot el mesocicle (comportament antic).",
@@ -173,6 +180,8 @@ def main() -> int:
     try:
         rutes = RutesNedador(args.nedador, arrel_dades)
         nedador = carregar_nedador(rutes)
+        if args.piscina:
+            nedador = nedador.model_copy(update={"piscina_m": args.piscina})
         totes_competicions = carregar_competicions(rutes)
         historial = carregar_historial(rutes)
     except FileNotFoundError as e:
@@ -195,7 +204,7 @@ def main() -> int:
 
     print(f"\n1. Dades carregades de {rutes.carpeta}")
 
-    print(f"   ✓ Nedador: {nedador.nom} ({nedador.categoria})")
+    print(f"   ✓ Nedador: {nedador.nom} ({nedador.categoria}), piscina {nedador.piscina_m} m")
     print(
         f"   ✓ Competicions: {len(competicions)} "
         f"({sum(1 for c in competicions if c.classe == 'A')} classe A)"
@@ -340,6 +349,11 @@ def main() -> int:
                 else ""
             )
         )
+        if microcicle.volum_objectiu and abs(volum / microcicle.volum_objectiu - 1) > 0.05:
+            print(
+                f"   ⚠ Volum de la setmana {volum}m: {volum / microcicle.volum_objectiu - 1:+.0%}"
+                " respecte a l'objectiu (marge ±5%). Ajusta les sèries principals al full."
+            )
         for avis in avisos_validacio:
             if avis.get("tipus") in TIPUS_AVIS_FRANGES:
                 print(f"   ⚠ {avis['missatge']}")

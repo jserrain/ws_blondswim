@@ -311,11 +311,11 @@ def context_setmana(dia_competicio: str | None, post_competicio: bool) -> str:
 
 
 def cicle_serie_control(nedador: Nedador) -> str:
-    """Cicle de la sèrie de control: ritme A2 per 100 + 15\", arrodonit a 5\" amunt."""
+    """Cicle de la sèrie de control: ritme A2 per 100 + 15 s, arrodonit a 5 s amunt."""
     if nedador.ritmes_css is None or nedador.ritmes_css.a2 is None:
-        return "d/20\""
+        return "d/0:20"
     segons = int(math.ceil((nedador.ritmes_css.a2 + 15) / 5) * 5)
-    return f"c/{segons // 60}'{segons % 60:02d}\""
+    return f"c/{segons // 60}:{segons % 60:02d}"
 
 
 def part_serie_control(nedador: Nedador) -> PartSessio:
@@ -408,21 +408,44 @@ _RE_BRACOS = re.compile(r"\b(bra[cç]\w*|completa?|nedar)\b", re.IGNORECASE)
 _RE_ESTILS = re.compile(r"\bIM\b|\bestils\b", re.IGNORECASE)
 
 
-def metres_papallona(sessio: Sessio) -> int:
+def papallona_per_exercici(sessio: Sessio) -> list[tuple[Exercici, int]]:
     """
-    Papallona: l'exercici sencer si l'esmenta; el 25% si és d'estils.
-    Els exercicis només de cames (dofí, "Ps Pap") no compten.
+    Metres de papallona de cada exercici que en té: l'exercici sencer si
+    l'esmenta; el 25% si és d'estils. Els exercicis només de cames (dofí,
+    "Ps Pap") no compten.
     """
-    total = 0
+    resultat = []
     for ex in _exercicis_variables(sessio):
         es_cames = _RE_CAMES.search(ex.execucio) and not _RE_BRACOS.search(ex.execucio)
         if es_cames:
             continue
-        if _RE_PAPALLONA.search(ex.execucio):
-            total += ex.volum_m
-        elif _RE_ESTILS.search(ex.execucio):
-            total += ex.volum_m // 4
-    return total
+        if _RE_ESTILS.search(ex.execucio):
+            resultat.append((ex, ex.volum_m // 4))
+        elif _RE_PAPALLONA.search(ex.execucio):
+            resultat.append((ex, ex.volum_m))
+    return resultat
+
+
+def metres_papallona(sessio: Sessio) -> int:
+    """Total de papallona de la sessió (vegeu papallona_per_exercici)."""
+    return sum(m for _ex, m in papallona_per_exercici(sessio))
+
+
+def nota_papallona(sessio: Sessio, dia_tecnica: str | None) -> str:
+    """On va la papallona tècnica de la setmana, per al prompt de cada sessió."""
+    maxim = PAPALLONA_MAX_ROL.get(sessio.rol or "aerobica", 50)
+    if sessio.rol == "tecnica":
+        return (
+            f"Aquesta és la sessió de la papallona tècnica de la setmana (màxim {maxim} m): "
+            "exercicis de coordinació i ondulació, sempre seguits de nedar complet."
+        )
+    on = f" (el {dia_tecnica})" if dia_tecnica else ""
+    return (
+        f"La papallona tècnica de la setmana es fa a la sessió de tècnica{on}. En aquesta "
+        f"sessió, papallona com a màxim {maxim} m, normalment dins dels estils (un 100 IM "
+        "en té 25 m). No hi posis exercicis de tècnica de papallona; per treballar-la, fes "
+        "cames de dofí (no compten)."
+    )
 
 
 def problemes_normes(ex: Exercici) -> list[str]:
@@ -452,9 +475,17 @@ def problemes_contingut(sessio: Sessio) -> list[str]:
             )
 
     pap_max = PAPALLONA_MAX_ROL.get(sessio.rol or "aerobica", 50)
-    pap = metres_papallona(sessio)
+    per_exercici = papallona_per_exercici(sessio)
+    pap = sum(m for _ex, m in per_exercici)
     if pap > pap_max:
-        problemes.append(f"Papallona: {pap} m, per sobre del màxim de {pap_max} m")
+        detall = ", ".join(
+            f"«{ex.series}x{ex.distancia_m} {ex.execucio}» {m} m" for ex, m in per_exercici
+        )
+        problemes.append(
+            f"Papallona: {pap} m, per sobre del màxim de {pap_max} m ({detall}). Treu "
+            "la tècnica de papallona (va a la sessió de tècnica) o canvia-la per cames "
+            "de dofí"
+        )
 
     for ex in _exercicis_variables(sessio):
         if (

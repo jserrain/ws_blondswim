@@ -86,10 +86,10 @@ def test_parsejar_descans(text, esperat):
 @pytest.mark.parametrize(
     ("descans", "text"),
     [
-        (Descans("cicle", 105), "c/1'45\""),
-        (Descans("cicle", 120), "c/2'"),
-        (Descans("descans", 15), "d/15\""),
-        (Descans("descans", 90), "d/1'30\""),
+        (Descans("cicle", 105), "c/1:45"),
+        (Descans("cicle", 120), "c/2:00"),
+        (Descans("descans", 15), "d/0:15"),
+        (Descans("descans", 90), "d/1:30"),
     ],
 )
 def test_formatar_descans(descans, text):
@@ -173,21 +173,21 @@ def test_descans_real():
 def test_c_curt_fet_servir_com_a_descans_passa_a_d():
     sessio = _sessio(_ex(8, 50, descans="c/15\""))
     correccions = corregir_cicles(sessio, _jep())
-    assert sessio.estructura.parts[0].exercicis[0].descans == "d/15\""
+    assert sessio.estructura.parts[0].exercicis[0].descans == "d/0:15"
     assert len(correccions) == 1 and "c/15\"" in correccions[0]
 
 
 def test_c_curt_per_sota_del_minim_puja_al_minim():
     sessio = _sessio(_ex(4, 50, intensitat="Velocitat", descans="c/20\""))
     corregir_cicles(sessio, _jep())
-    assert sessio.estructura.parts[0].exercicis[0].descans == "d/1'30\""
+    assert sessio.estructura.parts[0].exercicis[0].descans == "d/1:30"
 
 
 def test_c_llarg_impossible_passa_a_d_amb_el_minim():
     # 4x200 A2 c/3' amb un temps nedat de 3'16"
     sessio = _sessio(_ex(4, 200, descans="c/3'"))
     corregir_cicles(sessio, _jep())
-    assert sessio.estructura.parts[0].exercicis[0].descans == "d/20\""
+    assert sessio.estructura.parts[0].exercicis[0].descans == "d/0:20"
 
 
 def test_cicles_possibles_i_parts_fixes_no_es_toquen():
@@ -205,7 +205,7 @@ def test_a2_amb_cicle_massa_curt_es_problema():
     # W41: 4x100 A2 c/1'45" amb A2 a 1'38" -> 7" de descans
     problemes = problemes_cicles(_sessio(_ex(descans="c/1'45\"")), _jep())
     assert len(problemes) == 1
-    assert "~7\"" in problemes[0] and "c/1'50\"" in problemes[0]
+    assert "~7 s" in problemes[0] and "c/1:50" in problemes[0]
 
 
 def test_cicles_suficients_no_son_problema():
@@ -222,7 +222,7 @@ def test_velocitat_sense_recuperacio_completa():
     problemes = problemes_cicles(
         _sessio(_ex(8, 25, intensitat="Velocitat", descans="d/20\"")), _jep()
     )
-    assert len(problemes) == 1 and "d/45\"" in problemes[0]
+    assert len(problemes) == 1 and "d/0:45" in problemes[0]
 
 
 def test_falta_descans_nomes_a_partir_d_a2():
@@ -251,8 +251,10 @@ def test_sense_zones_no_hi_ha_problemes_de_cicle():
 
 def test_taula_cicles():
     taula = taula_cicles(_jep())
-    assert "| A2 | 100 | 1'38\" | d/10\" | c/1'50\" |" in taula
-    assert "| Velocitat | 25 | 21\" | d/45\" |" in taula
+    assert "| A2 | 100 | 1:38 | d/0:10 | c/1:50 |" in taula
+    assert "| Velocitat | 25 | 0:21 | d/0:45 |" in taula
+    a50 = taula_cicles(_jep().model_copy(update={"piscina_m": 50}))
+    assert "| Velocitat | 25 |" not in a50 and "| Velocitat | 50 |" in a50
     assert "sense zones" in taula_cicles(_jep().model_copy(update={"ritmes_css": None}))
 
 
@@ -271,3 +273,58 @@ def test_variants_de_farciment(execucio):
 @pytest.mark.parametrize("execucio", ["Crol nota alta de tècnica", "Esquena suau", "Nadar"])
 def test_no_farciment(execucio):
     assert not _es_farciment({"execucio": execucio})
+
+
+# --- Sprint 2b: notació m:ss, abast de la validació i factors de la fitxa ----------
+
+
+def test_normalitzar_descans():
+    from blondswim.agents.cicles import normalitzar_descans
+
+    assert normalitzar_descans("c/1'45\"") == "c/1:45"
+    assert normalitzar_descans("d/15\"") == "d/0:15"
+    assert normalitzar_descans("d/0:20") == "d/0:20"
+    assert normalitzar_descans(None) is None
+    assert normalitzar_descans("suau") == "suau"
+
+
+@pytest.mark.parametrize(
+    ("execucio", "material", "id_biblioteca", "conegut"),
+    [
+        ("Crol", None, None, True),
+        ("Crol", "Pull", None, True),
+        ("Crol", "Aletes", None, False),
+        ("Cames de crol amb taula", "Taula", None, False),
+        ("Crol amb paracaigudes", None, None, False),
+        ("Crol un braç", None, "cro_un_brac", False),
+    ],
+)
+def test_ritme_conegut(execucio, material, id_biblioteca, conegut):
+    from blondswim.agents.cicles import ritme_conegut
+
+    ex = Exercici(series=4, distancia_m=50, execucio=execucio, material=material,
+                  id_biblioteca=id_biblioteca)
+    assert ritme_conegut(ex) is conegut
+
+
+def test_cames_amb_aletes_no_es_validen_ni_es_corregeixen():
+    # W41 dimecres: 4x50 cames amb aletes c/1'10" donava un avís fals.
+    ex = _ex(4, 50, "Cames crol amb aletes", "A1", "c/1:10")
+    ex.material = "Aletes"
+    sessio = _sessio(ex)
+    assert corregir_cicles(sessio, _jep()) == []
+    assert problemes_cicles(sessio, _jep()) == []
+    assert ex.descans == "c/1:10"
+
+
+def test_factors_de_la_fitxa():
+    from blondswim.models.nedador import FactorsTemps
+
+    jep = _jep()
+    cames = _ex(1, 100, "Cames de crol amb taula", "A1")
+    cames_aletes = _ex(1, 100, "Cames de crol", "A1")
+    cames_aletes.material = "Aletes"
+    assert temps_nedat(cames, jep) == pytest.approx(104 * 1.30)
+    assert temps_nedat(cames_aletes, jep) == pytest.approx(104 * 1.00)
+    calibrat = jep.model_copy(update={"factors_temps": FactorsTemps(cames=1.45)})
+    assert temps_nedat(cames, calibrat) == pytest.approx(104 * 1.45)

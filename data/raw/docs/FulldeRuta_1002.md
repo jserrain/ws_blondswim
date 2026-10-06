@@ -88,6 +88,8 @@ Etapa 3b i validació de cicles, en un sol bloc de patches perquè comparteixen 
 
 **Fet (codi, 06/10):** `agents/cicles.py` (parser `c/`/`d/`, temps per exercici i sessió amb factor d'estil, correcció automàtica dels `c/` impossibles a `d/`, descans mínim per zona, durada màxima), taula de cicles al prompt, `Temps (min)` a l'Excel, farciment ampliat («placeholder_removed», «Nota: …») i fins a 2 reintents dirigits quedant-se la millor versió. Decisions: un `c/` impossible no fa reintentar, es converteix; un descans insuficient sí. Pendent: 2.8 (prova real) i, de la 2.9, treure la cota aproximada de 40 m/min de l'esquelet (la durada ja es valida amb el temps calculat).
 
+**Sprint 2b (06/10, després de la primera W41 amb l'Sprint 2):** notació `c/m:ss` i `d/m:ss` a tot arreu (les cometes trencaven el JSON dels reintents); descans validat només per a l'estil complet (cames, aletes, paracaigudes i tècnica, temps aproximat) amb factors de temps a la fitxa; distàncies i volums segons la piscina (25 per defecte, `PISCINA=50`) i distàncies no vàlides tornades a l'LLM en lloc d'arrodonir-les; biblioteca amb les dosis en múltiples de 25 (els «4x(12,5 + 12,5)» i «4x15 m» feien sortir 12 i 24 m); papallona tècnica només a la sessió de tècnica, amb el detall per exercici al reintent; marge de volum per sessió del 10% al 5% i avís si la setmana es desvia més d'un 5%.
+
 **Fet quan:** la W42 té `Temps (min)` ple, cap cicle impossible, cap sessió supera els 105 min i l'estructura correspon a una setmana de competició B.
 
 ---

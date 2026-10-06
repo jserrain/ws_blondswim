@@ -59,6 +59,23 @@ class ParametresRitme(BaseModel):
     offset_a2_css: float = 0
     offset_a3_css: float = -4
 
+class FactorsTemps(BaseModel):
+    """
+    Factors sobre el temps de crol a la mateixa zona, per estimar la durada
+    dels exercicis (columna Temps de l'Excel). Valors per defecte estimats:
+    calibra'ls cronometrant-te (p. ex. 100 cames amb taula a A1).
+    """
+    esquena: float = 1.10
+    braca: float = 1.17
+    papallona: float = 1.05
+    estils: float = 1.08
+    cames: float = 1.30
+    # Cames amb aletes (sobre el crol, no sobre les cames).
+    cames_aletes: float = 1.00
+    # Nedar amb aletes (multiplica el factor de l'estil).
+    aletes: float = 0.92
+
+
 class RitmeCursaObjectiu(BaseModel):
     """
     Ritme objectiu per a una prova específica (independent de zones fisiològiques).
@@ -159,6 +176,7 @@ class Nedador(BaseModel):
     marques_referencia: MarquesReferencia | None = None
     ritmes_css: RitmesCSS | None = None
     parametres_ritme: ParametresRitme = ParametresRitme()
+    factors_temps: FactorsTemps = FactorsTemps()
     ritmes_cursa_objectiu: list[RitmeCursaObjectiu] = []
     dies_disponibles: list[str] = ["dilluns", "dimarts", "dimecres", "dijous"]
     dia_opcional: str | None = None

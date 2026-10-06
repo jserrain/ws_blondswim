@@ -36,6 +36,8 @@ logger = logging.getLogger(__name__)
 MAX_TOKENS_SESSIO = 4096
 # Reintents dirigits (amb la llista de problemes) quan la sessió no valida.
 MAX_REINTENTS_CORRECCIO = 2
+# Marge sobre el rang de volum de cada sessió (abans 10%: la setmana es desviava).
+MARGE_VOLUM = 0.05
 
 
 class GeneracioMicrocicleError(Exception):
@@ -703,12 +705,26 @@ def generar_contingut_mesocicle(
     return resultats, errors
 
 
-def _construir_tools_sessio(noms_parts: list[str] | None = None) -> list[dict]:
+DISTANCIES_PISCINA: dict[int, list[int]] = {
+    25: [25, 50, 75, 100, 150, 200, 250, 300, 400, 500, 600, 800],
+    50: [50, 100, 150, 200, 300, 400, 500, 600, 800],
+}
+
+
+def distancies_valides(piscina_m: int) -> list[int]:
+    """Distàncies de repetició permeses per a la piscina (25 o 50 m)."""
+    return DISTANCIES_PISCINA.get(piscina_m, DISTANCIES_PISCINA[25])
+
+
+def _construir_tools_sessio(
+    noms_parts: list[str] | None = None, piscina_m: int = 25
+) -> list[dict]:
     """
     Tool schema per a la generació del contingut d'UNA sola sessió.
 
     Amb `noms_parts`, el camp `nom` de cada part es limita a aquests valors
     (enum), perquè l'LLM no hi posi l'etiqueta del bloc («Bloc principal 1 — …»).
+    Les distàncies es limiten a les de la piscina (múltiples de 25 o de 50).
     """
     nom_schema: dict = {"type": "string"}
     if noms_parts:
@@ -740,10 +756,7 @@ def _construir_tools_sessio(noms_parts: list[str] | None = None) -> list[dict]:
                                             "series": {"type": "integer"},
                                             "distancia_m": {
                                                 "type": "integer",
-                                                "enum": [
-                                                    25, 50, 75, 100, 150, 200,
-                                                    250, 300, 400, 500, 600, 800,
-                                                ],
+                                                "enum": distancies_valides(piscina_m),
                                             },
                                             "execucio": {"type": "string"},
                                             "descans": {"type": "string"},
@@ -875,11 +888,6 @@ def _extreure_parts(sessio_data: dict) -> list[dict]:
     return parts
 
 
-def _arrodonir_distancia_25(distancia_m: int) -> int:
-    """Arrodoneix a múltiple de 25 (mínim 25)."""
-    return max(25, round(distancia_m / 25) * 25)
-
-
 # Textos de farciment que l'LLM fa servir per quadrar metres: l'exercici es descarta.
 TEXTOS_FARCIMENT = {"", "-", "placeholder", "n.a.", "n.a", "na", "n/a", "tbd", "...", "x"}
 
@@ -928,8 +936,18 @@ def _es_farciment(ex_data: dict) -> bool:
     )
 
 
-def _aplicar_contingut_sessio(sessio: Sessio, sessio_data: dict, setmana: int) -> None:
-    """Aplica els exercicis del tool_use a les parts de la sessió."""
+def _aplicar_contingut_sessio(
+    sessio: Sessio, sessio_data: dict, setmana: int, piscina_m: int = 25
+) -> list[str]:
+    """
+    Aplica els exercicis del tool_use a les parts de la sessió.
+
+    Normalitza el descans a «c/m:ss» / «d/m:ss». Una distància que no és de la
+    piscina (p. ex. 12 o 24 m) no s'arrodoneix: l'exercici es descarta i es
+    retorna com a problema perquè l'LLM el corregeixi al reintent.
+    """
+    problemes: list[str] = []
+    valides = distancies_valides(piscina_m)
     for part_data in _extreure_parts(sessio_data):
         nom_part = part_data.get("nom")
         exercicis_data = part_data.get("exercicis", [])
@@ -957,14 +975,20 @@ def _aplicar_contingut_sessio(sessio: Sessio, sessio_data: dict, setmana: int) -
                 )
                 continue
             distancia = ex_data.get("distancia_m")
-            if isinstance(distancia, int) and distancia % 25 != 0:
-                arrodonida = _arrodonir_distancia_25(distancia)
-                logger.info(
-                    f"Setmana {setmana}, sessió '{sessio.id}', part '{nom_part}': "
-                    f"distancia_m={distancia} no és múltiple de 25, "
-                    f"arrodonida a {arrodonida}"
+            if distancia not in valides:
+                n_descartats += 1
+                problemes.append(
+                    f"'{ex_data.get('execucio')}': {distancia} m no és una distància vàlida "
+                    f"en piscina de {piscina_m} m ({', '.join(map(str, valides[:6]))}…). Si "
+                    f"l'exercici és més curt, posa {valides[0]} m i descriu la part curta a "
+                    f"l'execució (p. ex. «12,5 pap + 12,5 esq» o «15 m cap fora + 10 suau»)"
                 )
-                ex_data = {**ex_data, "distancia_m": arrodonida}
+                logger.warning(
+                    f"Setmana {setmana}, sessió '{sessio.id}', part '{nom_part}': "
+                    f"distancia_m={distancia} no vàlida en piscina de {piscina_m} m"
+                )
+                continue
+            ex_data = {**ex_data, "descans": cicles.normalitzar_descans(ex_data.get("descans"))}
             try:
                 exercicis.append(Exercici(**ex_data))
             except ValidationError as e:
@@ -979,6 +1003,7 @@ def _aplicar_contingut_sessio(sessio: Sessio, sessio_data: dict, setmana: int) -
             f"exercicis rebuts={n_rebuts}, vàlids={len(exercicis)}, "
             f"descartats={n_descartats}"
         )
+    return problemes
 
 
 def _fmt_ritme(valor: float | None) -> str:
@@ -998,7 +1023,8 @@ def _problemes_sessio(sessio: Sessio, nedador: Nedador | None = None) -> list[st
         ex.volum_m for part in sessio.estructura.parts for ex in part.exercicis
     )
     if sessio.volum_min is not None and sessio.volum_max is not None and (
-        volum_sessio < sessio.volum_min * 0.9 or volum_sessio > sessio.volum_max * 1.1
+        volum_sessio < sessio.volum_min * (1 - MARGE_VOLUM)
+        or volum_sessio > sessio.volum_max * (1 + MARGE_VOLUM)
     ):
         problemes.append(
             f"volum generat {volum_sessio}m fora del rang "
@@ -1028,11 +1054,15 @@ def _problemes_sessio(sessio: Sessio, nedador: Nedador | None = None) -> list[st
 
 def _aplicar_i_corregir(
     sessio: Sessio, sessio_data: dict, setmana: int, nedador: Nedador
-) -> None:
-    """Aplica el contingut de l'LLM i converteix els c/ impossibles en d/."""
-    _aplicar_contingut_sessio(sessio, sessio_data, setmana)
+) -> list[str]:
+    """Aplica el contingut de l'LLM i converteix els c/ impossibles en d/.
+
+    Retorna els problemes de l'aplicació (distàncies no vàlides).
+    """
+    problemes = _aplicar_contingut_sessio(sessio, sessio_data, setmana, nedador.piscina_m)
     for correccio in cicles.corregir_cicles(sessio, nedador):
         logger.info(f"Setmana {setmana}, sessió '{sessio.id}': cicle corregit: {correccio}")
+    return problemes
 
 
 def _copia_parts(sessio: Sessio) -> list[list[Exercici]]:
@@ -1100,11 +1130,12 @@ def generar_microcicle(
             raise GeneracioMicrocicleError("No hi ha sessions per generar contingut")
 
         setmana = sessions_natacio[0].microcicle_setmana
+        dia_tecnica = next((s.dia for s in sessions_natacio if s.rol == "tecnica"), None)
 
         client = get_llm_client()
         for sessio in sessions_natacio:
             tools = _construir_tools_sessio(
-                [p.nom for p in sessio.estructura.parts if not p.fixa]
+                [p.nom for p in sessio.estructura.parts if not p.fixa], nedador.piscina_m
             )
             # Estructura de parts d'aquesta sessió
             estructura_sessions_text = (
@@ -1173,6 +1204,9 @@ def generar_microcicle(
                 pressupost_sessio=pla_setmanal.text_pressupost(sessio),
                 context_setmana=_context_sessio(sessio, sessions),
                 taula_cicles=cicles.taula_cicles(nedador),
+                nota_papallona=pla_setmanal.nota_papallona(sessio, dia_tecnica),
+                piscina_m=nedador.piscina_m,
+                distancies=", ".join(map(str, distancies_valides(nedador.piscina_m))),
                 exercicis_tecnica=tecnica.text_exercicis(
                     [e for e in map(tecnica.per_id, sessio.exercicis_tecnica) if e]
                 ),
@@ -1235,12 +1269,12 @@ def generar_microcicle(
                     )
                     continue
 
-            _aplicar_i_corregir(sessio, sessio_data, setmana, nedador)
+            aplicacio = _aplicar_i_corregir(sessio, sessio_data, setmana, nedador)
 
             # Validar volum, pressupost d'intensitat, regles i descansos. Fins a
             # MAX_REINTENTS_CORRECCIO reintents dirigits amb la llista de
             # problemes; es queda la versió amb menys problemes.
-            problemes = _problemes_sessio(sessio, nedador)
+            problemes = aplicacio + _problemes_sessio(sessio, nedador)
             millor = (len(problemes), _copia_parts(sessio))
             intent = 0
             while problemes and intent < MAX_REINTENTS_CORRECCIO:
@@ -1261,8 +1295,8 @@ def generar_microcicle(
                 sessio_data = _extreure_tool_use_sessio(response)
                 if not sessio_data or not _extreure_parts(sessio_data):
                     continue
-                _aplicar_i_corregir(sessio, sessio_data, setmana, nedador)
-                problemes = _problemes_sessio(sessio, nedador)
+                aplicacio = _aplicar_i_corregir(sessio, sessio_data, setmana, nedador)
+                problemes = aplicacio + _problemes_sessio(sessio, nedador)
                 if len(problemes) < millor[0]:
                     millor = (len(problemes), _copia_parts(sessio))
             if problemes:

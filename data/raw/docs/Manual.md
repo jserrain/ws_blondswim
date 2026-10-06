@@ -150,11 +150,30 @@ Revisa sempre els avisos ⚠ de la consola abans d'anar a la piscina.
 
 ### 5.1 Llegir el full: cicles, descansos i temps
 
-- `c/1'50"` és un **cicle**: cada repetició surt cada 1'50" (nedar + descans). Amb un 100 a 1'38", queden 12" de descans.
-- `d/15"` és un **descans**: 15" de pausa després de cada repetició.
-- **Temps (min)** és la durada estimada de cada exercici (nedar + descansos) i, a la fila Total, de la sessió. Surt de les zones CSS i d'un factor per estil sobre el crol: esquena +10%, braça +17%, papallona +5%, estils +8%, cames +30%. Si el nedador no té zones, la columna queda en blanc.
+- `c/1:50` és un **cicle**: cada repetició surt cada 1:50 (nedar + descans). Amb un 100 a 1:38, queden 12 s de descans.
+- `d/0:15` és un **descans**: 15 s de pausa després de cada repetició.
+- Sempre minuts:segons, sense cometes (els fulls antics amb `c/1'50"` es continuen llegint).
+- **Temps (min)**: durada estimada de cada exercici (nedar + descansos) i, a la fila Total, de la sessió. Surt de les zones CSS i dels factors de la fitxa (`factors_temps`), estimats per defecte: esquena ×1,10, braça ×1,17, papallona ×1,05, estils ×1,08, cames ×1,30, cames amb aletes ×1,00, nedar amb aletes ×0,92. Calibra'ls cronometrant-te (p. ex. 100 cames amb taula, 100 cames amb aletes i 100 crol amb aletes a A1) i posa'ls a la fitxa:
 
-El sistema corregeix sol els cicles impossibles (més curts que el temps de nedar): `c/15"` en uns 50 passa a `d/15"`. Si el descans no arriba al mínim de la zona (A1 5", A2 10", A3 15", AeM 20" per cada 100 m; velocitat 45" per cada 25 m) o la sessió supera la durada màxima, torna a demanar la sessió a l'LLM amb la llista de problemes (fins a 2 vegades) i es queda la versió amb menys problemes. Els problemes que quedin surten com a avís a la consola.
+```json
+"factors_temps": {"cames": 1.40, "cames_aletes": 1.05, "aletes": 0.90}
+```
+
+Validació automàtica:
+- Només es validen els descansos quan el ritme és conegut: nedar l'estil complet, sense material o amb pull o pales. Cames, aletes, paracaigudes i exercicis de la biblioteca de tècnica tenen només temps aproximat.
+- Un cicle impossible (més curt que el temps de nedar) passa sol a `d/`: `c/0:15` en uns 50 → `d/0:15`.
+- Un descans per sota del mínim de la zona (A1 5 s, A2 10 s, A3 15 s, AeM 20 s per cada 100 m; velocitat 45 s per cada 25 m), una sessió fora del seu rang de volum (±5%), massa papallona o una distància que no és de la piscina tornen la sessió a l'LLM amb la llista concreta de problemes (fins a 2 vegades); es queda la versió amb menys problemes.
+- La papallona tècnica de la setmana va a la sessió de tècnica (màxim 350 m); a la resta, com a màxim 50 m (un 100 IM en té 25).
+
+### 5.2 Piscina de 25 o de 50 m
+
+Per defecte, piscina de 25 m (`piscina_m` a la fitxa). Per a una setmana en piscina de 50 m:
+
+```bash
+make setmana NEDADOR=jep DILLUNS=2027-06-28 PISCINA=50
+```
+
+Amb 50 m, les repeticions i els volums de sessió són múltiples de 50 (50, 100, 150, 200…), i els exercicis curts de la biblioteca es fan dins d'un 50 (p. ex. «25 exercici + 25 nedar»).
 
 ## 6. Resultats de competició
 
@@ -226,6 +245,7 @@ Protocol: escalfament 15-20 min; 400 m al màxim amb ritme regular (cap 100 més
 | `falta el resultat de …` | Competició B/C passada sense resultat | `registrar_resultat.py` |
 | `el 100 IM no es neda en piscina de 50 m` | Prova impossible al calendari | Corregir les proves |
 | `cicle corregit: … -> d/…` | Un `c/` era més curt que el temps de nedar | Cap: ja s'ha corregit. Comprova-ho al full |
+| `Volum de la setmana …: +X% respecte a l'objectiu` | La suma de sessions s'allunya més d'un 5% de l'objectiu | Ajustar les sèries principals al full |
 | `deixa ~X" de descans; a A2 cal com a mínim …` (després dels reintents) | Descans insuficient que l'LLM no ha corregit | Ajustar el cicle a mà al full (la taula del prompt dona el cicle mínim) |
 | `Durada estimada … min, per sobre del màxim` | La sessió no hi cap a `minuts_max_sessio` | Treure sèries o reduir descansos al full |
 | `nova millor marca` | Resultat de competició més ràpid que la millor marca | Actualitzar `millor_marca` a la fitxa |

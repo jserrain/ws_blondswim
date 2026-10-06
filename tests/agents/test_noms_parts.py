@@ -96,3 +96,31 @@ def test_schema_limita_els_noms_de_part():
     assert nom == {"type": "string", "enum": ["Escalfament", "Aeròbic"]}
     lliure = _construir_tools_sessio()[0]["input_schema"]["properties"]["parts"]
     assert lliure["items"]["properties"]["nom"] == {"type": "string"}
+
+
+def test_distancies_segons_la_piscina():
+    from blondswim.agents.generar_microcicle import distancies_valides
+
+    tools25 = _construir_tools_sessio(["Aeròbic"], 25)
+    tools50 = _construir_tools_sessio(["Aeròbic"], 50)
+
+    def enum(tools):
+        ex = tools[0]["input_schema"]["properties"]["parts"]["items"]["properties"]
+        return ex["exercicis"]["items"]["properties"]["distancia_m"]["enum"]
+
+    assert enum(tools25) == distancies_valides(25) and 25 in enum(tools25)
+    assert all(d % 50 == 0 for d in enum(tools50))
+
+
+def test_aplicar_normalitza_el_descans_i_retorna_distancies_no_valides():
+    sessio = _sessio()
+    dades = {"parts": [{"nom": "Aeròbic", "exercicis": [
+        {"series": 8, "distancia_m": 100, "execucio": "Crol", "descans": "c/1'50\""},
+        {"series": 4, "distancia_m": 24, "execucio": "12,5 pap + 12,5 esq"},
+    ]}]}
+    problemes = _aplicar_contingut_sessio(sessio, dades, 41)
+    [aerobic] = [p for p in sessio.estructura.parts if p.nom == "Aeròbic"]
+    assert [ex.descans for ex in aerobic.exercicis] == ["c/1:50"]
+    assert len(problemes) == 1 and "24 m no és una distància vàlida" in problemes[0]
+    problemes50 = _aplicar_contingut_sessio(sessio, dades, 41, piscina_m=50)
+    assert len(problemes50) == 1  # 100 val; 24 no

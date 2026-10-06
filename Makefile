@@ -19,7 +19,7 @@ run-ingestion:
 # Ús: make setmana NEDADOR=jep [DILLUNS=2026-10-05]
 setmana:
 	. .venv/bin/activate && python scripts/generar_temporada.py --nedador $(NEDADOR) \
-		$(if $(DILLUNS),--dilluns $(DILLUNS))
+		$(if $(DILLUNS),--dilluns $(DILLUNS)) $(if $(PISCINA),--piscina $(PISCINA))
 
 MODEL ?= deepseek/deepseek-chat
 

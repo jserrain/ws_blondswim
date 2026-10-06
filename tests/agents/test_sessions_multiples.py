@@ -128,7 +128,7 @@ def _resposta(sessio) -> MagicMock:
         dist = objectiu - 25 * (n - 1) if i == 0 else 25
         parts.append({
             "nom": p.nom,
-            "exercicis": [{"series": 1, "distancia_m": dist, "execucio": "Crol", "intensitat": "A1"}],
+            "exercicis": [{"series": dist // 25, "distancia_m": 25, "execucio": "Crol", "intensitat": "A1"}],
         })
     block = MagicMock(type="tool_use", input={"parts": parts})
     block.name = "retornar_contingut_sessio"

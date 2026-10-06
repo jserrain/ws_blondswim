@@ -1,11 +1,17 @@
 """Cicles i descansos: notació, temps de cada exercici i validació.
 
-Notació de la piscina:
+Notació (minuts:segons, sense cometes perquè no trenqui cap JSON):
 
-- ``c/X``: **cicle**. Cada repetició surt cada X (nedar + descans = X).
-  ``4x100 c/1'50"`` amb un ritme d'1'38" deixa 12" de descans.
-- ``d/X``: **descans**. X de descans després de cada repetició.
-  ``8x50 d/15"`` vol dir 15" de descans entre 50s.
+- ``c/m:ss``: **cicle**. Cada repetició surt cada X (nedar + descans = X).
+  ``4x100 c/1:50`` amb un ritme d'1:38 deixa 12 s de descans.
+- ``d/m:ss``: **descans**. X de descans després de cada repetició.
+  ``8x50 d/0:15`` vol dir 15 s de descans entre 50s.
+
+El parser també accepta la notació antiga (``c/1'50"``, ``d/15"``) de l'historial.
+
+Només es valida el descans quan el ritme és conegut: l'estil complet, sense
+material o amb pull o pales. Cames, aletes, paracaigudes i exercicis de la
+biblioteca de tècnica només tenen temps aproximat (factors de la fitxa).
 
 El temps nedat d'una repetició surt del ritme de la zona (CSS) i d'un factor
 d'estil. Amb aquest temps:
@@ -27,7 +33,6 @@ from typing import Literal
 
 from blondswim.models.nedador import Nedador
 from blondswim.models.sessio import Exercici, Sessio
-from blondswim.utils.temps import format_temps
 
 TipusDescans = Literal["cicle", "descans"]
 
@@ -71,29 +76,25 @@ def parsejar_descans(text: str | None) -> Descans | None:
     return Descans(tipus, total)
 
 
+def mmss(segons: float) -> str:
+    """105 -> «1:45»; 20 -> «0:20»."""
+    total = round(segons)
+    return f"{total // 60}:{total % 60:02d}"
+
+
 def formatar_descans(descans: Descans) -> str:
-    """Descans(cicle, 105) -> «c/1'45"»; Descans(descans, 60) -> «d/1'»."""
+    """Descans(cicle, 105) -> «c/1:45»; Descans(descans, 20) -> «d/0:20»."""
     prefix = "c/" if descans.tipus == "cicle" else "d/"
-    segons = round(descans.segons)
-    minuts, resta = divmod(segons, 60)
-    if minuts and resta:
-        return f"{prefix}{minuts}'{resta:02d}\""
-    if minuts:
-        return f"{prefix}{minuts}'"
-    return f"{prefix}{resta}\""
+    return prefix + mmss(descans.segons)
+
+
+def normalitzar_descans(text: str | None) -> str | None:
+    """Qualsevol notació reconeguda -> «c/m:ss» o «d/m:ss»; si no, el text tal qual."""
+    descans = parsejar_descans(text)
+    return formatar_descans(descans) if descans else text
 
 
 # --- Ritme de cada exercici --------------------------------------------------
-
-# Factor sobre el temps de crol a la mateixa zona.
-FACTOR_ESTIL = {
-    "crol": 1.00,
-    "papallona": 1.05,
-    "estils": 1.08,
-    "esquena": 1.10,
-    "braca": 1.17,
-    "cames": 1.30,
-}
 
 _RE_ESTIL = [
     ("cames", re.compile(r"(?i:\b(ps|peus|cames|patada|dof[ií]|batud\w*)\b)")),
@@ -135,12 +136,42 @@ def ritme_zona(nedador: Nedador, intensitat: str | None) -> float | None:
     return valors.get(zona)
 
 
+_RE_ALETES = re.compile(r"(?i:\baletes\b)|\bAL\b")
+_RE_SENSE_RITME = re.compile(r"\bparacaigudes\b", re.IGNORECASE)
+
+
+def _te_aletes(ex: Exercici) -> bool:
+    return bool(_RE_ALETES.search(f"{ex.material or ''} {ex.execucio}"))
+
+
+def factor_temps(ex: Exercici, nedador: Nedador) -> float:
+    """Factor sobre el temps de crol: estil, cames i aletes (fitxa del nedador)."""
+    f = nedador.factors_temps
+    estil = estil_exercici(ex.execucio)
+    if estil == "cames":
+        return f.cames_aletes if _te_aletes(ex) else f.cames
+    factor = 1.0 if estil == "crol" else getattr(f, estil)
+    return factor * (f.aletes if _te_aletes(ex) else 1.0)
+
+
+def ritme_conegut(ex: Exercici) -> bool:
+    """El temps nedat surt de les zones: estil complet, sense aletes ni paracaigudes
+    ni exercici de tècnica. Només aquests exercicis es validen per descans."""
+    text = f"{ex.material or ''} {ex.execucio}"
+    return (
+        estil_exercici(ex.execucio) != "cames"
+        and not _te_aletes(ex)
+        and not _RE_SENSE_RITME.search(text)
+        and ex.id_biblioteca is None
+    )
+
+
 def temps_nedat(ex: Exercici, nedador: Nedador) -> float | None:
-    """Temps nedat d'UNA repetició (s), segons zona i estil."""
+    """Temps nedat d'UNA repetició (s), segons zona, estil i material."""
     ritme = ritme_zona(nedador, ex.intensitat)
     if ritme is None:
         return None
-    return ritme * ex.distancia_m / 100 * FACTOR_ESTIL[estil_exercici(ex.execucio)]
+    return ritme * ex.distancia_m / 100 * factor_temps(ex, nedador)
 
 
 # Descans mínim per 100 m, per zona (s). Velocitat i làctic: vegeu _descans_minim.
@@ -231,7 +262,7 @@ def corregir_cicles(sessio: Sessio, nedador: Nedador) -> list[str]:
             continue
         for ex in part.exercicis:
             descans = parsejar_descans(ex.descans)
-            if descans is None or descans.tipus != "cicle":
+            if descans is None or descans.tipus != "cicle" or not ritme_conegut(ex):
                 continue
             nedat = temps_nedat(ex, nedador)
             if nedat is None or descans.segons > nedat:
@@ -245,7 +276,7 @@ def corregir_cicles(sessio: Sessio, nedador: Nedador) -> list[str]:
             correccions.append(
                 f"{ex.series}x{ex.distancia_m} {ex.intensitat or ''} '{ex.execucio}': "
                 f"{ex.descans} és més curt que el temps nedat "
-                f"(~{format_temps(nedat, 0)}) -> {nou}"
+                f"(~{mmss(nedat)}) -> {nou}"
             )
             ex.descans = nou
     return correccions
@@ -264,7 +295,7 @@ def problemes_cicles(
         if part.fixa:
             continue
         for ex in part.exercicis:
-            if ex.series < 2:
+            if ex.series < 2 or not ritme_conegut(ex):
                 continue
             nedat = temps_nedat(ex, nedador)
             minim = descans_minim(ex, nedat)
@@ -280,18 +311,18 @@ def problemes_cicles(
                 ):
                     problemes.append(
                         f"{nom}: falta el descans. Posa c/ (cicle) o d/ (descans) "
-                        f"amb com a mínim {_arrodonir_5(minim)}\" de descans"
+                        f"amb com a mínim {_arrodonir_5(minim)} s de descans"
                     )
                 continue
             if real < minim * TOLERANCIA:
                 suggeriment = (
-                    f"c/{format_temps(_arrodonir_5(nedat + minim), 0)}"
+                    f"c/{mmss(_arrodonir_5(nedat + minim))}"
                     if nedat is not None and ex.intensitat not in ("Velocitat", "MPLA", "TOLA")
-                    else f"d/{format_temps(_arrodonir_5(minim), 0)}"
+                    else f"d/{mmss(_arrodonir_5(minim))}"
                 )
                 problemes.append(
-                    f"{nom}: {ex.descans} deixa ~{max(real, 0):.0f}\" de descans; "
-                    f"a {ex.intensitat} cal com a mínim {_arrodonir_5(minim)}\" "
+                    f"{nom}: {ex.descans} deixa ~{max(real, 0):.0f} s de descans; "
+                    f"a {ex.intensitat} cal com a mínim {_arrodonir_5(minim)} s "
                     f"(p. ex. {suggeriment})"
                 )
     if minuts_max:
@@ -310,7 +341,7 @@ def problemes_cicles(
 def taula_cicles(nedador: Nedador) -> str:
     """Temps nedat i cicle mínim de crol per zona i distància (text per al prompt).
 
-    Per a altres estils: esquena +10%, braça +17%, papallona +5%, estils +8%.
+    Només distàncies vàlides per a la piscina del nedador.
     """
     if nedador.ritmes_css is None:
         return "(sense zones CSS: fes servir d/ amb descansos coherents amb la zona)"
@@ -320,10 +351,12 @@ def taula_cicles(nedador: Nedador) -> str:
     ]
     distancies = {
         "A1": (100, 200), "A2": (50, 100, 200), "A3": (50, 100, 200),
-        "AeM": (50, 100), "Velocitat": (25, 50),
+        "AeM": (50, 100), "Velocitat": (25, 50, 100),
     }
     for zona, dists in distancies.items():
         for d in dists:
+            if d % nedador.piscina_m:
+                continue
             ex = Exercici(series=2, distancia_m=d, execucio="crol", intensitat=zona)
             nedat = temps_nedat(ex, nedador)
             if nedat is None:
@@ -332,10 +365,10 @@ def taula_cicles(nedador: Nedador) -> str:
             cicle = (
                 "— (fes servir d/)"
                 if zona == "Velocitat"
-                else f"c/{format_temps(_arrodonir_5(nedat + minim), 0)}"
+                else f"c/{mmss(_arrodonir_5(nedat + minim))}"
             )
             linies.append(
-                f"| {zona} | {d} | {format_temps(nedat, 0)} | "
-                f"d/{format_temps(_arrodonir_5(minim), 0)} | {cicle} |"
+                f"| {zona} | {d} | {mmss(nedat)} | "
+                f"d/{mmss(_arrodonir_5(minim))} | {cicle} |"
             )
     return "\n".join(linies)

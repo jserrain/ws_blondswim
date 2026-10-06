@@ -151,7 +151,7 @@ def test_esquelet_serie_de_control_fixa_dimecres(nedador_plantilla):
     assert control.nom == pla_setmanal.NOM_SERIE_CONTROL
     ex = control.exercicis[0]
     assert (ex.series, ex.distancia_m, ex.intensitat) == (4, 100, "A2")
-    assert ex.descans == "c/1'40\""  # A2 82" + 15" -> 1'40" (múltiple de 5")
+    assert ex.descans == "c/1:40"  # A2 82 s + 15 s -> 1:40 (múltiple de 5 s)
     assert dimecres.estructura.parts[1].fixa  # just després de l'escalfament
     altres = [s for s in sessions if s.dia != "dimecres"]
     assert all(not p.fixa for s in altres for p in s.estructura.parts)
@@ -191,7 +191,7 @@ def test_cicle_serie_control_sense_ritmes():
     nedador = Nedador(
         id="x", nom="X", categoria="master", proves_objectiu=[], mode_ritme="rpe"
     )
-    assert pla_setmanal.cicle_serie_control(nedador) == "d/20\""
+    assert pla_setmanal.cicle_serie_control(nedador) == "d/0:20"
 
 
 # --- Pressupost i validació ---
@@ -364,3 +364,53 @@ def test_problemes_normes(execucio, n):
     from blondswim.models.sessio import Exercici
 
     assert len(problemes_normes(Exercici(series=4, distancia_m=50, execucio=execucio))) == n
+
+
+# --- Papallona: detall per exercici i nota per rol (W41) ---------------------------
+
+
+def _sessio_pap(rol: str, *exercicis):
+    from blondswim.models.sessio import EstructuraSessio, PartSessio, Sessio
+
+    part = PartSessio(nom="Aeròbic", percentatge_carrega=100, percentatge_qualitat=100,
+                      percentatge_descarrega=100, exercicis=list(exercicis))
+    return Sessio(id="s", microcicle_setmana=41, dia="dilluns", tipus_sessio="carrega",
+                  volum_total=3000, estructura=EstructuraSessio(parts=[part]), rol=rol)
+
+
+def test_papallona_per_exercici_i_missatge_amb_el_detall():
+    from blondswim.models.sessio import Exercici
+
+    tecnica_pap = Exercici(series=4, distancia_m=50, execucio="Pap 1 braç")
+    estils = Exercici(series=2, distancia_m=100, execucio="IM per estils")
+    dofi = Exercici(series=6, distancia_m=25, execucio="Cames de dofí")
+    sessio = _sessio_pap("aerobica", tecnica_pap, estils, dofi)
+    assert [(ex.execucio, m) for ex, m in pla_setmanal.papallona_per_exercici(sessio)] == [
+        ("Pap 1 braç", 200), ("IM per estils", 50)
+    ]
+    [problema] = [p for p in pla_setmanal.problemes_contingut(sessio) if "Papallona" in p]
+    assert "250 m" in problema and "«4x50 Pap 1 braç» 200 m" in problema
+    assert "sessió de tècnica" in problema
+
+
+def test_un_100_im_compta_25_m_de_papallona():
+    from blondswim.models.sessio import Exercici
+
+    sessio = _sessio_pap("aerobica", Exercici(series=2, distancia_m=100,
+                                              execucio="IM, papallona amb respiració cada 2"))
+    assert pla_setmanal.metres_papallona(sessio) == 50
+
+
+def test_nota_papallona_per_rol():
+    aerobica = pla_setmanal.nota_papallona(_sessio_pap("aerobica"), "dimecres")
+    assert "sessió de tècnica (el dimecres)" in aerobica and "50 m" in aerobica
+    tecnica = pla_setmanal.nota_papallona(_sessio_pap("tecnica"), "dimecres")
+    assert "Aquesta és la sessió de la papallona tècnica" in tecnica and "350 m" in tecnica
+
+
+def test_esquelet_piscina_50_volums_multiples_de_50(nedador_plantilla):
+    piscina50 = nedador_plantilla.model_copy(update={"piscina_m": 50})
+    sessions = generar_esquelet_sessions(piscina50, _microcicle())
+    for s in sessions:
+        assert s.volum_total % 50 == 0 and s.volum_min % 50 == 0 and s.volum_max % 50 == 0
+    assert abs(sum(s.volum_total for s in sessions) - 13600) <= 150

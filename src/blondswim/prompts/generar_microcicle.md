@@ -7,7 +7,9 @@ Ets un expert entrenador de natació especialitzat en planificació d'entrenamen
 **Proves objectiu (per ordre de prioritat):** {proves_objectiu}
 **Categoria:** {categoria}
 
-Reparteix el treball d'estils segons aquestes proves. La papallona té un límit de metres per sessió (vegeu el pressupost) per protegir l'espatlla: prioritza la tècnica i la regularitat, no el volum.
+Reparteix el treball d'estils segons aquestes proves. Un 100 IM són 25 m de cada estil.
+
+**Papallona:** {nota_papallona}
 
 **Zones de ritme CSS (pace per 100m, només per calibrar la teva descripció -- NO les escriguis mai com a número al camp `execucio` ni a cap altre camp de text):**
 - Recuperació: {zona_recuperacio}
@@ -61,14 +63,14 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 
 2. **CADA EXERCICI és una entrada estructurada, MAI text lliure:**
    - `series`: nombre enter de repeticions (ex: 4, 8, 1)
-   - `distancia_m`: distància en metres, SEMPRE múltiple de 25 (25, 50, 75, 100, 150, 200...). MAI un valor com 15, 48, 52, 194 o 598. Els esforços més curts de 25m (p.ex. 15m subaquàtic) van DINS del camp `execucio` d'un exercici de 25m (ex: `"execucio": "15m subaquàtic + 10 suau"`, `"distancia_m": 25`).
+   - `distancia_m`: piscina de {piscina_m} m; NOMÉS un d'aquests valors: {distancies}. MAI un valor com 12, 15, 24 o 48. Els esforços més curts (p.ex. 15 m subaquàtic, 12,5 pap + 12,5 esq) van DINS del camp `execucio` d'una repetició de {piscina_m} m (ex: `"execucio": "15 m subaquàtic + 10 suau"`). Les dosis de la biblioteca ja segueixen aquest format.
    - `execucio`: descripció textual de l'exercici (estil, focus tècnic) -- SENSE xifres de volum ni de ritme
-   - `descans`: `c/X` (**cicle**: cada repetició SURT cada X, nedar inclòs; ex: "c/1'50\"") o `d/X` (**descans**: X de pausa després de cada repetició; ex: "d/20\""). Vegeu la taula de cicles.
+   - `descans`: SEMPRE en minuts:segons, sense cometes. `c/m:ss` (**cicle**: cada repetició SURT cada X, nedar inclòs; ex: "c/1:50") o `d/m:ss` (**descans**: X de pausa després de cada repetició; ex: "d/0:20"). Vegeu la taula de cicles.
    - `material`: quan calgui (ex: "Pull", "Palites", "AL")
    - `intensitat`: NOMÉS un dels valors vàlids llistats (Recuperació/A1/A2/A3/Velocitat/MPLA/TOLA/AeM) -- MAI un número
    - `objectiu`: propòsit breu de l'exercici (ex: "Tècnica captura Crol", "Aeròbic Crol")
 
-3. **MAI ESCRIGUIS UN NÚMERO DE RITME O DE VOLUM DINS DE `execucio` NI DE CAP CAMP DE TEXT.** El volum es calcula automàticament (series x distancia_m) i el ritme real es mostra a partir del camp `intensitat`. Si escrius un número decimal de ritme (ex: "92.50") o una distància no múltiple de 25, l'exercici serà descartat.
+3. **MAI ESCRIGUIS UN NÚMERO DE RITME O DE VOLUM DINS DE `execucio` NI DE CAP CAMP DE TEXT.** El volum es calcula automàticament (series x distancia_m) i el ritme real es mostra a partir del camp `intensitat`. Si escrius un número decimal de ritme (ex: "92.50") o una distància que no sigui de la llista, l'exercici serà descartat.
 
 4. **COHERÈNCIA AMB EL VOLUM OBJECTIU DE CADA PART:**
    - Tries combinacions de `series` x `distancia_m` (múltiples de 25) que sumin aproximadament el volum indicat per a cada part
@@ -87,7 +89,7 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 
    **SENSE FARCIMENT:** cada exercici ha de tenir contingut real. Mai escriguis exercicis com "placeholder", "N.A." o similars per quadrar metres.
 
-   **VOLUM FLEXIBLE:** la sessió ha de fer entre {volum_min} i {volum_max} m (piscina 25 m). La suma de `series × distancia_m` de tots els exercicis ha d'estar dins d'aquest rang. Si no hi arribes, ajusta el nombre de `series` o la `distancia_m` (sempre múltiple de 25) fins a quedar-hi dins.
+   **VOLUM FLEXIBLE:** la sessió ha de fer entre {volum_min} i {volum_max} m (piscina {piscina_m} m). La suma de `series × distancia_m` de tots els exercicis ha d'estar dins d'aquest rang: ni més ni menys. Ajusta el nombre de `series` o la `distancia_m` (de la llista) fins a quedar-hi dins.
 
    **ROL DE LA SESSIÓ ({rol}):** {descripcio_rol}
 
@@ -101,8 +103,8 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
    **REGLES DE NATACIÓ (OBLIGATÒRIES):**
    - Uns estils complets (IM) són de 100 o 200 m, mai 125 o 150 m. Els estils "per estils" en repeticions de 25 m són vàlids.
    - A3 només en repeticions de 50 m o més: en 25 m no s'arriba al llindar.
-   - Velocitat i ritme de cursa amb recuperació completa (d/45" o més per cada 25 m).
-   - **CICLES I DESCANSOS.** `c/X` és el temps entre sortides (nedar + descans), MAI el descans: "c/15\"" en un 50 és impossible; si vols 15" de pausa escriu "d/15\"". Un cicle ha de ser el temps nedat de la repetició MÉS el descans mínim de la zona. Per a altres estils, suma al temps de crol: esquena +10%, braça +17%, papallona +5%, estils +8%, cames +30%. Velocitat i làctic (MPLA/TOLA), sempre amb `d/`. Les sèries d'A2 o més intensitat porten sempre `descans`. El sistema calcula el descans real i rebutja els que no arriben al mínim.
+   - Velocitat i ritme de cursa amb recuperació completa (d/0:45 o més per cada 25 m).
+   - **CICLES I DESCANSOS.** `c/m:ss` és el temps entre sortides (nedar + descans), MAI el descans: "c/0:15" en un 50 és impossible; si vols 15 s de pausa escriu "d/0:15". Un cicle ha de ser el temps nedat de la repetició MÉS el descans mínim de la zona. Per a altres estils, suma al temps de crol: esquena +10%, braça +17%, papallona +5%, estils +8%. Per a cames, aletes i exercicis de tècnica fes servir `d/` (el ritme depèn del material). Velocitat i làctic (MPLA/TOLA), sempre amb `d/`. Les sèries d'A2 o més intensitat porten sempre `descans`. El sistema calcula el descans real i rebutja els que no arriben al mínim.
 
      Taula de referència d'aquest nedador (crol, piscina de 25 m):
 
@@ -131,7 +133,7 @@ Per a cada sessió, genera els exercicis de cada part seguint aquest format:
       "nom": "Escalfament",
       "exercicis": [
         {{"series": 1, "distancia_m": 200, "execucio": "Crol suau", "descans": null, "material": null, "intensitat": "Recuperació", "objectiu": "Activació"}},
-        {{"series": 4, "distancia_m": 50, "execucio": "Crol amb Pales petites, focus captura", "descans": "c/1'", "material": "Pales petites", "intensitat": "A1", "objectiu": "Tècnica captura Crol"}}
+        {{"series": 4, "distancia_m": 50, "execucio": "Crol amb Pales petites, focus captura", "descans": "c/1:00", "material": "Pales petites", "intensitat": "A1", "objectiu": "Tècnica captura Crol"}}
       ]
     }}
   ]

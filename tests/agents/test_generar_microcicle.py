@@ -107,11 +107,12 @@ def _tool_use_sessio(
     assert distancia_principal >= 25 and distancia_principal % 25 == 0
 
     def _exercici(nom_part: str, distancia: int) -> dict:
+        # Distància vàlida a piscina de 25 m: el volum va en repeticions de 25.
         return {
-            "series": 1,
-            "distancia_m": distancia,
+            "series": distancia // 25,
+            "distancia_m": 25,
             "execucio": f"Exercici test {nom_part}",
-            "descans": "c/20\"",
+            "descans": None,
             "material": None,
             "intensitat": "A1",
             "objectiu": "Test",
@@ -1555,10 +1556,11 @@ def test_parts_buit_dos_cops_deixa_sessio_buida(
     assert any("encara buit després del reintent" in r.message for r in caplog.records)
 
 
-def test_distancia_no_multiple_25_s_arrodoneix(
+def test_distancia_no_valida_es_descarta_i_es_retorna_a_l_llm(
     nedador_test, metodologia_test, sessions_test, caplog
 ):
-    """Una distancia_m no múltiple de 25 s'arrodoneix i no es descarta."""
+    """Una distancia_m que no és de la piscina no s'arrodoneix: es descarta i el
+    reintent porta el problema (W41: 12 i 24 m)."""
     sessions = sessions_test[:1]
     sessio = sessions[0]
 
@@ -1598,9 +1600,9 @@ def test_distancia_no_multiple_25_s_arrodoneix(
         resultat = generar_microcicle(nedador_test, sessions, metodologia_test)
 
     part = resultat[0].estructura.parts[0]
-    assert len(part.exercicis) == 1
-    assert part.exercicis[0].distancia_m == 50
-    assert any("arrodonida a 50" in r.message for r in caplog.records)
+    assert part.exercicis == []
+    segon = mock_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
+    assert "60 m no és una distància vàlida en piscina de 25 m" in segon
 
 
 def test_log_setmana_generada_correctament(
@@ -1963,7 +1965,7 @@ def test_cicle_impossible_es_corregeix_sense_reintent(metodologia_test):
 
     assert mock_client.messages.create.call_count == 1
     [ex] = _exercicis_amb(sessio, "Crol progressiu")
-    assert ex.descans == "d/15\""
+    assert ex.descans == "d/0:15"
 
 
 def test_descans_insuficient_reintenta_amb_el_problema(metodologia_test):
@@ -1985,10 +1987,10 @@ def test_descans_insuficient_reintenta_amb_el_problema(metodologia_test):
     assert mock_client.messages.create.call_count == 2
     primer = mock_client.messages.create.call_args_list[0].kwargs["messages"][0]["content"]
     segon = mock_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
-    assert "Taula de referència" in primer and "| A2 | 100 | 1'22\" |" in primer
-    assert "c/1'25\" deixa ~3\" de descans; a A2 cal com a mínim 10\"" in segon
+    assert "Taula de referència" in primer and "| A2 | 100 | 1:22 |" in primer
+    assert "c/1:25 deixa ~3 s de descans; a A2 cal com a mínim 10 s" in segon
     [ex] = _exercicis_amb(sessio, "Crol A2")
-    assert ex.descans == "c/1'35\""
+    assert ex.descans == "c/1:35"
 
 
 def test_reintents_es_queda_la_millor_versio(metodologia_test):

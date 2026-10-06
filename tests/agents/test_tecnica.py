@@ -90,3 +90,17 @@ def test_text_exercicis_inclou_ids():
     sel = seleccionar_exercicis(_nedador(JEP), "aerobica", "carrega", _micro())
     text = tecnica.text_exercicis(sel)
     assert all(f'id_biblioteca: "{e["id"]}"' in text for e in sel)
+
+
+def test_dosis_de_la_biblioteca_en_multiples_de_25_i_sense_cometes():
+    """Les dosis van al prompt: l'LLM les copia (W41: 12 i 24 m de «4x(12,5 + 12,5)»)."""
+    import re
+
+    from blondswim.agents.tecnica import carregar_biblioteca
+
+    for e in carregar_biblioteca():
+        fmt = e["format"]
+        assert "x(" not in fmt, e["id"]
+        assert '"' not in fmt and "'" not in fmt, e["id"]
+        for distancia in re.findall(r"x(\d+)", fmt):
+            assert int(distancia) % 25 == 0, (e["id"], fmt)

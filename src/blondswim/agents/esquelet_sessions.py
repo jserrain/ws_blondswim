@@ -44,9 +44,9 @@ def _midpoint(rol: str) -> float:
     return (minim + maxim) / 2
 
 
-def _arrodonir_25(valor: float) -> int:
-    """Arrodoneix a múltiple de 25 (mínim 25)."""
-    return max(25, round(valor / 25) * 25)
+def _arrodonir_25(valor: float, pas: int = 25) -> int:
+    """Arrodoneix a múltiple de la piscina (25 m per defecte; mínim una llargada)."""
+    return max(pas, round(valor / pas) * pas)
 
 
 def _assignar_rols(dies_actius: list[str]) -> dict[str, str]:
@@ -196,15 +196,15 @@ def _esquelet_dies(nedador: Nedador, microcicle: Microcicle) -> list[Sessio]:
         # Calcular rang de volum d'aquesta sessió segons el rol
         rol = rols[dia]
         minim_rol, maxim_rol = RANGS_ROL[rol]
-        volum_min = _arrodonir_25(minim_rol * factor)
-        volum_max = _arrodonir_25(maxim_rol * factor)
+        volum_min = _arrodonir_25(minim_rol * factor, nedador.piscina_m)
+        volum_max = _arrodonir_25(maxim_rol * factor, nedador.piscina_m)
 
         if es_carrega:
             volum_min = max(volum_min, CLAMP_CARREGA[0])
             volum_max = min(volum_max, CLAMP_CARREGA[1])
 
         # volum_total = punt mig del rang
-        volum_sessio = _arrodonir_25((volum_min + volum_max) / 2)
+        volum_sessio = _arrodonir_25((volum_min + volum_max) / 2, nedador.piscina_m)
 
         # Crear estructura de 5 parts amb percentatges segons tipus_sessio
         parts = _crear_parts_estandard(tipus_sessio, volum_sessio)
@@ -298,10 +298,13 @@ def _esquelet_plantilla(nedador: Nedador, microcicle: Microcicle) -> list[Sessio
         rol = rols[dia]
         objectiu = microcicle.volum_objectiu * pla_setmanal.PES_ROL[rol] / suma_pesos
         objectiu = min(objectiu, volum_max_temps)
-        volum_sessio = _arrodonir_25(objectiu)
-        volum_min = _arrodonir_25(objectiu * (1 - pla_setmanal.MARGE_RANG_SESSIO))
+        volum_sessio = _arrodonir_25(objectiu, nedador.piscina_m)
+        volum_min = _arrodonir_25(
+            objectiu * (1 - pla_setmanal.MARGE_RANG_SESSIO), nedador.piscina_m
+        )
         volum_max = _arrodonir_25(
-            min(objectiu * (1 + pla_setmanal.MARGE_RANG_SESSIO), volum_max_temps)
+            min(objectiu * (1 + pla_setmanal.MARGE_RANG_SESSIO), volum_max_temps),
+            nedador.piscina_m,
         )
 
         parts: list[PartSessio] = []
