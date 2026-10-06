@@ -44,6 +44,8 @@ from blondswim.models.sessio import Exercici, PartSessio, Sessio
 from blondswim.utils.proves import mateixa_prova
 
 NOM_PART = "Sèrie objectiu"
+NOM_RECUPERACIO = "Recuperació activa"
+RECUPERACIO_M = 200
 DIES_PER_DEFECTE = ["dimarts", "dijous"]
 FASES_UTILS = ("Base", "Build1", "Build2")
 MOLT_PER_SOTA = 0.025
@@ -302,6 +304,18 @@ def part_serie_objectiu(prescripcio: Prescripcio) -> PartSessio:
     )
 
 
+def part_recuperacio() -> PartSessio:
+    """200 m suaus després de la sèrie objectiu, abans del bloc principal (la
+    recuperació activa suau manté millor el rendiment següent que la passiva)."""
+    return PartSessio(
+        nom=NOM_RECUPERACIO, bloc="Bloc principal", percentatge_carrega=0,
+        percentatge_qualitat=0, percentatge_descarrega=0, fixa=True,
+        exercicis=[Exercici(series=1, distancia_m=RECUPERACIO_M,
+                            execucio="Nedar suau, estil complet", intensitat="Recuperació",
+                            objectiu="Recuperació activa entre sèries")],
+    )
+
+
 def afegir_series_objectiu(
     sessions: list[Sessio], prescripcions: list[Prescripcio]
 ) -> list[str]:
@@ -328,5 +342,6 @@ def afegir_series_objectiu(
             len(parts) - 1,
         )
         parts.insert(posicio, part_serie_objectiu(presc))
+        parts.insert(posicio + 1, part_recuperacio())
         pla_setmanal.assignar_metres_parts(sessio)
     return avisos

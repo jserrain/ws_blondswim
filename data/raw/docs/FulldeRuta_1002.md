@@ -98,6 +98,8 @@ Etapa 3b i validació de cicles, en un sol bloc de patches perquè comparteixen 
 
 **Sprint 3 (06/10): sèries de ritme objectiu.** Decisió de l'entrenador: una sèrie per prova P (100 L dimarts, 100 IM dijous) que va de l'estimació pessimista a l'objectiu realista del pic (sense taper), amb la forma per fase (ritme, densitat, volum) i la progressió condicionada als temps registrats (dins → +1, molt per sota → +2, per sobre → es manté; 2 per sobre → −1). Part fixa a la sessió, pestanya nova al registre (també s'afegeix als fulls ja creats), resum a la consola. Mòdul `agents/ritme_objectiu.py`.
 
+**Estructura de la sessió (06/10, decisions de l'entrenador):** sèrie de control després de la tècnica (opció A); sèrie objectiu abans de la qualitat i seguida de 200 m de recuperació activa (ordre i recuperació activa amb base: Sports 2023 sobre l'ordre de sèries; Toubekis 2008 i Kostoulas 2018 sobre recuperació activa); cames dins de l'escalfament (~150 m) i sense part pròpia; tornada a la calma = nedar suau, la resta dels metres.
+
 **Fet quan:** la W42 té `Temps (min)` ple, cap cicle impossible, cap sessió supera els 105 min i l'estructura correspon a una setmana de competició B.
 
 ---

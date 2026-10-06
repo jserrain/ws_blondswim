@@ -50,22 +50,25 @@ METRES_PER_MINUT: int = 40
 # calma. El treball més exigent (qualitat, velocitat) va just després de
 # l'escalfament i la tècnica, en estat fresc; el bloc secundari (aeròbic,
 # cames) després.
+# Estructura de la sessió (decisió de l'entrenador, 06/10): sense part de cames
+# a part; les cames van a l'escalfament (~150 m). La tornada a la calma és nedar
+# suau (recuperació activa). La sèrie de control va després de la tècnica i la
+# sèrie objectiu, seguida de 200 m de recuperació activa, abans del bloc principal.
 PARTS_ROL: dict[str, list[tuple[str, float]]] = {
     "aerobica": [
-        ("Escalfament", 15), ("Tècnica", 15), ("Aeròbic", 48), ("Cames", 12),
-        ("Tornada a la calma", 10),
+        ("Escalfament", 20), ("Tècnica", 15), ("Aeròbic", 55), ("Tornada a la calma", 10),
     ],
     "llarga": [
-        ("Escalfament", 10), ("Tècnica", 10), ("Velocitat alàctica", 5),
-        ("Aeròbic llarg", 55), ("Cames", 10), ("Tornada a la calma", 10),
+        ("Escalfament", 15), ("Tècnica", 10), ("Velocitat alàctica", 5),
+        ("Aeròbic llarg", 60), ("Tornada a la calma", 10),
     ],
     "qualitat": [
         ("Escalfament", 15), ("Tècnica+Subaquàtic", 15), ("Qualitat", 25),
         ("Aeròbic", 30), ("Tornada a la calma", 15),
     ],
     "tecnica": [
-        ("Escalfament", 15), ("Tècnica i papallona", 45), ("Cames", 15),
-        ("Nedar suau", 15), ("Tornada a la calma", 10),
+        ("Escalfament", 15), ("Tècnica i papallona", 50), ("Nedar suau", 25),
+        ("Tornada a la calma", 10),
     ],
     "activacio": [
         ("Escalfament", 30), ("Tècnica i sortides", 25), ("Ritme de cursa", 10),
@@ -73,8 +76,7 @@ PARTS_ROL: dict[str, list[tuple[str, float]]] = {
     ],
     "recuperacio": [
         ("Escalfament", 20), ("Tècnica suau", 20),
-        ("Aeròbic suau amb canvis de ritme", 40), ("Cames", 10),
-        ("Tornada a la calma", 10),
+        ("Aeròbic suau amb canvis de ritme", 50), ("Tornada a la calma", 10),
     ],
 }
 
@@ -381,6 +383,18 @@ def cicle_serie_control(nedador: Nedador) -> str:
         return "d/0:20"
     segons = int(math.ceil((nedador.ritmes_css.a2 + 15) / 5) * 5)
     return f"c/{segons // 60}:{segons % 60:02d}"
+
+
+CAMES_ESCALFAMENT_M = 150
+
+
+def posicio_despres_tecnica(parts: list[PartSessio]) -> int:
+    """Índex just després de l'última part de tècnica (o de l'escalfament)."""
+    tecnica = [i for i, p in enumerate(parts) if p.nom.casefold().startswith("tècnica")]
+    if tecnica:
+        return tecnica[-1] + 1
+    escalfament = [i for i, p in enumerate(parts) if p.bloc == "Escalfament"]
+    return escalfament[-1] + 1 if escalfament else 0
 
 
 def part_serie_control(nedador: Nedador) -> PartSessio:

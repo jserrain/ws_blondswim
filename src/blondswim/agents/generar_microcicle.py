@@ -1145,7 +1145,8 @@ def afegir_exercicis_biblioteca(sessio: Sessio, piscina_m: int = 25) -> list[str
         return []
 
     def part_per(element: str) -> PartSessio:
-        noms = ["cames"] if element.lower().startswith("cames") else []
+        # Les cames van a l'escalfament (decisió 06/10); la resta, a la tècnica.
+        noms = ["cames", "escalfament"] if element.lower().startswith("cames") else []
         noms += ["tècnica", "tecnica"]
         for clau in noms:
             part = next((p for p in variables if clau in p.nom.lower()), None)

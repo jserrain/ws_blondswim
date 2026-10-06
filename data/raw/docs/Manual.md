@@ -205,6 +205,20 @@ Per canviar-les, a la fitxa:
 ]
 ```
 
+### 5.4 Estructura de la sessió (06/10)
+
+| Rol | Ordre de les parts (percentatges sobre els metres no fixos) |
+|---|---|
+| Aeròbica (Dl, Dj) | Escalfament 20% (inclou ~150 m de cames) · Tècnica 15% · [Sèrie objectiu + 200 recuperació] · Aeròbic 55% · Tornada a la calma (la resta) |
+| Qualitat (Dt) | Escalfament 15% · Tècnica+Subaquàtic 15% · Sèrie objectiu · 200 recuperació · Qualitat 25% · Aeròbic 30% · Tornada a la calma (la resta) |
+| Tècnica (Dc) | Escalfament 15% · Tècnica i papallona 50% · Sèrie de control 4x100 A2 · Nedar suau 25% · Tornada a la calma (la resta) |
+| Llarga (Dv) | Escalfament 15% · Tècnica 10% · Velocitat alàctica 5% · Aeròbic llarg 60% · Tornada a la calma (la resta) |
+
+- **Cames**: dins de l'escalfament (~150 m), no com a part separada.
+- **Tornada a la calma**: nedar suau a l'estil complet (recuperació activa).
+- **Sèrie de control**: el dimecres, després de la tècnica, perquè la prova es faci amb l'escalfament acumulat i en condicions estandarditzades.
+- **Sèrie objectiu** (ritme de cursa) abans de la qualitat i seguida de 200 m de recuperació activa.
+
 ## 6. Resultats de competició
 
 ```bash

@@ -148,4 +148,7 @@ def test_afegir_series_objectiu_com_a_part_fixa():
     part = dimarts.estructura.parts[noms.index(ro.NOM_PART)]
     assert part.fixa and part.exercicis[0].volum_m == 300
     variables = [p for p in dimarts.estructura.parts if not p.fixa]
-    assert sum(p.metres_objectiu for p in variables) == dimarts.volum_total - 300
+    recuperacio = dimarts.estructura.parts[noms.index(ro.NOM_PART) + 1]
+    assert recuperacio.nom == ro.NOM_RECUPERACIO and recuperacio.fixa
+    assert recuperacio.exercicis[0].volum_m == 200
+    assert sum(p.metres_objectiu for p in variables) == dimarts.volum_total - 300 - 200

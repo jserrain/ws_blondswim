@@ -152,7 +152,9 @@ def test_esquelet_serie_de_control_fixa_dimecres(nedador_plantilla):
     ex = control.exercicis[0]
     assert (ex.series, ex.distancia_m, ex.intensitat) == (4, 100, "A2")
     assert ex.descans == "c/1:40"  # A2 82 s + 15 s -> 1:40 (múltiple de 5 s)
-    assert dimecres.estructura.parts[1].fixa  # just després de l'escalfament
+    noms = [p.nom for p in dimecres.estructura.parts]
+    # Opció A (06/10): després de la tècnica, amb l'escalfament acumulat
+    assert noms.index(pla_setmanal.NOM_SERIE_CONTROL) == noms.index("Tècnica i papallona") + 1
     altres = [s for s in sessions if s.dia != "dimecres"]
     assert all(not p.fixa for s in altres for p in s.estructura.parts)
 
@@ -343,7 +345,9 @@ def test_esquelet_assigna_bloc_a_cada_part(nedador_plantilla):
     for sessio in sessions:
         assert all(p.bloc is not None for p in sessio.estructura.parts)
     dimecres = next(s for s in sessions if s.dia == "dimecres")
-    assert [p.bloc for p in dimecres.estructura.parts][:2] == ["Escalfament", "Sèrie de control"]
+    assert [p.bloc for p in dimecres.estructura.parts][:3] == [
+        "Escalfament", "Bloc principal", "Sèrie de control"
+    ]
 
 
 # --- Normes de l'entrenador comprovables pel text ---------------------------------
@@ -563,3 +567,12 @@ def test_avisos_estils_setmana():
     avisos = pla_setmanal.avisos_estils_setmana([poca])
     assert any(a.startswith("Esquena de la setmana 0m") for a in avisos)
     assert any("Papallona de la setmana 0m: per sota" in a for a in avisos)
+
+
+def test_estructura_sense_part_de_cames(nedador_plantilla):
+    """Decisió 06/10: les cames van a l'escalfament; no hi ha part de cames."""
+    sessions = generar_esquelet_sessions(nedador_plantilla, _microcicle())
+    for sessio in sessions:
+        noms = [p.nom for p in sessio.estructura.parts]
+        assert "Cames" not in noms
+        assert noms[0] == "Escalfament" and noms[-1] == "Tornada a la calma"

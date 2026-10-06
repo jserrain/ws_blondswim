@@ -61,7 +61,7 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 
 1. **NO MODIFICAR** els percentatges de cap part de les sessions. Són fixos segons el tipus de setmana.
 
-   **ESTRUCTURA DE LA SESSIÓ:** les parts ja van en l'ordre recomanat (escalfament -> tècnica -> bloc o blocs principals -> tornada a la calma). Cada exercici ha d'anar a la part on toca segons el seu objectiu: l'escalfament només prepara (Recuperació/A1, progressius curts), la tècnica només porta exercicis tècnics i el seu nedar complet, cada bloc principal treballa NOMÉS el seu objectiu (el nom de la part), i la tornada a la calma és suau. No posis sèries principals a l'escalfament ni a la tornada a la calma.
+   **ESTRUCTURA DE LA SESSIÓ:** les parts ja van en l'ordre recomanat (escalfament -> tècnica -> bloc o blocs principals -> tornada a la calma). Cada exercici ha d'anar a la part on toca segons el seu objectiu: l'escalfament només prepara (Recuperació/A1, progressius curts) i inclou ~150 m de cames suaus o progressives (no hi ha cap part de cames a part), la tècnica només porta exercicis tècnics i el seu nedar complet, cada bloc principal treballa NOMÉS el seu objectiu (el nom de la part), i la tornada a la calma és nedar suau a l'estil complet (recuperació activa, sense sèries de cames ni intensitat). No posis sèries principals a l'escalfament ni a la tornada a la calma.
 
 2. **CADA EXERCICI és una entrada estructurada, MAI text lliure:**
    - `series`: nombre enter de repeticions (ex: 4, 8, 1)
@@ -97,7 +97,7 @@ Els següents exemples mostren l'estil i vocabulari utilitzat en sessions anteri
 {pressupost_sessio}
    La resta del volum ha de ser Recuperació, A1 o A2. El sistema ho comprova i rebutja la sessió si se supera.
 
-   **EXERCICIS DE TÈCNICA OBLIGATORIS (biblioteca):** inclou-los TOTS, a la part de Tècnica o de Cames, amb el camp `id_biblioteca` exactament igual. Ajusta la dosi als metres de la part (hi compten l'exercici i el nedar complet). Cada exercici va seguit de nedar l'estil complet amb el mateix focus (p.ex. 4x(25 exercici + 25 nedar)); posa també l'`id_biblioteca` a la repetició de nedar.
+   **EXERCICIS DE TÈCNICA OBLIGATORIS (biblioteca):** inclou-los TOTS, a la part de Tècnica (els de cames, a l'escalfament), amb el camp `id_biblioteca` exactament igual. Ajusta la dosi als metres de la part (hi compten l'exercici i el nedar complet). Cada exercici va seguit de nedar l'estil complet amb el mateix focus (p.ex. 4x(25 exercici + 25 nedar)); posa també l'`id_biblioteca` a la repetició de nedar.
 {exercicis_tecnica}
 
    **REGLES DE NATACIÓ (OBLIGATÒRIES):**

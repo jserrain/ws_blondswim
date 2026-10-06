@@ -332,8 +332,10 @@ def _esquelet_plantilla(nedador: Nedador, microcicle: Microcicle) -> list[Sessio
                     contingut=None,
                 )
             )
-            if i == 0 and volum_fix:
-                parts.append(control)
+
+        if volum_fix:
+            # Després de la tècnica: escalfament acumulat abans de la prova (opció A).
+            parts.insert(pla_setmanal.posicio_despres_tecnica(parts), control)
 
         sessions.append(
             Sessio(
