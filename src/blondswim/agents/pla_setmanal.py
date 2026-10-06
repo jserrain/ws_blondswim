@@ -170,17 +170,30 @@ _PRESSUPOST_ROL: dict[str, dict[str, float]] = {
     "recuperacio": {"a2": 0, "a3": 0.0, "velocitat": 0, "lactic": 0},
 }
 
-# Màxim de papallona per sessió (m). Setmana: 300-600 m, sobretot a la tècnica.
+# Màxim de papallona per sessió (m). Decisió de l'entrenador (06/10, opció
+# intermèdia): ~900 m/setmana, fins a 150 m per sessió i 300 m el dia de tècnica,
+# sempre en repeticions de 25-50 m, amb bona tècnica i mai a la tornada a la calma.
+# Els estils compten un 25%.
 PAPALLONA_MAX_ROL: dict[str, int] = {
-    "tecnica": 350,
+    "tecnica": 300,
     "qualitat": 150,
-    "llarga": 50,
-    "aerobica": 50,
-    "mitjana": 50,
+    "llarga": 150,
+    "aerobica": 150,
+    "mitjana": 150,
     "activacio": 50,
     "recuperacio": 0,
 }
-PAPALLONA_SETMANA: tuple[int, int] = (300, 600)
+PAPALLONA_SETMANA: tuple[int, int] = (600, 900)
+# Repetició màxima de papallona sola (els estils de 100/200 no hi compten).
+PAPALLONA_REPETICIO_MAX = 50
+
+# Repartiment orientatiu per estils (fracció dels metres de l'LLM). El crol és la
+# resta; la papallona la limita PAPALLONA_MAX_ROL. Proves: 100 L i 100 IM (P),
+# 200 L (S); l'esquena, la braça i els canvis d'estil és on es guanya al 100 IM.
+ESTILS_ROL: dict[str, dict[str, float]] = {
+    "tecnica": {"esquena": 0.20, "braca": 0.20},
+}
+ESTILS_DEFECTE: dict[str, float] = {"esquena": 0.15, "braca": 0.15}
 
 _DESCRIPCIO_ROL: dict[str, str] = {
     "aerobica": (
@@ -473,6 +486,17 @@ _RE_PAP_DOFI = re.compile(
 )
 
 
+_RE_SENSE_PAP = re.compile(r"sense\s+pap", re.IGNORECASE)
+_RE_ALTRES_ESTILS = re.compile(r"\b(esquena|esq|bra[cç]a|bra|crol)\b", re.IGNORECASE)
+
+
+def _sense_papallona(text: str) -> bool:
+    """Estils «sense papallona», o que detallen els estils i la papallona no hi és."""
+    if _RE_SENSE_PAP.search(text):
+        return True
+    return bool(_RE_ALTRES_ESTILS.search(text)) and not _RE_PAPALLONA.search(text)
+
+
 def papallona_per_exercici(sessio: Sessio) -> list[tuple[Exercici, int]]:
     """
     Metres de papallona de cada exercici que en té: l'exercici sencer si
@@ -486,8 +510,8 @@ def papallona_per_exercici(sessio: Sessio) -> list[tuple[Exercici, int]]:
         if es_cames:
             continue
         if _RE_ESTILS.search(text):
-            if _RE_PAP_DOFI.search(text):
-                continue  # la papallona dels estils es fa de cames
+            if _RE_PAP_DOFI.search(text) or _sense_papallona(text):
+                continue  # papallona de cames de dofí, o estils sense papallona
 
             resultat.append((ex, ex.volum_m // 4))
         elif _RE_PAPALLONA.search(ex.execucio):
@@ -501,19 +525,66 @@ def metres_papallona(sessio: Sessio) -> int:
 
 
 def nota_papallona(sessio: Sessio, dia_tecnica: str | None) -> str:
-    """On va la papallona tècnica de la setmana, per al prompt de cada sessió."""
+    """Papallona de la sessió (límit i forma), per al prompt de cada sessió."""
     maxim = PAPALLONA_MAX_ROL.get(sessio.rol or "aerobica", 50)
+    forma = (
+        f"sempre en repeticions de 25 o {PAPALLONA_REPETICIO_MAX} m amb bona tècnica i "
+        "descans suficient, mai a la tornada a la calma ni al final de la sessió; els "
+        "estils compten un 25% (un 100 IM en té 25 m); les cames de dofí no compten"
+    )
+    if maxim == 0:
+        return "Sense papallona en aquesta sessió (els estils, només si són suaus i curts)."
     if sessio.rol == "tecnica":
         return (
-            f"Aquesta és la sessió de la papallona tècnica de la setmana (màxim {maxim} m): "
-            "exercicis de coordinació i ondulació, sempre seguits de nedar complet."
+            f"Aquesta és la sessió de la papallona tècnica de la setmana: màxim {maxim} m, "
+            f"exercicis de coordinació i ondulació seguits de nedar complet; {forma}."
         )
     on = f" (el {dia_tecnica})" if dia_tecnica else ""
     return (
-        f"La papallona tècnica de la setmana es fa a la sessió de tècnica{on}. En aquesta "
-        f"sessió, papallona com a màxim {maxim} m, normalment dins dels estils (un 100 IM "
-        "en té 25 m). No hi posis exercicis de tècnica de papallona; per treballar-la, fes "
-        "cames de dofí (no compten)."
+        f"Màxim {maxim} m de papallona, dins dels estils o en sèries curtes; {forma}. "
+        f"La tècnica de papallona va a la sessió de tècnica{on}."
+    )
+
+
+def metres_estils_objectiu(sessio: Sessio, metres: int) -> dict[str, int]:
+    """Metres orientatius per estil (arrodonits a 50) sobre els metres de l'LLM."""
+    fraccions = ESTILS_ROL.get(sessio.rol or "aerobica", ESTILS_DEFECTE)
+    esquena = int(round(metres * fraccions["esquena"] / 50) * 50)
+    braca = int(round(metres * fraccions["braca"] / 50) * 50)
+    papallona = PAPALLONA_MAX_ROL.get(sessio.rol or "aerobica", 50)
+    return {
+        "crol": max(metres - esquena - braca - papallona, 0),
+        "esquena": esquena,
+        "braca": braca,
+        "papallona": papallona,
+    }
+
+
+def metres_per_estil(sessions: list[Sessio]) -> dict[str, int]:
+    """Metres de la setmana per estil (estils repartits a 25%; cames i papallona
+    segons el comptador de papallona). Per al resum de la consola."""
+    from blondswim.agents.cicles import estil_exercici
+
+    total = {"crol": 0, "esquena": 0, "braca": 0, "papallona": 0, "cames": 0}
+    for sessio in sessions:
+        total["papallona"] += metres_papallona(sessio)
+        for ex in _exercicis_variables(sessio):
+            estil = estil_exercici(ex.execucio)
+            if estil == "estils":
+                for e in ("crol", "esquena", "braca"):
+                    total[e] += ex.volum_m // 4
+            elif estil in total and estil != "papallona":
+                total[estil] += ex.volum_m
+    return total
+
+
+def text_estils(sessio: Sessio, metres: int) -> str:
+    """«crol ~1.900 m, esquena ~450 m, braça ~450 m, papallona ≤150 m» per al prompt."""
+    m = metres_estils_objectiu(sessio, metres)
+    return (
+        f"crol ~{m['crol']} m, esquena ~{m['esquena']} m, braça ~{m['braca']} m, "
+        f"papallona ≤{m['papallona']} m (els estils compten un 25% per a cada estil; "
+        "les cames compten a l'estil de la patada)"
     )
 
 
@@ -551,10 +622,24 @@ def problemes_contingut(sessio: Sessio) -> list[str]:
             f"«{ex.series}x{ex.distancia_m} {ex.execucio}» {m} m" for ex, m in per_exercici
         )
         problemes.append(
-            f"Papallona: {pap} m, per sobre del màxim de {pap_max} m ({detall}). Treu "
-            "la tècnica de papallona (va a la sessió de tècnica) o canvia-la per cames "
-            "de dofí"
+            f"Papallona: {pap} m, per sobre del màxim de {pap_max} m ({detall}). Redueix "
+            "les repeticions de papallona o d'estils, o canvia'n alguna per cames de dofí"
         )
+    darrera = next(
+        (p for p in reversed(sessio.estructura.parts) if not p.fixa and p.exercicis), None
+    )
+    for ex, m in per_exercici:
+        es_estils = bool(_RE_ESTILS.search(ex.execucio))
+        if not es_estils and m and ex.distancia_m > PAPALLONA_REPETICIO_MAX:
+            problemes.append(
+                f"'{ex.execucio}': papallona en repeticions de {ex.distancia_m} m; "
+                f"fes-la en 25 o {PAPALLONA_REPETICIO_MAX} m"
+            )
+        if darrera is not None and any(e is ex for e in darrera.exercicis) and not es_estils and m:
+            problemes.append(
+                f"'{ex.execucio}': papallona a la tornada a la calma; posa-la abans, "
+                "amb el cos fresc"
+            )
 
     for ex in _exercicis_variables(sessio):
         if (

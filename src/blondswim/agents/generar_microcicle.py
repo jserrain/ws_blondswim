@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 import re
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -1073,12 +1074,62 @@ def _aplicar_i_corregir(
     problemes = _aplicar_contingut_sessio(sessio, sessio_data, setmana, nedador.piscina_m)
     for correccio in cicles.corregir_cicles(sessio, nedador):
         logger.info(f"Setmana {setmana}, sessió '{sessio.id}': cicle corregit: {correccio}")
+    for id_ex in afegir_exercicis_biblioteca(sessio, nedador.piscina_m):
+        logger.info(
+            f"Setmana {setmana}, sessió '{sessio.id}': exercici de biblioteca afegit: {id_ex}"
+        )
     for ajust in ajustar_volum(sessio, nedador.piscina_m):
         logger.info(f"Setmana {setmana}, sessió '{sessio.id}': volum ajustat: {ajust}")
     return problemes
 
 
 _ZONES_SUAUS = {None, "Recuperació", "A1", "A2"}
+# Estils fets per rotació («25 Pap + 25 Esq + 25 Bra + 25 Crol», «per estils»):
+# les sèries van de 4 en 4 i no es retallen.
+_RE_ROTACIO_ESTILS = re.compile(r"per\s+estils|de\s+cada|rotant", re.IGNORECASE)
+_RE_DOSI = re.compile(r"(\d+)(?:-\d+)?x(\d+)")
+
+
+def afegir_exercicis_biblioteca(sessio: Sessio, piscina_m: int = 25) -> list[str]:
+    """
+    Afegeix els exercicis obligatoris de la biblioteca que l'LLM ha deixat fora
+    (W41: «vir_esq» desapareixia als reintents), amb la dosi mínima de la
+    biblioteca, a la part de Cames (exercicis de cames) o de Tècnica.
+    Retorna els ids afegits.
+    """
+    presents = {ex.id_biblioteca for p in sessio.estructura.parts for ex in p.exercicis}
+    variables = [p for p in sessio.estructura.parts if not p.fixa]
+    if not variables:
+        return []
+
+    def part_per(element: str) -> PartSessio:
+        noms = ["cames"] if element.lower().startswith("cames") else []
+        noms += ["tècnica", "tecnica"]
+        for clau in noms:
+            part = next((p for p in variables if clau in p.nom.lower()), None)
+            if part is not None:
+                return part
+        return variables[min(1, len(variables) - 1)]
+
+    afegits = []
+    valides = distancies_valides(piscina_m)
+    for id_ex in sessio.exercicis_tecnica:
+        if id_ex in presents:
+            continue
+        dades = tecnica.per_id(id_ex)
+        if dades is None:
+            continue
+        m = _RE_DOSI.search(dades.get("format", ""))
+        series, distancia = (int(m.group(1)), int(m.group(2))) if m else (4, 25)
+        distancia = min((d for d in valides if d >= distancia), default=valides[0])
+        part_per(dades.get("element", "")).exercicis.append(Exercici(
+            series=series, distancia_m=distancia,
+            execucio=f"{dades['nom']}. {dades.get('consigna', '')}".strip(),
+            material=dades.get("material") or None, intensitat="A1",
+            objectiu=dades.get("familia"), id_biblioteca=id_ex,
+        ))
+        afegits.append(id_ex)
+    return afegits
 
 
 def _metres_llm(sessio: Sessio) -> int:
@@ -1117,8 +1168,11 @@ def ajustar_volum(sessio: Sessio, piscina_m: int = 25) -> list[str]:
     candidats = [
         (part.bloc == "Bloc principal", ex)
         for part in sessio.estructura.parts if not part.fixa
-        for ex in part.exercicis if ex.id_biblioteca is None
+        for ex in part.exercicis
+        if ex.id_biblioteca is None and not _RE_ROTACIO_ESTILS.search(ex.execucio)
     ]
+    # Mínim de sèries per no desfer l'exercici (W41: 4x25 -> 1x25).
+    minim_series = {id(ex): max(2, math.ceil(ex.series / 2)) for _p, ex in candidats}
     if not candidats:
         return []
 
@@ -1147,7 +1201,8 @@ def ajustar_volum(sessio: Sessio, piscina_m: int = 25) -> list[str]:
                 candidats, key=lambda c: (-desviacio(c[1]), not c[0], -c[1].volum_m)
             )
             ex = next((e for _p, e in ordre
-                       if e.series > 1 and volum - e.distancia_m >= sessio.volum_min), None)
+                       if e.series > minim_series[id(e)]
+                       and volum - e.distancia_m >= sessio.volum_min), None)
             if ex is not None:
                 ex.series -= 1
                 canvis.append(f"'{ex.execucio}' -> {ex.series}x{ex.distancia_m}")
@@ -1334,6 +1389,7 @@ def generar_microcicle(
                 context_setmana=_context_sessio(sessio, sessions),
                 taula_cicles=cicles.taula_cicles(nedador),
                 nota_papallona=pla_setmanal.nota_papallona(sessio, dia_tecnica),
+                estils_sessio=pla_setmanal.text_estils(sessio, metres_llm),
                 piscina_m=nedador.piscina_m,
                 distancies=", ".join(map(str, distancies_valides(nedador.piscina_m))),
                 exercicis_tecnica=tecnica.text_exercicis(

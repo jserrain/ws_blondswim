@@ -92,6 +92,8 @@ Etapa 3b i validació de cicles, en un sol bloc de patches perquè comparteixen 
 
 **Sprint 2c (06/10, segona W41 amb el 2b: 16.425 m, +21%):** l'LLM no quadra els metres ni amb reintents → el volum l'ajusta el codi (`ajustar_volum`: sèries del bloc principal, sense tocar la biblioteca ni les parts fixes); comptador de papallona sense falsos positius (estils amb la papallona de cames de dofí, «braços estirats», «sense braçada»); pressupost d'A3 arrodonit a 100 amunt (4x50 = 200); «skip» com a farciment. Causes del sobrevolum (anàlisi): el prompt deia «no cal quadrar exactament», el rang no aclaria si incloïa la sèrie de control, les dosis obligatòries de la biblioteca no hi cabien, arrodoniment a l'alça per part i cap suma acumulada al format de resposta. Correccions: conveni de l'entrenador (sessió i parts a múltiples de 100, l'última part fa la resta; mètode del residu més gran), metres exactes per part al prompt, camp `metres_part` obligatori, dosi de la biblioteca dins dels metres de la part i ajust per part.
 
+**Sprint 2d (06/10, tercera W41: 13.800 m, +1,5%):** papallona amb l'opció intermèdia de l'entrenador (≤150 m/sessió, 300 m el dia de tècnica, 600-900 m/setmana, repeticions de 25-50 m, mai a la calma); repartiment orientatiu per estils al prompt (esquena i braça 15%, 20% a tècnica) i resum per estils a la consola; estils sense papallona no compten; l'ajust de volum no baixa de 2 sèries ni de la meitat i no toca les rotacions d'estils; els exercicis obligatoris de la biblioteca que falten els afegeix el codi.
+
 **Fet quan:** la W42 té `Temps (min)` ple, cap cicle impossible, cap sessió supera els 105 min i l'estructura correspon a una setmana de competició B.
 
 ---

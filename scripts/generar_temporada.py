@@ -35,7 +35,7 @@ from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from blondswim.agents import carrega, recuperacio
+from blondswim.agents import carrega, pla_setmanal, recuperacio
 from blondswim.agents.context_competicio import validar_espaiat_pics_a
 from blondswim.agents.generar_macrocicle import generar_macrocicle, generar_mesocicle
 from blondswim.agents.generar_microcicle import (
@@ -354,6 +354,15 @@ def main() -> int:
                 f"   ⚠ Volum de la setmana {volum}m: {volum / microcicle.volum_objectiu - 1:+.0%}"
                 " respecte a l'objectiu (marge ±5%). Ajusta les sèries principals al full."
             )
+        estils = pla_setmanal.metres_per_estil(natacio)
+        print(
+            f"   · Estils: crol {estils['crol']}m, esquena {estils['esquena']}m, "
+            f"braça {estils['braca']}m, papallona {estils['papallona']}m, "
+            f"cames {estils['cames']}m"
+        )
+        _pap_min, pap_max = pla_setmanal.PAPALLONA_SETMANA
+        if estils["papallona"] > pap_max:
+            print(f"   ⚠ Papallona de la setmana {estils['papallona']}m: màxim {pap_max}m")
         for avis in avisos_validacio:
             if avis.get("tipus") in TIPUS_AVIS_FRANGES:
                 print(f"   ⚠ {avis['missatge']}")

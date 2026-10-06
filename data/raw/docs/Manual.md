@@ -165,7 +165,9 @@ Validació automàtica:
 - **Metres de sessió i de part (conveni):** el volum de cada sessió i els límits del seu rang són múltiples de 100 (p. ex. 2.900 m, rang 2.800-3.100). Cada part rep els seus metres en múltiples de 100 segons el percentatge, i l'última completa la resta: 2.800 m amb 15/15/48/12/10% → 400/400/1.400/300/300. La sèrie de control (400 m) va a part. L'LLM rep els metres exactes de cada part i ha d'escriure'n la suma.
 - El volum el quadra el codi: si una sessió surt del seu rang, treu sèries de la part que més se'n passa dels seus metres o n'afegeix a la que més en falta (primer al bloc principal, mai als exercicis de la biblioteca) i ho anota a la consola («volum ajustat»).
 - Un descans per sota del mínim de la zona (A1 5 s, A2 10 s, A3 15 s, AeM 20 s per cada 100 m; velocitat 45 s per cada 25 m), massa papallona o una distància que no és de la piscina tornen la sessió a l'LLM amb la llista concreta de problemes (fins a 2 vegades); es queda la versió amb menys problemes.
-- La papallona tècnica de la setmana va a la sessió de tècnica (màxim 350 m); a la resta, com a màxim 50 m (un 100 IM en té 25; si la papallona dels estils es fa de cames de dofí, no compta).
+- **Estils (orientatiu):** esquena i braça un 15% cadascun (20% el dia de tècnica), papallona fins al límit i la resta crol. El prompt de cada sessió porta els metres per estil i la consola en mostra el resum de la setmana.
+- **Papallona (opció intermèdia, 06/10):** ~600-900 m a la setmana; fins a 150 m per sessió i 300 m el dia de tècnica; sempre en repeticions de 25-50 m (els estils de 100/200 hi compten un 25%), mai a la tornada a la calma. Les cames de dofí i els estils sense papallona no compten. Si la setmana passa de 900 m, la consola avisa.
+- Si l'LLM deixa fora un exercici obligatori de la biblioteca, el codi l'afegeix amb la dosi mínima a la part de tècnica o de cames.
 
 ### 5.2 Piscina de 25 o de 50 m
 

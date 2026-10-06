@@ -390,7 +390,7 @@ def test_papallona_per_exercici_i_missatge_amb_el_detall():
     ]
     [problema] = [p for p in pla_setmanal.problemes_contingut(sessio) if "Papallona" in p]
     assert "250 m" in problema and "«4x50 Pap 1 braç» 200 m" in problema
-    assert "sessió de tècnica" in problema
+    assert "cames de dofí" in problema
 
 
 def test_un_100_im_compta_25_m_de_papallona():
@@ -403,9 +403,9 @@ def test_un_100_im_compta_25_m_de_papallona():
 
 def test_nota_papallona_per_rol():
     aerobica = pla_setmanal.nota_papallona(_sessio_pap("aerobica"), "dimecres")
-    assert "sessió de tècnica (el dimecres)" in aerobica and "50 m" in aerobica
+    assert "sessió de tècnica (el dimecres)" in aerobica and "Màxim 150 m" in aerobica
     tecnica = pla_setmanal.nota_papallona(_sessio_pap("tecnica"), "dimecres")
-    assert "Aquesta és la sessió de la papallona tècnica" in tecnica and "350 m" in tecnica
+    assert "Aquesta és la sessió de la papallona tècnica" in tecnica and "màxim 300 m" in tecnica
 
 
 def test_esquelet_piscina_50_volums_multiples_de_50(nedador_plantilla):
@@ -479,3 +479,69 @@ def test_esquelet_volums_a_100_i_parts_assignades(nedador_plantilla):
         assert sum(p.metres_objectiu for p in s.estructura.parts if not p.fixa) == (
             s.volum_total - fix
         )
+
+
+# --- Papallona: opció intermèdia (06/10) ----------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("execucio", "metres"),
+    [
+        ("Estils (IM) per 25 m: Esquena-Braça-Crol-Esquena (sense papallona)", 0),
+        ("Nedar per estils: 1 llarg d'Esquena + 1 de Braça + 1 de Crol + 1 d'Esquena", 0),
+        ("Estils (IM) complet, focus coordinació", 50),
+        ("Per estils: 25 Pap + 25 Esq + 25 Bra + 25 Crol", 50),
+    ],
+)
+def test_estils_sense_papallona_no_compten(execucio, metres):
+    sessio = _sessio_pap("aerobica", Exercici(series=2, distancia_m=100, execucio=execucio))
+    assert pla_setmanal.metres_papallona(sessio) == metres
+
+
+def test_limits_de_papallona_intermedis():
+    assert pla_setmanal.PAPALLONA_MAX_ROL["aerobica"] == 150
+    assert pla_setmanal.PAPALLONA_MAX_ROL["tecnica"] == 300
+    assert pla_setmanal.PAPALLONA_SETMANA == (600, 900)
+
+
+def test_papallona_en_repeticions_llargues_o_a_la_calma():
+    from blondswim.models.sessio import EstructuraSessio, PartSessio, Sessio
+
+    principal = PartSessio(nom="Aeròbic", percentatge_carrega=90, percentatge_qualitat=90,
+                           percentatge_descarrega=90, exercicis=[
+                               Exercici(series=1, distancia_m=100, execucio="Papallona")])
+    calma = PartSessio(nom="Tornada a la calma", percentatge_carrega=10,
+                       percentatge_qualitat=10, percentatge_descarrega=10, exercicis=[
+                           Exercici(series=1, distancia_m=25, execucio="Pap suau"),
+                           Exercici(series=1, distancia_m=100, execucio="IM suau")])
+    sessio = Sessio(id="s", microcicle_setmana=41, dia="dilluns", tipus_sessio="carrega",
+                    volum_total=3000, rol="aerobica",
+                    estructura=EstructuraSessio(parts=[principal, calma]))
+    problemes = pla_setmanal.problemes_contingut(sessio)
+    assert any("repeticions de 100 m" in p for p in problemes)
+    assert any("'Pap suau': papallona a la tornada a la calma" in p for p in problemes)
+    assert not any("'IM suau'" in p for p in problemes)
+
+
+def test_metres_estils_objectiu():
+    aerobica = _sessio_pap("aerobica")
+    assert pla_setmanal.metres_estils_objectiu(aerobica, 2900) == {
+        "crol": 2900 - 450 - 450 - 150, "esquena": 450, "braca": 450, "papallona": 150
+    }
+    tecnica = _sessio_pap("tecnica")
+    m = pla_setmanal.metres_estils_objectiu(tecnica, 1500)
+    assert m["esquena"] == 300 and m["papallona"] == 300
+    assert "crol ~" in pla_setmanal.text_estils(aerobica, 2900)
+
+
+def test_metres_per_estil_de_la_setmana():
+    sessio = _sessio_pap(
+        "aerobica",
+        Exercici(series=8, distancia_m=100, execucio="Crol"),
+        Exercici(series=4, distancia_m=100, execucio="Estils complet"),
+        Exercici(series=4, distancia_m=50, execucio="Esquena"),
+        Exercici(series=6, distancia_m=50, execucio="Cames de crol amb taula"),
+    )
+    assert pla_setmanal.metres_per_estil([sessio]) == {
+        "crol": 900, "esquena": 300, "braca": 100, "papallona": 100, "cames": 300
+    }

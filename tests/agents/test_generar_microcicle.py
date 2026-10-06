@@ -1903,7 +1903,8 @@ def test_part_fixa_no_es_demana_ni_es_sobreescriu(metodologia_test):
 
 
 def test_exercicis_de_biblioteca_obligatoris(metodologia_test):
-    """Si falta un exercici de la biblioteca, es reintenta amb l'id que falta."""
+    """Si l'LLM deixa fora un exercici de la biblioteca, el codi l'afegeix amb la
+    dosi mínima (W41: «vir_esq» desapareixia als reintents), sense reintent."""
     nedador = _nedador_plantilla()
     microcicle = Microcicle(
         setmana=41, dates="05-11/10/2026", mesocicle_id="meso_1", tipus_base="carrega",
@@ -1915,34 +1916,23 @@ def test_exercicis_de_biblioteca_obligatoris(metodologia_test):
     assert sessio.exercicis_tecnica
     ids = sessio.exercicis_tecnica
 
-    def _amb_ids():
-        """Respostes vàlides amb els exercicis de la biblioteca a la part Tècnica."""
-        parts = _parts_valides(sessio)
-        parts[1]["exercicis"] = [
-            {"series": 1, "distancia_m": 50, "execucio": "Crol", "intensitat": "A1",
-             "id_biblioteca": id_ex}
-            for id_ex in ids
-        ]
-        return parts
-
     mock_client = MagicMock()
-    mock_client.messages.create.side_effect = [
-        _resposta_parts(_parts_valides(sessio)),
-        _resposta_parts(_amb_ids()),
-    ]
+    mock_client.messages.create.side_effect = [_resposta_parts(_parts_valides(sessio))]
     with patch(
         "blondswim.agents.generar_microcicle.get_llm_client", return_value=mock_client
     ):
         generar_microcicle(nedador, [sessio], metodologia_test)
 
     primer = mock_client.messages.create.call_args_list[0].kwargs["messages"][0]["content"]
-    segon = mock_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
     assert all(f'id_biblioteca: "{i}"' in primer for i in ids)
-    assert "Falten exercicis obligatoris de la biblioteca" in segon
-    presents = {
-        ex.id_biblioteca for p in sessio.estructura.parts for ex in p.exercicis
-    }
-    assert set(ids) <= presents
+    assert mock_client.messages.create.call_count == 1
+    afegits = [
+        ex for p in sessio.estructura.parts for ex in p.exercicis if ex.id_biblioteca
+    ]
+    assert {ex.id_biblioteca for ex in afegits} == set(ids)
+    assert all(ex.series >= 1 and ex.distancia_m % 25 == 0 for ex in afegits)
+    volum = sum(ex.volum_m for p in sessio.estructura.parts for ex in p.exercicis)
+    assert sessio.volum_min <= volum <= sessio.volum_max
 
 
 # --- Sprint 2: cicles, descansos i reintents dirigits ---------------------------------

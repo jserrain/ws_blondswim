@@ -225,3 +225,17 @@ def test_prompt_porta_els_metres_de_cada_part():
     assert 'nom: "Tornada a la calma": 400 m (la resta fins a 2900 m)' in prompt
     assert "els teus exercicis han de sumar 2900 m" in prompt
     assert "No cal quadrar" not in prompt
+
+
+def test_ajustar_volum_no_desfa_exercicis():
+    from blondswim.agents.generar_microcicle import ajustar_volum
+    from blondswim.models.sessio import Exercici
+
+    rotacio = Exercici(series=8, distancia_m=25, execucio="Per estils: 25 Pap + 25 Esq...")
+    recompte = Exercici(series=4, distancia_m=25, execucio="Crol recompte de braçades")
+    principal = Exercici(series=10, distancia_m=200, execucio="Crol A2", intensitat="A2")
+    sessio = _sessio_volum(recompte, rotacio, principal, rang=(1700, 1900))  # 2500
+    ajustar_volum(sessio)
+    assert rotacio.series == 8  # rotació d'estils: no es toca
+    assert recompte.series >= 2 and principal.series >= 5
+    assert 1700 <= _volum(sessio) <= 1900

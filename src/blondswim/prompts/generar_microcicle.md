@@ -9,6 +9,8 @@ Ets un expert entrenador de natació especialitzat en planificació d'entrenamen
 
 Reparteix el treball d'estils segons aquestes proves. Un 100 IM són 25 m de cada estil.
 
+**Repartiment orientatiu per estils d'aquesta sessió:** {estils_sessio}.
+
 **Papallona:** {nota_papallona}
 
 **Zones de ritme CSS (pace per 100m, només per calibrar la teva descripció -- NO les escriguis mai com a número al camp `execucio` ni a cap altre camp de text):**
